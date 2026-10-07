@@ -1,0 +1,30 @@
+name: Source probe (Phase 0)
+# Checks which candidate source sites are reachable from GitHub's hosted runners
+# (datacenter IPs) and whether real page images can be fetched. Read-only GETs.
+on:
+  workflow_dispatch: {}
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Runner network
+        run: curl -s --max-time 10 https://ipinfo.io/org || echo "ipinfo unreachable"
+      - name: Round 1 - reachability
+        continue-on-error: true
+        run: node probe/probe.mjs
+      - name: Round 2 - listing + gallery + image
+        continue-on-error: true
+        run: node probe/probe2.mjs
+      - name: Round 3 - real page images
+        continue-on-error: true
+        run: node probe/probe3.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: probe-results
+          path: probe/*.json
