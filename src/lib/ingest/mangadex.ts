@@ -14,6 +14,8 @@ export interface IngestOptions {
   maxMinutes: number;
   /** per work per run; the rest are picked up by the next run */
   maxChapters: number;
+  /** only these languages (e.g. ["en","ja"]); empty = all */
+  langs: string[];
   dryRun: boolean;
   log: (m: string) => void;
 }
@@ -28,7 +30,7 @@ export interface IngestStats {
   errors: string[];
 }
 
-const PAGE_CONCURRENCY = 4;
+const PAGE_CONCURRENCY = Number(process.env.PAGE_CONCURRENCY) || 12;
 const LANG_PRIORITY = ["en", "ja", "es", "pt", "fr", "de", "it", "ru", "zh", "ko"];
 
 class Budget {
@@ -173,7 +175,9 @@ async function processManga(
 
   // English first, then the big languages, then the rest by chapter count - so a short
   // run always covers the most-read variants before the budget runs out
-  const order = [...byLang].sort(([a, x], [b, y]) => {
+  const order = [...byLang]
+    .filter(([l]) => !o.langs.length || o.langs.includes(l))
+    .sort(([a, x], [b, y]) => {
     const pa = LANG_PRIORITY.indexOf(a);
     const pb = LANG_PRIORITY.indexOf(b);
     return (pa < 0 ? 99 : pa) - (pb < 0 ? 99 : pb) || y.length - x.length;

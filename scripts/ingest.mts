@@ -12,6 +12,7 @@ const stats = await runMangadex({
   limit: Number(arg("limit", "5")),
   maxMinutes: Number(arg("max-minutes", "20")),
   maxChapters: Number(arg("max-chapters", "10")),
+  langs: arg("langs", "").split(",").filter(Boolean),
   dryRun: flag("dry-run"),
   log: (m) => console.log(m),
 });
