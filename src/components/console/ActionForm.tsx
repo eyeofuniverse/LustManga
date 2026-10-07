@@ -28,11 +28,15 @@ export function ActionForm({
         if (confirm && !window.confirm(confirm)) return;
         const form = e.currentTarget;
         start(async () => {
-          const r = await action(new FormData(form));
-          setMsg(r);
-          if (r.ok) {
-            form.reset();
-            router.refresh();
+          try {
+            const r = await action(new FormData(form));
+            setMsg(r);
+            if (r.ok) {
+              form.reset();
+              router.refresh();
+            }
+          } catch {
+            setMsg({ ok: false, message: "That did not go through (your session may have expired). Reload and try again." });
           }
         });
       }}
@@ -71,9 +75,13 @@ export function ActionButton({
         onClick={() => {
           if (confirm && !window.confirm(confirm)) return;
           start(async () => {
-            const r = await action();
-            setMsg(r);
-            if (r.ok) router.refresh();
+            try {
+              const r = await action();
+              setMsg(r);
+              if (r.ok) router.refresh();
+            } catch {
+              setMsg({ ok: false, message: "That did not go through (your session may have expired). Reload and try again." });
+            }
           });
         }}
       >
@@ -97,9 +105,13 @@ export function ChipRemove({ action, label }: { action: () => Promise<Result>; l
       className={`ml-1 rounded px-1 text-xs hover:bg-white/10 ${err ? "text-red-400" : "text-white/50"}`}
       onClick={() =>
         start(async () => {
-          const r = await action();
-          if (r.ok) router.refresh();
-          else setErr(r.message);
+          try {
+            const r = await action();
+            if (r.ok) router.refresh();
+            else setErr(r.message);
+          } catch {
+            setErr("Failed: reload and try again");
+          }
         })
       }
     >
