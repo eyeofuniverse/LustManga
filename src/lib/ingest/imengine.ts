@@ -14,6 +14,8 @@ import {
   emptyStats,
   endRun,
   finalizeWork,
+  pageNewer,
+  saveCursor,
   storeChapterPages,
   storeCover,
   type IngestStats,
@@ -190,6 +192,7 @@ export async function runImEngine(cfgName: string, o: ImOptions): Promise<Ingest
         const key = `${cfg.name}:${mode}:${lang ?? "all"}:page`;
         const saved = mode === "popular" || o.mode === "popular" ? await db(() => prisma.setting.findUnique({ where: { key } })) : null;
         let page = (saved?.value as { page?: number } | null)?.page ?? 1;
+        let idle = 0; // consecutive pages that produced nothing new
         const c: Ctx = { cfg, o, stats, budget, created: { n: 0, cap: perLang } };
 
         while (!budget.expired && c.created.n < c.created.cap) {
@@ -209,14 +212,21 @@ export async function runImEngine(cfgName: string, o: ImOptions): Promise<Ingest
             o.log("caught up with the newest uploads");
             break;
           }
+          const before = c.created.n;
           await pool(fresh, WORK_CONCURRENCY, async (x) => {
             if (budget.expired || c.created.n >= c.created.cap) return;
             await processGallery(x, mode === "popular" ? Math.max(1, 50_000 - (page - 1) * ids.length) : 0, lang, c);
           });
           if (budget.expired || c.created.n >= c.created.cap) break; // stopped mid-page: resume this page next run
+          if (o.mode === "recent") {
+            idle = c.created.n === before ? idle + 1 : 0;
+            if (idle >= 3) {
+              o.log("nothing new for 3 pages, stopping");
+              break;
+            }
+          }
           page++;
-          if (!o.dryRun && (mode === "popular" || o.mode === "popular"))
-            await db(() => prisma.setting.upsert({ where: { key }, create: { key, value: { page } }, update: { value: { page } } }));
+          if (!o.dryRun && (mode === "popular" || o.mode === "popular")) await saveCursor(key, { page }, pageNewer);
         }
       }
     }

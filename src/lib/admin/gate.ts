@@ -6,11 +6,9 @@
  * It does NOT authenticate anyone; it only un-hides the console so a scanner
  * hitting `/console/*` cold gets a 404, not a login page.
  */
-const SECRET =
-  process.env.ADMIN_GATE_SECRET ||
-  process.env.STREAM_SECRET ||
-  process.env.CRON_SECRET ||
-  "insecure-dev-gate-secret";
+// No fallback in production: a default secret would be public (this repo is public), which would let
+// anyone forge the gate cookie. Without ADMIN_GATE_SECRET the console simply stays closed.
+const SECRET = process.env.ADMIN_GATE_SECRET || (process.env.NODE_ENV === "production" ? "" : "insecure-dev-gate-secret");
 
 const enc = new TextEncoder();
 
@@ -22,6 +20,7 @@ function b64url(buf: ArrayBuffer): string {
 }
 
 async function sign(msg: string): Promise<string> {
+  if (!SECRET) throw new Error("ADMIN_GATE_SECRET is not set");
   const key = await crypto.subtle.importKey(
     "raw",
     enc.encode(SECRET),
@@ -46,7 +45,7 @@ export async function signGate(ttlMs = 30 * 60_000): Promise<string> {
 }
 
 export async function verifyGate(value: string | undefined | null): Promise<boolean> {
-  if (!value) return false;
+  if (!value || !SECRET) return false;
   const dot = value.indexOf(".");
   if (dot < 1) return false;
   const exp = Number(value.slice(0, dot));

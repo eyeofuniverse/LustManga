@@ -2,7 +2,19 @@ import slugify from "slugify";
 import type { TagType } from "@prisma/client";
 import { prisma, db } from "@/lib/db";
 
-export const slug = (s: string) => slugify(s, { lower: true, strict: true }).slice(0, 80);
+/**
+ * URL slug. ASCII names use the usual transliterating slugifier. Names with non-Latin letters keep them
+ * (a slugifier would drop them: an artist called "ぴんく" would get an empty slug and vanish, and "Foo 夢"
+ * and "Foo 愛" would both become "foo").
+ */
+export const slug = (s: string): string => {
+  const name = s.normalize("NFKC").trim();
+  if (/[^\x00-\x7F]/.test(name) && /[\p{L}\p{N}]/u.test(name.replace(/[\u0300-\u036f]/g, ""))) {
+    const keepsNonLatin = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Cyrillic}\p{Script=Arabic}\p{Script=Thai}\p{Script=Greek}\p{Script=Hebrew}]/u.test(name);
+    if (keepsNonLatin) return name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+  }
+  return slugify(name, { lower: true, strict: true }).slice(0, 80);
+};
 
 const LANG_NAMES: Record<string, string> = {
   en: "english", ja: "japanese", zh: "chinese", "zh-hk": "chinese", "zh-ro": "chinese", es: "spanish",

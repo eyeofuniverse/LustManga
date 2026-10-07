@@ -14,6 +14,8 @@ import {
   emptyStats,
   endRun,
   finalizeWork,
+  pageNewer,
+  saveCursor,
   storeChapterPages,
   storeCover,
   type IngestStats,
@@ -206,6 +208,7 @@ export async function runHentai2Read(o: H2ROptions): Promise<IngestStats> {
       const key = `hentai2read:${o.mode}:page`;
       const saved = o.mode === "popular" ? await db(() => prisma.setting.findUnique({ where: { key } })) : null;
       let page = (saved?.value as { page?: number } | null)?.page ?? 1;
+      let idle = 0; // consecutive pages that produced nothing new
 
       while (!budget.expired) {
         const slugs = await h2r.listSlugs(o.mode, page);
@@ -225,14 +228,21 @@ export async function runHentai2Read(o: H2ROptions): Promise<IngestStats> {
           o.log("caught up with the newest uploads");
           break;
         }
+        const before = c.created.n;
         await pool(fresh, WORK_CONCURRENCY, async (s) => {
           if (!budget.expired) await processWork(s, Math.max(1, 5000 - (page - 1) * slugs.length), c);
         });
         // stopped mid-page: resume this page next run (known works are skipped)
         if (budget.expired) break;
+        if (o.mode === "recent") {
+          idle = c.created.n === before ? idle + 1 : 0;
+          if (idle >= 3) {
+            o.log("nothing new for 3 pages, stopping");
+            break;
+          }
+        }
         page++;
-        if (o.mode === "popular" && !o.dryRun)
-          await db(() => prisma.setting.upsert({ where: { key }, create: { key, value: { page } }, update: { value: { page } } }));
+        if (o.mode === "popular" && !o.dryRun) await saveCursor(key, { page }, pageNewer);
       }
     }
   } finally {

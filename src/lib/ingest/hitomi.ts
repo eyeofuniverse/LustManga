@@ -13,6 +13,8 @@ import {
   emptyStats,
   endRun,
   finalizeWork,
+  offsetNewer,
+  saveCursor,
   storeChapterPages,
   storeCover,
   type IngestStats,
@@ -36,15 +38,25 @@ const CHUNK = 100;
 const PAGE_CONCURRENCY = Number(process.env.HITOMI_PAGE_CONCURRENCY) || 8;
 const GALLERY_CONCURRENCY = Number(process.env.HITOMI_GALLERY_CONCURRENCY) || 3;
 
-type Ctx = { o: HitomiOptions; stats: IngestStats; budget: Budget; created: { n: number; cap: number } };
+type Ctx = {
+  o: HitomiOptions;
+  stats: IngestStats;
+  budget: Budget;
+  created: { n: number; cap: number };
+  /** galleries whose outcome is final this run (created, skipped on purpose, quarantined...); a transient fetch failure is NOT final */
+  decided: Set<number>;
+};
 
 /** Ingest one gallery. Creates the Work on first sight; on a retry it just finishes the missing chapter. */
 async function processGallery(id: number, seed: number, c: Ctx): Promise<void> {
   const { o, stats, budget } = c;
+  let failed = false;
   const info = await hm.getGallery(id).catch((e) => {
     stats.errors.push(`gallery ${id}: ${(e as Error).message}`);
+    failed = true;
     return null;
   });
+  if (!failed) c.decided.add(id);
   if (!info) return;
   stats.worksSeen++;
   if (info.blocked) return;
@@ -204,7 +216,7 @@ export async function runHitomi(o: HitomiOptions): Promise<IngestStats> {
         }),
       );
       o.log(`retry: ${rows.length} gallery(ies) with unfinished chapters`);
-      const c: Ctx = { o, stats, budget, created: { n: 0, cap: Infinity } };
+      const c: Ctx = { o, stats, budget, created: { n: 0, cap: Infinity }, decided: new Set() };
       await pool(rows, GALLERY_CONCURRENCY, async (r) => {
         if (!budget.tripped) await processGallery(Number(r.externalId), 0, c);
       });
@@ -216,7 +228,8 @@ export async function runHitomi(o: HitomiOptions): Promise<IngestStats> {
         const key = `hitomi:${o.mode}:${lang}:offset`;
         const saved = o.mode === "popular" ? await db(() => prisma.setting.findUnique({ where: { key } })) : null;
         let offset = (saved?.value as { offset?: number } | null)?.offset ?? 0;
-        const c: Ctx = { o, stats, budget, created: { n: 0, cap: perLang } };
+        const c: Ctx = { o, stats, budget, created: { n: 0, cap: perLang }, decided: new Set() };
+        let idle = 0; // consecutive pages that produced nothing new
 
         while (!budget.expired && c.created.n < c.created.cap) {
           const { ids, total } = await hm.listIds(path, offset, CHUNK);
@@ -236,23 +249,24 @@ export async function runHitomi(o: HitomiOptions): Promise<IngestStats> {
             o.log(`${lang}: caught up with the newest uploads`);
             break;
           }
-          let consumed = ids.length;
+          const before = c.created.n;
           await pool(fresh, GALLERY_CONCURRENCY, async (x) => {
             if (budget.expired || c.created.n >= c.created.cap) return;
             await processGallery(x.id, Math.max(1, 50_000 - x.rank), c);
           });
-          // if we stopped early, resume at the first unprocessed gallery next time
-          if (budget.expired || c.created.n >= c.created.cap) {
-            const lastDone = await db(() =>
-              prisma.workSource.findMany({ where: { site: hm.SITE, externalId: { in: fresh.map((x) => String(x.id)) } }, select: { externalId: true } }),
-            );
-            const done = new Set(lastDone.map((r) => r.externalId));
-            const firstOpen = fresh.find((x) => !done.has(String(x.id)));
-            consumed = firstOpen ? firstOpen.rank - offset : ids.length;
+          // resume at the first gallery whose outcome is not final (not yet reached, or failed transiently)
+          const firstOpen = fresh.find((x) => !c.decided.has(x.id));
+          offset += firstOpen ? firstOpen.rank - offset : ids.length;
+          if (o.mode === "popular" && !o.dryRun) await saveCursor(key, { offset }, offsetNewer);
+          if (firstOpen && !(budget.expired || c.created.n >= c.created.cap)) break; // a transient failure: stop here, retry next run
+          // "newest" sweeps: stop after a few barren pages instead of walking the whole index
+          if (o.mode === "recent") {
+            idle = c.created.n === before ? idle + 1 : 0;
+            if (idle >= 3) {
+              o.log(`${lang}: nothing new for 3 pages, stopping`);
+              break;
+            }
           }
-          offset += consumed;
-          if (o.mode === "popular" && !o.dryRun)
-            await db(() => prisma.setting.upsert({ where: { key }, create: { key, value: { offset } }, update: { value: { offset } } }));
         }
       }
     }

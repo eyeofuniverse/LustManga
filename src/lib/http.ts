@@ -4,16 +4,18 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Polite fetch wrapper: minimum gap between calls, retry with backoff on 429/5xx/network errors. */
 export class Http {
-  private last = 0;
+  /** earliest time the next request may start; claimed synchronously so concurrent callers queue up */
+  private next = 0;
   constructor(
     private minGapMs = 250,
     private headers: Record<string, string> = {},
   ) {}
 
   private async gap() {
-    const wait = this.last + this.minGapMs - Date.now();
-    if (wait > 0) await sleep(wait);
-    this.last = Date.now();
+    const now = Date.now();
+    const start = Math.max(now, this.next);
+    this.next = start + this.minGapMs; // reserve before awaiting: no two callers can share a slot
+    if (start > now) await sleep(start - now);
   }
 
   async request(url: string, init: RequestInit = {}, attempts = 5): Promise<Response> {

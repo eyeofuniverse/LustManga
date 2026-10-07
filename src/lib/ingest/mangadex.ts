@@ -2,7 +2,19 @@ import { prisma, db } from "@/lib/db";
 import { pool } from "@/lib/http";
 import { toWebp } from "@/lib/images";
 import { r2Put } from "@/lib/r2";
-import { Budget, MAX_ATTEMPTS, beginRun, emptyStats, endRun, finalizeWork, storeChapterPages, type IngestStats } from "@/lib/ingest/shared";
+import {
+  Budget,
+  MAX_ATTEMPTS,
+  beginRun,
+  emptyStats,
+  endRun,
+  finalizeWork,
+  offsetNewer,
+  saveCursor,
+  storeChapterPages,
+  takeDownWork,
+  type IngestStats,
+} from "@/lib/ingest/shared";
 import { classify } from "@/lib/safety/classify";
 import { loadTerms } from "@/lib/safety/load-terms";
 import { slug, normLang, langName, upsertTags } from "@/lib/tags";
@@ -107,6 +119,11 @@ async function processManga(
           update: { reasons: verdict.reasons },
         }),
       );
+    if (!o.dryRun) {
+      // the source may have added the tag after we ingested it: take down anything we already hold
+      const held = await db(() => prisma.workSource.findMany({ where: { site: md.SITE, externalId: { startsWith: `${m.id}:` } }, select: { workId: true } }));
+      for (const w of new Set(held.map((h) => h.workId))) await takeDownWork(w, verdict.reasons);
+    }
     return false;
   }
   const held = verdict.verdict === "REVIEW";
@@ -310,7 +327,7 @@ export async function runMangadex(o: IngestOptions): Promise<IngestStats> {
       const reached = await sweep(page.data, `popular offset ${offset} of ${page.total}`);
       offset += reached; // resume exactly where we stopped
       if (!o.dryRun)
-        await db(() => prisma.setting.upsert({ where: { key }, create: { key, value: { offset } }, update: { value: { offset } } }));
+        await saveCursor(key, { offset }, offsetNewer);
       if (reached < page.data.length) break;
     }
     if (offset > 9900 && !budget.expired) {
@@ -346,7 +363,7 @@ export async function runMangadex(o: IngestOptions): Promise<IngestStats> {
         offset = 0;
       }
       if (!o.dryRun)
-        await db(() => prisma.setting.upsert({ where: { key }, create: { key, value: { since, offset } }, update: { value: { since, offset } } }));
+        await saveCursor(key, { since, offset }, (c, n) => String(n.since) > String(c.since ?? "") || (n.since === c.since && Number(n.offset ?? 0) > Number(c.offset ?? 0)));
       if (page.data.length < 100 && reached >= page.data.length) {
         o.log("backlog complete: reached the newest work");
         break;

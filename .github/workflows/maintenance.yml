@@ -41,9 +41,15 @@ jobs:
       - name: Verify stored content
         continue-on-error: true
         run: npm run verify -- --sample=${{ github.event.inputs.sample || '600' }}
+      - name: Re-check stored works against the current safety terms
+        continue-on-error: true
+        run: npm run rescan
       - name: Cross-source dedupe
         continue-on-error: true
         run: npm run dedupe
       - name: Recompute derived numbers
         continue-on-error: true
         run: npm run recompute
+      - name: Retention cleanup
+        continue-on-error: true
+        run: npm run cleanup

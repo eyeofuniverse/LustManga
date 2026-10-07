@@ -11,8 +11,13 @@ const sample = Number(process.argv.find((a) => a.startsWith("--sample="))?.split
 const host = process.env.NEXT_PUBLIC_IMG_CDN_HOST;
 if (!host) throw new Error("NEXT_PUBLIC_IMG_CDN_HOST not set");
 
+// ORDER BY random() over the whole Chapter table gets slower with every work we add; TABLESAMPLE reads a
+// small random slice of the table's blocks instead. (For a small table the percentage is 100: all of it.)
+const est = Number((await prisma.$queryRaw<{ n: bigint }[]>`SELECT reltuples::bigint AS n FROM pg_class WHERE relname = 'Chapter'`)[0]?.n ?? 0);
+const pct = Math.min(100, Math.max(0.01, (sample * 8 * 100) / Math.max(est, 1)));
 const chapters = await prisma.$queryRaw<{ id: string; pageData: unknown; mediaId: string }[]>`
-  SELECT c.id, c."pageData", w."mediaId" FROM "Chapter" c JOIN "Work" w ON w.id = c."workId"
+  SELECT c.id, c."pageData", w."mediaId" FROM "Chapter" c TABLESAMPLE SYSTEM (${pct}::float4)
+  JOIN "Work" w ON w.id = c."workId"
   WHERE c.status = 'READY' AND c."pageData" IS NOT NULL ORDER BY random() LIMIT ${sample}`;
 const targets = chapters.flatMap((c) => {
   const pages = pagesOf(c, c.mediaId);

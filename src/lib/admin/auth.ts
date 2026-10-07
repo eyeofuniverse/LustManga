@@ -14,11 +14,8 @@ const SESSION_TTL_MS = 12 * 60 * 60_000; // 12h sliding
 const SESSION_ABS_MS = 7 * 24 * 60 * 60_000; // 7d hard cap
 const PENDING_TTL_MS = 10 * 60_000; // 10 min to finish 2FA / enrolment
 
-const HMAC_SECRET =
-  process.env.ADMIN_GATE_SECRET ||
-  process.env.STREAM_SECRET ||
-  process.env.CRON_SECRET ||
-  "insecure-dev-gate-secret";
+// No fallback in production (see gate.ts): the pending-2FA cookie must not be forgeable.
+const HMAC_SECRET = process.env.ADMIN_GATE_SECRET || (PROD ? "" : "insecure-dev-gate-secret");
 
 export type AdminRole = "OWNER" | "ADMIN" | "MOD";
 export type AdminIdentity = {
@@ -145,6 +142,7 @@ export async function requireAdmin(min: AdminRole = "MOD"): Promise<AdminIdentit
 type PendingKind = "totp" | "enroll";
 
 export async function setPending(adminId: string, kind: PendingKind): Promise<void> {
+  if (!HMAC_SECRET) throw new Error("ADMIN_GATE_SECRET is not set");
   const exp = Date.now() + PENDING_TTL_MS;
   const body = `${kind}.${adminId}.${exp}`;
   const sig = createHmac("sha256", HMAC_SECRET).update(body).digest("base64url");
@@ -153,7 +151,7 @@ export async function setPending(adminId: string, kind: PendingKind): Promise<vo
 
 export async function readPending(): Promise<{ adminId: string; kind: PendingKind } | null> {
   const raw = (await cookies()).get(PENDING_COOKIE)?.value;
-  if (!raw) return null;
+  if (!raw || !HMAC_SECRET) return null;
   const parts = raw.split(".");
   if (parts.length !== 4) return null;
   const [kind, adminId, expStr, sig] = parts;

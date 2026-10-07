@@ -6,3 +6,4 @@ probe/*-results.json
 .next/
 *.tsbuildinfo
 next-env.d.ts
+!.env.example

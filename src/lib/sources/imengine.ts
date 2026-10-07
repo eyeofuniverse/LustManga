@@ -98,7 +98,7 @@ export interface IMGallery {
 const EXT: Record<string, string> = { j: "jpg", p: "png", g: "gif", w: "webp", b: "bmp" };
 
 /** Pull the first balanced {...} object at or after index `from`. */
-function objectAt(src: string, from: number): string | null {
+export function objectAt(src: string, from: number): string | null {
   const start = src.indexOf("{", from);
   if (start < 0) return null;
   let depth = 0;
@@ -111,7 +111,11 @@ function objectAt(src: string, from: number): string | null {
 
 export async function getGallery(cfg: SiteCfg, id: string): Promise<IMGallery | null> {
   const page = await html(cfg, `${cfg.galleryPath}${id}/`);
-  if (!page) return null;
+  return page ? parseGallery(cfg, id, page) : null;
+}
+
+/** Pure parser (kept apart from the fetch so it can be tested against fixtures). */
+export function parseGallery(cfg: SiteCfg, id: string, page: string): IMGallery | null {
 
   const hidden = Object.fromEntries([...page.matchAll(/<input[^>]*id="(load_\w+|gallery_\w+)"[^>]*value="([^"]*)"/g)].map((m) => [m[1], m[2]]));
   // some sites carry no load_pages field; the visible "Pages: N" line is the fallback

@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { purgeImages } from "@/lib/purge";
+import { pagesOf } from "@/lib/pages";
 import { prisma, db } from "@/lib/db";
 import { pool } from "@/lib/http";
 import { isAvifSequence, toWebp, UnsupportedImageError } from "@/lib/images";
@@ -166,6 +168,11 @@ export async function finalizeWork(workId: string, sourceId: string): Promise<{ 
       select: { coverKey: true, publish: true, needsReview: true, reviewedAt: true, reviewDecision: true },
     }),
   );
+  // a cover that failed once (or never existed) must not leave the work a draft forever: use its first page
+  if (!fresh.coverKey && ready._count > 0) {
+    const key = await coverFromFirstPage(workId).catch(() => null);
+    if (key) fresh.coverKey = key;
+  }
   const canAutoPublish =
     ready._count > 0 &&
     !!fresh.coverKey &&
@@ -221,3 +228,67 @@ export async function endRun(runId: string | null, stats: IngestStats): Promise<
 
 /** Short stable hash for logs and error strings: lets us correlate a failure without printing a work's id or title. */
 export const anon = (s: string) => createHash("sha1").update(s).digest("hex").slice(0, 8);
+
+/** Build the cover from the first page that can be decoded (animated AVIF pages are skipped). */
+export async function coverFromFirstPage(workId: string): Promise<string | null> {
+  const host = process.env.NEXT_PUBLIC_IMG_CDN_HOST;
+  if (!host) return null;
+  const work = await db(() => prisma.work.findUnique({ where: { id: workId }, select: { mediaId: true } }));
+  const chapter = await db(() =>
+    prisma.chapter.findFirst({ where: { workId, status: "READY" }, orderBy: { number: "asc" }, select: { id: true, pageData: true } }),
+  );
+  if (!work || !chapter) return null;
+  for (const p of pagesOf(chapter, work.mediaId).slice(0, 5)) {
+    if (p.key.endsWith(".avif")) continue;
+    const res = await fetch(`https://${host}/${p.key}`, { signal: AbortSignal.timeout(30_000) }).catch(() => null);
+    if (!res?.ok) continue;
+    try {
+      return await storeCover(workId, work.mediaId, Buffer.from(await res.arrayBuffer()));
+    } catch {
+      /* try the next page */
+    }
+  }
+  return null;
+}
+
+/**
+ * Persist a resume cursor, but never move it backwards. Two runs can overlap (a manual run during a
+ * scheduled sweep) and the slower one must not rewind the faster one's progress.
+ */
+export async function saveCursor(
+  key: string,
+  value: Record<string, unknown>,
+  isNewer: (current: Record<string, unknown>, next: Record<string, unknown>) => boolean,
+): Promise<void> {
+  const row = await db(() => prisma.setting.findUnique({ where: { key } }));
+  const cur = (row?.value ?? null) as Record<string, unknown> | null;
+  if (cur && !isNewer(cur, value)) return;
+  await db(() => prisma.setting.upsert({ where: { key }, create: { key, value: value as never }, update: { value: value as never } }));
+}
+export const offsetNewer = (c: Record<string, unknown>, n: Record<string, unknown>) => Number(n.offset ?? 0) > Number(c.offset ?? 0);
+export const pageNewer = (c: Record<string, unknown>, n: Record<string, unknown>) => Number(n.page ?? 1) > Number(c.page ?? 1);
+
+/**
+ * A work we already hold turned out to carry a hard tag (the source changed its tags, or an admin added a
+ * term). Take it down for good: delete its images, record each of its sources as quarantined metadata, and
+ * remove the work so nothing can republish it.
+ */
+export async function takeDownWork(workId: string, reasons: string[]): Promise<boolean> {
+  const work = await db(() => prisma.work.findUnique({ where: { id: workId }, include: { sources: true } }));
+  if (!work) return false;
+  await purgeImages(workId, work.coverKey);
+  for (const src of work.sources) {
+    // MangaDex quarantine is recorded per manga (the id before the language suffix)
+    const externalId = src.site === "mangadex" ? src.externalId.split(":")[0] : src.externalId;
+    await db(() =>
+      prisma.suppressedSource.upsert({
+        where: { site_externalId: { site: src.site, externalId } },
+        create: { site: src.site, externalId, title: work.title.slice(0, 200), reasons },
+        update: { reasons },
+      }),
+    );
+  }
+  await db(() => prisma.duplicateCandidate.deleteMany({ where: { OR: [{ workId }, { otherId: workId }] } }));
+  await db(() => prisma.work.delete({ where: { id: workId } })); // cascades chapters and sources
+  return true;
+}
