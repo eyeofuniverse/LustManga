@@ -127,7 +127,12 @@ model Tag {
   slug  String
   /// number of PUBLISHED works carrying this tag (maintained by recompute)
   count Int     @default(0)
+  /// admin controls: hidden tags are not shown on public pages; featured ones are promoted
+  hidden   Boolean @default(false)
+  featured Boolean @default(false)
+  description String?
   works Work[]  @relation("WorkTags")
+  aliases TagAlias[]
 
   @@unique([type, slug])
   @@index([type, count])
@@ -135,6 +140,8 @@ model Tag {
 
 model Chapter {
   id      String @id @default(cuid())
+  /// failed fetch attempts; chapters stop being retried after 6
+  attempts Int @default(0)
   workId  String
   work    Work   @relation(fields: [workId], references: [id], onDelete: Cascade)
   /// chapter number; one-shots use 1
@@ -229,4 +236,104 @@ model Setting {
   key       String   @id
   value     Json
   updatedAt DateTime @default(now()) @updatedAt
+}
+
+/// A source tag name that resolves to one of our canonical tags (created by merging).
+model TagAlias {
+  id          String  @id @default(cuid())
+  type        TagType
+  slug        String
+  name        String
+  targetTagId Int
+  target      Tag     @relation(fields: [targetTagId], references: [id], onDelete: Cascade)
+
+  @@unique([type, slug])
+  @@index([targetTagId])
+}
+
+enum SafetyTier {
+  /// source-tagged child sexualisation: metadata only, never downloaded or published
+  QUARANTINE
+  /// explicit age markers: held for an admin, NOT downloaded until approved
+  DEFER
+  /// ambiguous markers: held for an admin, downloaded so they can inspect
+  REVIEW
+  /// normal adult phrases that contain a flagged word (suppresses a match)
+  ALLOWED
+}
+
+/// Admin-editable term lists for the ingest safety gate. The core QUARANTINE terms
+/// (src/lib/safety/core.ts) are enforced from code and cannot be removed here.
+model SafetyTerm {
+  id        String     @id @default(cuid())
+  term      String
+  tier      SafetyTier
+  /// core terms: seeded from code, protected from edit/delete
+  locked    Boolean    @default(false)
+  createdBy String?
+  createdAt DateTime   @default(now())
+
+  @@unique([term, tier])
+  @@index([tier])
+}
+
+model AdminUser {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  role          String    @default("OWNER") // OWNER | ADMIN | MOD
+  displayName   String?
+  totpSecret    String?
+  totpEnabledAt DateTime?
+  backupCodes   String[]  @default([])
+  active        Boolean   @default(true)
+  failedLogins  Int       @default(0)
+  lockedUntil   DateTime?
+  lastLoginAt   DateTime?
+  lastLoginIp   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @default(now()) @updatedAt
+
+  sessions AdminSession[]
+}
+
+model AdminSession {
+  id         String    @id @default(cuid())
+  adminId    String
+  admin      AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  userAgent  String?
+  ip         String?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+
+  @@index([adminId])
+  @@index([expiresAt])
+}
+
+model AdminLoginAttempt {
+  id        String   @id @default(cuid())
+  email     String
+  ip        String
+  ok        Boolean
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+  @@index([ip, createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actorEmail String?
+  action     String
+  targetType String
+  targetId   String
+  diff       Json?
+  createdAt  DateTime @default(now())
+
+  @@index([targetType, targetId])
+  @@index([createdAt])
 }

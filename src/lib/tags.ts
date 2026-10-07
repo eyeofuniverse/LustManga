@@ -15,26 +15,39 @@ const LANG_NAMES: Record<string, string> = {
 export const normLang = (code: string) => code.toLowerCase().split("-")[0];
 export const langName = (code: string) => LANG_NAMES[code.toLowerCase()] ?? LANG_NAMES[normLang(code)] ?? code.toLowerCase();
 
-/** Upsert tags and return their ids (deduped). */
+/**
+ * Resolve tags to ids in three queries total (aliases, existing, create-missing),
+ * not two per tag. Source names that were merged into a canonical tag by an admin
+ * (TagAlias) resolve to that tag.
+ */
 export async function upsertTags(items: { type: TagType; name: string }[]): Promise<number[]> {
-  const seen = new Map<string, { type: TagType; name: string; slug: string }>();
+  const wanted = new Map<string, { type: TagType; name: string; slug: string }>();
   for (const it of items) {
     const name = it.name.trim();
     const s = slug(name);
     if (!name || !s) continue;
-    seen.set(`${it.type}:${s}`, { type: it.type, name, slug: s });
+    wanted.set(`${it.type}:${s}`, { type: it.type, name, slug: s });
   }
-  const ids: number[] = [];
-  for (const t of seen.values()) {
-    const row = await db(() =>
-      prisma.tag.upsert({
-        where: { type_slug: { type: t.type, slug: t.slug } },
-        create: { type: t.type, name: t.name, slug: t.slug },
-        update: {},
-        select: { id: true },
-      }),
-    );
-    ids.push(row.id);
+  if (!wanted.size) return [];
+  const list = [...wanted.values()];
+  const where = { OR: list.map((t) => ({ type: t.type, slug: t.slug })) };
+
+  const ids = new Set<number>();
+  const aliases = await db(() => prisma.tagAlias.findMany({ where, select: { type: true, slug: true, targetTagId: true } }));
+  const aliased = new Set(aliases.map((a) => `${a.type}:${a.slug}`));
+  for (const a of aliases) ids.add(a.targetTagId);
+
+  const rest = list.filter((t) => !aliased.has(`${t.type}:${t.slug}`));
+  if (rest.length) {
+    const restWhere = { OR: rest.map((t) => ({ type: t.type, slug: t.slug })) };
+    let existing = await db(() => prisma.tag.findMany({ where: restWhere, select: { id: true, type: true, slug: true } }));
+    const have = new Set(existing.map((t) => `${t.type}:${t.slug}`));
+    const missing = rest.filter((t) => !have.has(`${t.type}:${t.slug}`));
+    if (missing.length) {
+      await db(() => prisma.tag.createMany({ data: missing, skipDuplicates: true }));
+      existing = await db(() => prisma.tag.findMany({ where: restWhere, select: { id: true, type: true, slug: true } }));
+    }
+    for (const t of existing) ids.add(t.id);
   }
-  return ids;
+  return [...ids];
 }

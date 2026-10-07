@@ -11,20 +11,29 @@
     "db:push": "prisma db push",
     "db:setup": "tsx --env-file=.env scripts/db-setup.mts",
     "ingest": "tsx --env-file=.env scripts/ingest.mts",
-    "review": "tsx --env-file=.env scripts/review.mts"
+    "review": "tsx --env-file=.env scripts/review.mts",
+    "verify": "tsx --env-file=.env scripts/verify.mts",
+    "recompute": "tsx --env-file=.env scripts/recompute.mts",
+    "health": "tsx --env-file=.env scripts/health.mts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
     "aws4fetch": "^1.0.20",
+    "bcryptjs": "^3.0.3",
     "next": "15.5.25",
+    "otplib": "^12.0.1",
+    "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "server-only": "^0.0.1",
     "sharp": "^0.34.0",
     "slugify": "^1.6.6",
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^3.0.0",
     "@types/node": "^22.10.5",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.0.4",
     "@types/react-dom": "^19.0.2",
     "autoprefixer": "^10.4.20",

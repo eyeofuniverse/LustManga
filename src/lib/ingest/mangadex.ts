@@ -3,6 +3,7 @@ import { pool } from "@/lib/http";
 import { toWebp } from "@/lib/images";
 import { r2Put } from "@/lib/r2";
 import { classify } from "@/lib/safety/classify";
+import { loadTerms } from "@/lib/safety/load-terms";
 import { slug, normLang, langName, upsertTags } from "@/lib/tags";
 import * as md from "@/lib/sources/mangadex";
 import type { MdChapter, MdManga } from "@/lib/sources/mangadex";
@@ -12,7 +13,7 @@ export interface IngestOptions {
   /** stop after this many works were processed (skipped ones do not count) */
   limit: number;
   maxMinutes: number;
-  /** per work per run; the rest are picked up by the next run */
+  /** per work per language per run; the rest are picked up by the next run */
   maxChapters: number;
   /** only these languages (e.g. ["en","ja"]); empty = all */
   langs: string[];
@@ -31,10 +32,15 @@ export interface IngestStats {
 }
 
 const PAGE_CONCURRENCY = Number(process.env.PAGE_CONCURRENCY) || 12;
+const CHAPTER_CONCURRENCY = Number(process.env.CHAPTER_CONCURRENCY) || 3;
+const MAX_ATTEMPTS = 6; // a chapter that failed this many times is parked until an admin resets it
+const BREAKER = 8; // consecutive chapter failures before the run stops itself
 const LANG_PRIORITY = ["en", "ja", "es", "pt", "fr", "de", "it", "ru", "zh", "ko"];
 
 class Budget {
   private deadline: number;
+  failures = 0;
+  tripped = false;
   constructor(
     minutes: number,
     public worksLeft: number,
@@ -42,7 +48,16 @@ class Budget {
     this.deadline = Date.now() + minutes * 60_000;
   }
   get expired() {
-    return Date.now() > this.deadline || this.worksLeft <= 0;
+    return this.tripped || Date.now() > this.deadline || this.worksLeft <= 0;
+  }
+  ok() {
+    this.failures = 0;
+  }
+  fail(log: (m: string) => void) {
+    if (++this.failures >= BREAKER && !this.tripped) {
+      this.tripped = true;
+      log(`  circuit breaker: ${BREAKER} chapters failed in a row - stopping this run (source or network problem)`);
+    }
   }
 }
 
@@ -81,6 +96,8 @@ async function storeChapter(
   chapterId: string,
   src: MdChapter,
   stats: IngestStats,
+  budget: Budget,
+  log: (m: string) => void,
 ): Promise<void> {
   await db(() => prisma.chapter.update({ where: { id: chapterId }, data: { status: "FETCHING", error: null } }));
   try {
@@ -100,6 +117,9 @@ async function storeChapter(
       throw lastErr;
     });
     if (pages.length === 0) throw new Error("no pages");
+    // integrity: the source promised N pages; a short chapter is a failed chapter, not a published one
+    if (pages.length < Math.min(src.attributes.pages, refs.length))
+      throw new Error(`short chapter: ${pages.length}/${src.attributes.pages} pages`);
     await db(() =>
       prisma.$transaction([
         prisma.page.deleteMany({ where: { chapterId } }),
@@ -112,9 +132,13 @@ async function storeChapter(
     );
     stats.chaptersFetched++;
     stats.pagesStored += pages.length;
+    budget.ok();
   } catch (e) {
     const msg = (e as Error).message.slice(0, 300);
-    await db(() => prisma.chapter.update({ where: { id: chapterId }, data: { status: "FAILED", error: msg } }));
+    await db(() =>
+      prisma.chapter.update({ where: { id: chapterId }, data: { status: "FAILED", error: msg, attempts: { increment: 1 } } }),
+    );
+    budget.fail(log);
     throw e;
   }
 }
@@ -132,12 +156,10 @@ async function processManga(
 
   const allTitles = [...Object.values(a.title), ...a.altTitles.flatMap((t) => Object.values(t))];
   const tags = md.tagNames(m);
-  const verdict = classify({
-    title: md.titleFor(m, "en"),
-    altTitles: allTitles,
-    description: md.descriptionFor(m, "en"),
-    tags,
-  });
+  const verdict = classify(
+    { title: md.titleFor(m, "en"), altTitles: allTitles, description: md.descriptionFor(m, "en"), tags },
+    await loadTerms(),
+  );
 
   if (verdict.verdict === "QUARANTINE") {
     stats.worksSuppressed++;
@@ -165,7 +187,7 @@ async function processManga(
     return false;
   }
   if (o.dryRun) {
-    o.log(`  ${m.id} ${verdict.verdict} langs=${[...byLang].map(([l, c]) => `${l}:${c.length}`).join(",")}`);
+    o.log(`  ${m.id} ${verdict.verdict}${verdict.deferFetch ? "(defer)" : ""} langs=${[...byLang].map(([l, c]) => `${l}:${c.length}`).join(",")}`);
     return true;
   }
 
@@ -178,10 +200,11 @@ async function processManga(
   const order = [...byLang]
     .filter(([l]) => !o.langs.length || o.langs.includes(l))
     .sort(([a, x], [b, y]) => {
-    const pa = LANG_PRIORITY.indexOf(a);
-    const pb = LANG_PRIORITY.indexOf(b);
-    return (pa < 0 ? 99 : pa) - (pb < 0 ? 99 : pb) || y.length - x.length;
-  });
+      const pa = LANG_PRIORITY.indexOf(a);
+      const pb = LANG_PRIORITY.indexOf(b);
+      return (pa < 0 ? 99 : pa) - (pb < 0 ? 99 : pb) || y.length - x.length;
+    });
+
   for (const [lang, chs] of order) {
     if (budget.expired) break;
     const picked = dedupeChapters(chs);
@@ -238,36 +261,41 @@ async function processManga(
       o.log(`  ${externalId} HELD (review before download) - nothing fetched`);
       continue;
     }
+    if (work.publish === "REJECTED") continue;
 
-    if (!work.coverKey) {
-      try {
-        const coverKey = await storeCover(work.mediaId, m);
-        if (coverKey) await db(() => prisma.work.update({ where: { id: work.id }, data: { coverKey } }));
-      } catch (e) {
-        stats.errors.push(`cover ${m.id}: ${(e as Error).message}`);
-      }
-    }
+    // cover and chapter rows (one batched insert), then fetch the missing chapters in parallel
+    const coverP = work.coverKey
+      ? Promise.resolve()
+      : storeCover(work.mediaId, m)
+          .then((coverKey) => (coverKey ? db(() => prisma.work.update({ where: { id: work.id }, data: { coverKey } })) : null))
+          .catch((e) => void stats.errors.push(`cover ${m.id}: ${(e as Error).message}`));
 
-    // chapters: create rows, then fetch up to maxChapters that are not READY yet
-    let fetched = 0;
-    for (const { number, ch } of picked) {
-      const row = await db(() =>
-        prisma.chapter.upsert({
-          where: { workId_number: { workId: work.id, number } },
-          create: { workId: work.id, number, volume: ch.attributes.volume, title: ch.attributes.title, sourceChapterId: ch.id },
-          update: {},
-          select: { id: true, status: true },
-        }),
-      );
-      if (row.status === "READY") continue;
-      if (fetched >= o.maxChapters || budget.expired) continue;
+    await db(() =>
+      prisma.chapter.createMany({
+        data: picked.map(({ number, ch }) => ({
+          workId: work.id, number, volume: ch.attributes.volume, title: ch.attributes.title, sourceChapterId: ch.id,
+        })),
+        skipDuplicates: true,
+      }),
+    );
+    const todo = await db(() =>
+      prisma.chapter.findMany({
+        where: { workId: work.id, status: { not: "READY" }, attempts: { lt: MAX_ATTEMPTS } },
+        orderBy: { number: "asc" },
+        take: o.maxChapters,
+        select: { id: true, number: true },
+      }),
+    );
+    const srcByNumber = new Map(picked.map((p) => [p.number, p.ch]));
+    await pool(todo, CHAPTER_CONCURRENCY, async (row) => {
+      if (budget.expired) return;
       try {
-        await storeChapter(work, row.id, ch, stats);
-        fetched++;
+        await storeChapter(work, row.id, srcByNumber.get(row.number)!, stats, budget, o.log);
       } catch (e) {
-        stats.errors.push(`chapter ${ch.id}: ${(e as Error).message}`);
+        stats.errors.push(`chapter ${srcByNumber.get(row.number)!.id}: ${(e as Error).message}`);
       }
-    }
+    });
+    await coverP;
 
     // roll up + publish
     const ready = await db(() =>
@@ -317,6 +345,15 @@ export async function runMangadex(o: IngestOptions): Promise<IngestStats> {
     ? null
     : await db(() => prisma.ingestRun.create({ data: { site: md.SITE, mode: o.mode }, select: { id: true } }));
 
+  // a killed run can leave chapters stuck in FETCHING; put them back in the queue
+  if (!o.dryRun)
+    await db(() =>
+      prisma.chapter.updateMany({
+        where: { status: "FETCHING", updatedAt: { lt: new Date(Date.now() - 30 * 60_000) } },
+        data: { status: "QUEUED" },
+      }),
+    );
+
   const handle = async (m: MdManga, seed: number) => {
     try {
       if (await processManga(m, seed, o, stats, budget)) budget.worksLeft--;
@@ -337,16 +374,23 @@ export async function runMangadex(o: IngestOptions): Promise<IngestStats> {
       }
       const page = await md.listPopular(offset);
       if (!page.data.length) break;
-      const follows = await md.follows(page.data.map((x) => x.id));
-      o.log(`popular offset ${offset} (${page.data.length} of ${page.total})`);
+      const ids = page.data.map((x) => x.id);
+      const [follows, known, suppressed] = await Promise.all([
+        md.follows(ids),
+        db(() =>
+          prisma.workSource.findMany({
+            where: { site: md.SITE, OR: ids.map((id) => ({ externalId: { startsWith: `${id}:` } })) },
+            select: { externalId: true },
+          }),
+        ),
+        db(() => prisma.suppressedSource.findMany({ where: { site: md.SITE, externalId: { in: ids } }, select: { externalId: true } })),
+      ]);
+      const skip = new Set([...known.map((k) => k.externalId.split(":")[0]), ...suppressed.map((s) => s.externalId)]);
+      o.log(`popular offset ${offset} (${page.data.length} of ${page.total}, ${skip.size} already known)`);
       let i = 0;
       for (; i < page.data.length && !budget.expired; i++) {
         const m = page.data[i];
-        const known = await db(() =>
-          prisma.workSource.count({ where: { site: md.SITE, externalId: { startsWith: `${m.id}:` } } }),
-        );
-        const suppressed = await db(() => prisma.suppressedSource.count({ where: { site: md.SITE, externalId: m.id } }));
-        if (known || suppressed) continue;
+        if (skip.has(m.id)) continue;
         await handle(m, follows[m.id] ?? 0);
       }
       offset += i; // resume exactly where we stopped
@@ -357,7 +401,7 @@ export async function runMangadex(o: IngestOptions): Promise<IngestStats> {
       if (i < page.data.length) break;
     }
   } else {
-    // update: revisit works we already have - new chapters, retries of failed ones
+    // update: revisit works we already have - new chapters, retries of failed ones, other languages
     const sources = await db(() =>
       prisma.workSource.findMany({
         where: { site: md.SITE, status: "ACTIVE" },

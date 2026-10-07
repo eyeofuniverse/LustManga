@@ -84,3 +84,18 @@ test("quarantine outranks defer outranks review", () => {
 test("fullwidth forms normalise", () => {
   assert.equal(classify({ ...base, tags: ["ｌｏｌｉ"] }).verdict, "QUARANTINE");
 });
+
+test("core quarantine terms hold even when the supplied term set is empty", () => {
+  const empty = { quarantine: [], defer: [], review: [], allowed: [] };
+  assert.equal(classify({ ...base, tags: ["loli"] }, empty).verdict, "QUARANTINE");
+  assert.equal(classify({ ...base, tags: ["shotacon"] }, empty).verdict, "QUARANTINE");
+  assert.equal(classify({ ...base, tags: ["school uniform"] }, empty).verdict, "CLEAN");
+});
+
+test("admins can add extra quarantine terms (stricter), and edit review/defer/allowed freely", () => {
+  const t = { quarantine: ["custom banned"], defer: ["custom defer"], review: ["custom review"], allowed: ["custom review ok"] };
+  assert.equal(classify({ ...base, tags: ["custom banned"] }, t).verdict, "QUARANTINE");
+  assert.equal(classify({ ...base, tags: ["custom defer"] }, t).deferFetch, true);
+  assert.equal(classify({ ...base, tags: ["custom review"] }, t).verdict, "REVIEW");
+  assert.equal(classify({ ...base, tags: ["custom review ok"] }, t).verdict, "CLEAN");
+});

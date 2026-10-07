@@ -54,6 +54,8 @@ jobs:
             echo "NEXT_PUBLIC_IMG_CDN_HOST=${{ secrets.NEXT_PUBLIC_IMG_CDN_HOST }}"
           } > .env
       - run: npx prisma generate
+      - name: Health check
+        run: npm run health
       - name: Ingest
         run: |
           MODE="${{ github.event.inputs.mode }}"

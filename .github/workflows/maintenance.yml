@@ -1,0 +1,46 @@
+name: Maintenance
+# Daily housekeeping: dependency health check, integrity verify (stored pages still load
+# through the CDN; broken chapters go back in the queue), recompute tag counts.
+on:
+  schedule:
+    - cron: "30 11 * * *"
+  workflow_dispatch:
+    inputs:
+      sample:
+        description: "pages to spot-check"
+        default: "600"
+concurrency:
+  group: maintenance
+  cancel-in-progress: false
+jobs:
+  maintain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Write .env
+        run: |
+          {
+            echo "DATABASE_URL=${{ secrets.DATABASE_URL }}"
+            echo "DB_RETRY_ATTEMPTS=12"
+            echo "DIRECT_URL=${{ secrets.DIRECT_URL }}"
+            echo "R2_ACCESS_KEY_ID=${{ secrets.R2_ACCESS_KEY_ID }}"
+            echo "R2_SECRET_ACCESS_KEY=${{ secrets.R2_SECRET_ACCESS_KEY }}"
+            echo "R2_ENDPOINT=${{ secrets.R2_ENDPOINT }}"
+            echo "R2_BUCKET=${{ secrets.R2_BUCKET }}"
+            echo "NEXT_PUBLIC_IMG_CDN_HOST=${{ secrets.NEXT_PUBLIC_IMG_CDN_HOST }}"
+          } > .env
+      - run: npx prisma generate
+      - name: Health check
+        run: npm run health
+      - name: Verify stored content
+        continue-on-error: true
+        run: npm run verify -- --sample=${{ github.event.inputs.sample || '600' }}
+      - name: Recompute derived numbers
+        continue-on-error: true
+        run: npm run recompute

@@ -19,4 +19,8 @@ jobs:
           DATABASE_URL: postgresql://x:x@localhost:5432/x
           DIRECT_URL: postgresql://x:x@localhost:5432/x
       - run: npm run typecheck
+      - run: npx next build
+        env:
+          DATABASE_URL: postgresql://x:x@localhost:5432/x
+          DIRECT_URL: postgresql://x:x@localhost:5432/x
       - run: npm test

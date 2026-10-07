@@ -1,39 +1,16 @@
 /**
- * Term lists for the ingest safety gate. Edit here (it is config, not logic).
- * Matching is on whole normalised words / phrases, never substrings, so
- * "childhood friend" does not trip "child" and "lolita fashion" does not trip
- * "loli".
+ * Default term lists. These seed the SafetyTerm table (npm run db:setup); after
+ * that, admins edit the lists from the console (Tags, then Safety terms) and the
+ * database is the source of truth. The core quarantine terms live in core.ts.
  *
- * Three tiers:
- *   QUARANTINE  the source itself tags the work as child sexualisation. Metadata
- *               only, no images, no publish path.
- *   DEFER       explicit age markers. Held as DRAFT for an admin; images are NOT
- *               downloaded until the admin approves (a rejected work never has
- *               its images stored).
- *   REVIEW      ambiguous markers. Held as DRAFT for an admin; images are
- *               downloaded so the admin can inspect, then publish or reject.
- * Everything that is not QUARANTINE is decided by an admin, never by this list.
+ *   QUARANTINE  (core.ts + admin additions) metadata only, no images, no publish
+ *   DEFER       explicit age markers: held for an admin, NOT downloaded until approved
+ *   REVIEW      ambiguous markers: held for an admin, downloaded so they can inspect
+ *   ALLOWED     normal adult phrases containing a flagged word (suppresses a match)
+ *
+ * Matching is on whole normalised words / phrases, never substrings.
  */
-
-/**
- * QUARANTINE: genre tags that identify child / child-like sexual content.
- * Matched against TAGS and TITLES only (never the description, so a "no loli"
- * disclaimer cannot suppress a work). Deliberately kept to these few exact tags.
- */
-export const QUARANTINE_TERMS: string[] = [
-  "loli",
-  "lolis",
-  "lolicon",
-  "shota",
-  "shotas",
-  "shotacon",
-  "toddlercon",
-];
-
-/**
- * DEFER: explicit age markers. Matched against tags and titles (not description).
- */
-export const DEFER_TERMS: string[] = [
+export const DEFAULT_DEFER: string[] = [
   "underage",
   "under age",
   "preteen",
@@ -46,10 +23,7 @@ export const DEFER_TERMS: string[] = [
   "primary school",
 ];
 
-/**
- * REVIEW: ambiguous markers. Matched against tags, titles and the description.
- */
-export const REVIEW_TERMS: string[] = [
+export const DEFAULT_REVIEW: string[] = [
   "little girl",
   "little boy",
   "young girl",
@@ -75,11 +49,7 @@ export const REVIEW_TERMS: string[] = [
   "young",
 ];
 
-/**
- * Phrases that contain a flagged word but are normal adult context. Any match of
- * a flagged term that sits inside one of these phrases is ignored.
- */
-export const ALLOWED_CONTEXT: string[] = [
+export const DEFAULT_ALLOWED: string[] = [
   "college student",
   "university student",
   "graduate student",
