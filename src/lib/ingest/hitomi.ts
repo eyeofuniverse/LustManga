@@ -3,6 +3,7 @@ import { pool } from "@/lib/http";
 import { classify } from "@/lib/safety/classify";
 import { loadTerms } from "@/lib/safety/load-terms";
 import { slug, upsertTags } from "@/lib/tags";
+import { attachSource, findDuplicate, findSimilar, normTitle, recordCandidate } from "@/lib/dedupe";
 import * as hm from "@/lib/sources/hitomi";
 import type { HGallery } from "@/lib/sources/hitomi";
 import {
@@ -82,8 +83,15 @@ async function processGallery(id: number, seed: number, c: Ctx): Promise<void> {
   );
   if (!ws) {
     // every language version of a gallery lists its siblings; the lowest id is the group key
-    const siblings = (info.languages ?? []).map((l) => Number(l.galleryid)).filter(Number.isFinite);
     const lang = hm.langCode(info.language);
+    const probe = { titleNorm: normTitle(info.title), language: lang, kind: "ONESHOT" as const, pageCount: info.files.length, artists: n.artists };
+    const dup = await findDuplicate(probe);
+    if (dup) {
+      await attachSource(dup.id, hm.SITE, externalId, `https://hitomi.la/galleries/${id}.html`);
+      stats.duplicates++;
+      return void o.log(`  ${id} DUPLICATE of #${dup.publicId}, source attached (nothing downloaded)`);
+    }
+    const siblings = (info.languages ?? []).map((l) => Number(l.galleryid)).filter(Number.isFinite);
     const created = await db(() =>
       prisma.work.create({
         data: {
@@ -91,6 +99,7 @@ async function processGallery(id: number, seed: number, c: Ctx): Promise<void> {
           kind: "ONESHOT",
           category: hm.categoryFor(info.type) as never,
           title: info.title,
+          titleNorm: probe.titleNorm,
           titleOriginal: info.japanese_title,
           altTitles: info.japanese_title ? [info.japanese_title] : [],
           language: lang,
@@ -105,6 +114,7 @@ async function processGallery(id: number, seed: number, c: Ctx): Promise<void> {
         },
       }),
     );
+    for (const sim of await findSimilar(probe, created.id)) await recordCandidate(created.id, sim.id, sim.score, ["similar title"]);
     stats.worksCreated++;
     c.created.n++;
     budget.worksLeft--;

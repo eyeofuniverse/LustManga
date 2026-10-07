@@ -1,0 +1,69 @@
+name: Ingest Hentai2Read
+# Doujinshi and manga from Hentai2Read, one Work per title. Releases we already hold from another
+# source are attached as an extra source, not re-downloaded. Hard-tagged works are recorded as
+# metadata only; other flagged ones are held for an admin. Safe to re-run.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "popular (most-read, resumable page cursor) | recent (newest uploads) | retry (finish failed works)"
+        default: "popular"
+      limit:
+        description: "max NEW works this run"
+        default: "40"
+      max_pages:
+        description: "skip works with more pages than this"
+        default: "600"
+      max_minutes:
+        description: "stop starting new work after this many minutes"
+        default: "300"
+      dry_run:
+        type: boolean
+        default: false
+  schedule:
+    - cron: "20 */4 * * *" # newest uploads
+    - cron: "50 2,10,18 * * *" # most-read, resumable cursor
+    - cron: "40 6,22 * * *" # retry works that failed
+concurrency:
+  group: ingest-hentai2read
+  cancel-in-progress: false
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Write .env
+        run: |
+          {
+            echo "DATABASE_URL=${{ secrets.DATABASE_URL }}"
+            echo "DB_RETRY_ATTEMPTS=12"
+            echo "DIRECT_URL=${{ secrets.DIRECT_URL }}"
+            echo "R2_ACCESS_KEY_ID=${{ secrets.R2_ACCESS_KEY_ID }}"
+            echo "R2_SECRET_ACCESS_KEY=${{ secrets.R2_SECRET_ACCESS_KEY }}"
+            echo "R2_ENDPOINT=${{ secrets.R2_ENDPOINT }}"
+            echo "R2_BUCKET=${{ secrets.R2_BUCKET }}"
+            echo "NEXT_PUBLIC_IMG_CDN_HOST=${{ secrets.NEXT_PUBLIC_IMG_CDN_HOST }}"
+          } > .env
+      - run: npx prisma generate
+      - name: Health check
+        run: npm run health
+      - name: Ingest
+        run: |
+          MODE="${{ github.event.inputs.mode }}"
+          LIMIT="${{ github.event.inputs.limit }}"
+          if [ -z "$MODE" ]; then
+            case "${{ github.event.schedule }}" in
+              "20 */4 * * *") MODE=recent; LIMIT=30 ;;
+              "40 6,22 * * *") MODE=retry; LIMIT=30 ;;
+              *) MODE=popular; LIMIT=40 ;;
+            esac
+          fi
+          ARGS="--source=hentai2read --mode=$MODE --limit=${LIMIT:-40} --max-pages=${{ github.event.inputs.max_pages || '600' }} --max-minutes=${{ github.event.inputs.max_minutes || '300' }} --max-chapters=20"
+          [ "${{ github.event.inputs.dry_run }}" = "true" ] && ARGS="$ARGS --dry-run"
+          npm run ingest -- $ARGS

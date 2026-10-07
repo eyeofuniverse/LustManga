@@ -8,6 +8,8 @@ export interface IngestStats {
   worksCreated: number;
   worksHeld: number;
   worksSuppressed: number;
+  /** releases that matched a work we already hold; the source was attached instead of re-downloading */
+  duplicates: number;
   chaptersFetched: number;
   pagesStored: number;
   errors: string[];
@@ -18,6 +20,7 @@ export const emptyStats = (): IngestStats => ({
   worksCreated: 0,
   worksHeld: 0,
   worksSuppressed: 0,
+  duplicates: 0,
   chaptersFetched: 0,
   pagesStored: 0,
   errors: [],
@@ -189,6 +192,7 @@ export async function endRun(runId: string | null, stats: IngestStats): Promise<
         worksCreated: stats.worksCreated,
         worksHeld: stats.worksHeld,
         worksSuppressed: stats.worksSuppressed,
+        duplicates: stats.duplicates,
         chaptersFetched: stats.chaptersFetched,
         pagesStored: stats.pagesStored,
         errors: stats.errors.slice(0, 50),

@@ -6,6 +6,7 @@ import { Budget, MAX_ATTEMPTS, beginRun, emptyStats, endRun, finalizeWork, store
 import { classify } from "@/lib/safety/classify";
 import { loadTerms } from "@/lib/safety/load-terms";
 import { slug, normLang, langName, upsertTags } from "@/lib/tags";
+import { attachSource, findDuplicate, findSimilar, normTitle, recordCandidate } from "@/lib/dedupe";
 import * as md from "@/lib/sources/mangadex";
 import type { MdChapter, MdManga } from "@/lib/sources/mangadex";
 
@@ -151,6 +152,20 @@ async function processManga(
     );
     if (!ws) {
       const title = md.titleFor(m, lang);
+      const probe = {
+        titleNorm: normTitle(title),
+        language: lang,
+        kind: (picked.length === 1 ? "ONESHOT" : "SERIES") as "ONESHOT" | "SERIES",
+        pageCount: picked.length === 1 ? picked[0].ch.attributes.pages : 0,
+        artists: [...authors, ...artists],
+      };
+      const dup = await findDuplicate(probe);
+      if (dup) {
+        await attachSource(dup.id, md.SITE, externalId, `https://mangadex.org/title/${m.id}`);
+        stats.duplicates++;
+        o.log(`  ${externalId} DUPLICATE of #${dup.publicId}, source attached (nothing downloaded)`);
+        continue;
+      }
       const created = await db(() =>
         prisma.work.create({
           data: {
@@ -158,6 +173,7 @@ async function processManga(
             kind: picked.length === 1 ? "ONESHOT" : "SERIES",
             category: isDoujin ? "DOUJINSHI" : "MANGA",
             title,
+            titleNorm: probe.titleNorm,
             titleOriginal: a.altTitles.find((t) => t[a.originalLanguage])?.[a.originalLanguage] ?? null,
             altTitles: [...new Set(allTitles)].filter((t) => t !== title).slice(0, 20),
             description: md.descriptionFor(m, lang),
@@ -173,6 +189,7 @@ async function processManga(
           },
         }),
       );
+      for (const sim of await findSimilar(probe, created.id)) await recordCandidate(created.id, sim.id, sim.score, ["similar title"]);
       stats.worksCreated++;
       if (held) stats.worksHeld++;
       const tagIds = await upsertTags([

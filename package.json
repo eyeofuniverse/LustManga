@@ -14,7 +14,8 @@
     "review": "tsx --env-file=.env scripts/review.mts",
     "verify": "tsx --env-file=.env scripts/verify.mts",
     "recompute": "tsx --env-file=.env scripts/recompute.mts",
-    "health": "tsx --env-file=.env scripts/health.mts"
+    "health": "tsx --env-file=.env scripts/health.mts",
+    "dedupe": "tsx --env-file=.env scripts/dedupe.mts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

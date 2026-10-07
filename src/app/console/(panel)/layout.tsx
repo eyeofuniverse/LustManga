@@ -9,18 +9,20 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   const me = await getAdminSession();
   if (!me) redirect("/console/login");
 
-  const [held, deferred, quarantined, failed] = await db(() =>
+  const [held, deferred, quarantined, failed, dups] = await db(() =>
     Promise.all([
       prisma.work.count({ where: { needsReview: true, publish: "DRAFT", deferFetch: false } }),
       prisma.work.count({ where: { needsReview: true, publish: "DRAFT", deferFetch: true } }),
       prisma.suppressedSource.count({ where: { confirmedAt: null } }),
       prisma.chapter.count({ where: { status: "FAILED" } }),
+      prisma.duplicateCandidate.count({ where: { status: "OPEN" } }),
     ]),
-  ).catch(() => [0, 0, 0, 0]);
+  ).catch(() => [0, 0, 0, 0, 0]);
 
   const items: NavItem[] = [
     { href: "/console", label: "Dashboard" },
     { href: "/console/review", label: "Review queue", badge: held + deferred + quarantined || undefined },
+    { href: "/console/duplicates", label: "Duplicates", badge: dups || undefined },
     { href: "/console/works", label: "Works" },
     { href: "/console/tags", label: "Tags & safety" },
     { href: "/console/runs", label: "Ingest runs", badge: failed || undefined },

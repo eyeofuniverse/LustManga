@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import type { SafetyTier, TagType } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireAdmin, type AdminIdentity } from "@/lib/admin/auth";
-import { r2Delete } from "@/lib/r2";
+import { purgeImages } from "@/lib/purge";
+import { mergeWorks, pickSurvivor } from "@/lib/dedupe";
 import { isCoreTerm } from "@/lib/safety/core";
 import { loadTerms } from "@/lib/safety/load-terms";
 import { slug } from "@/lib/tags";
@@ -17,15 +18,6 @@ async function audit(me: AdminIdentity, action: string, targetType: string, targ
   await prisma.auditLog
     .create({ data: { actorId: me.id, actorEmail: me.email, action, targetType, targetId, diff: diff as object | undefined } })
     .catch(() => {});
-}
-
-/** Delete every stored image (pages + cover) for a work and drop its chapters. */
-async function purgeImages(workId: string, coverKey: string | null): Promise<number> {
-  const pages = await prisma.page.findMany({ where: { chapter: { workId } }, select: { key: true } });
-  for (const p of pages) await r2Delete(p.key).catch(() => {});
-  if (coverKey) await r2Delete(coverKey).catch(() => {});
-  await prisma.chapter.deleteMany({ where: { workId } }); // cascades Page rows
-  return pages.length + (coverKey ? 1 : 0);
 }
 
 /* ───────────────────────────── review + works ───────────────────────────── */
@@ -229,4 +221,55 @@ export async function removeTerm(id: string): Promise<ActionResult> {
   await audit(me, "term.remove", "term", t.term, { tier: t.tier });
   revalidatePath("/console/tags");
   return ok(`"${t.term}" removed from ${t.tier.toLowerCase()}`);
+}
+
+/* ───────────────────────────── duplicates ───────────────────────────── */
+
+/**
+ * Fold one work into the other. If either copy was rejected, the admin's rejection wins:
+ * the other copy is rejected too instead of being merged into a live work.
+ */
+export async function resolveDuplicate(candidateId: string, keepPublicId: number): Promise<ActionResult> {
+  const me = await requireAdmin("MOD");
+  const cand = await prisma.duplicateCandidate.findUnique({ where: { id: candidateId } });
+  if (!cand || cand.status !== "OPEN") return fail("Already resolved");
+  const [a, b] = await Promise.all([
+    prisma.work.findUnique({ where: { id: cand.workId } }),
+    prisma.work.findUnique({ where: { id: cand.otherId } }),
+  ]);
+  if (!a || !b) {
+    await prisma.duplicateCandidate.update({ where: { id: candidateId }, data: { status: "DISMISSED" } });
+    return ok("One of the works no longer exists");
+  }
+  const keep = a.publicId === keepPublicId ? a : b.publicId === keepPublicId ? b : null;
+  if (!keep) return fail("Pick one of the two works");
+  const drop = keep.id === a.id ? b : a;
+
+  if (a.publish === "REJECTED" || b.publish === "REJECTED") {
+    const live = [a, b].find((w) => w.publish !== "REJECTED");
+    if (live) {
+      const purged = await purgeImages(live.id, live.coverKey);
+      await prisma.work.update({
+        where: { id: live.id },
+        data: { publish: "REJECTED", needsReview: false, reviewDecision: "REJECTED", reviewedAt: new Date(), reviewedBy: me.email, coverKey: null, pageCount: 0 },
+      });
+      await prisma.duplicateCandidate.update({ where: { id: candidateId }, data: { status: "MERGED" } });
+      await audit(me, "duplicate.reject-follow", "work", String(live.publicId), { purged });
+      revalidatePath("/console", "layout");
+      return ok(`#${live.publicId} rejected to match the earlier rejection of its duplicate`);
+    }
+  }
+  const { purged } = await mergeWorks(keep.id, drop.id);
+  await prisma.duplicateCandidate.update({ where: { id: candidateId }, data: { status: "MERGED" } }).catch(() => {});
+  await audit(me, "duplicate.merge", "work", String(keep.publicId), { dropped: drop.publicId, purged });
+  revalidatePath("/console", "layout");
+  return ok(`#${drop.publicId} merged into #${keep.publicId}; its sources and tags moved across`);
+}
+
+export async function dismissDuplicate(candidateId: string): Promise<ActionResult> {
+  const me = await requireAdmin("MOD");
+  await prisma.duplicateCandidate.update({ where: { id: candidateId }, data: { status: "DISMISSED" } });
+  await audit(me, "duplicate.dismiss", "duplicate", candidateId);
+  revalidatePath("/console", "layout");
+  return ok("Marked as different works");
 }

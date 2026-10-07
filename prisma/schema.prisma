@@ -78,6 +78,8 @@ model Work {
   language      String   @default("en")
   /// all language variants of the same underlying work share this id
   translationGroupId String?
+  /// normalised title (brackets stripped) used to recognise the same work from another source
+  titleNorm String?
 
   pageCount Int     @default(0)
   coverKey  String?
@@ -117,6 +119,7 @@ model Work {
   @@index([publish, seedPopularity])
   @@index([needsReview, publish])
   @@index([translationGroupId])
+  @@index([language, titleNorm])
   @@index([slug])
 }
 
@@ -225,6 +228,7 @@ model IngestRun {
   worksCreated     Int @default(0)
   worksHeld        Int @default(0)
   worksSuppressed  Int @default(0)
+  duplicates       Int @default(0)
   chaptersFetched  Int @default(0)
   pagesStored      Int @default(0)
   errors     String[]  @default([])
@@ -336,4 +340,22 @@ model AuditLog {
 
   @@index([targetType, targetId])
   @@index([createdAt])
+}
+
+/// Two Works that may be the same release from different sources. Confident matches are merged
+/// automatically; the rest wait here for an admin (Console, Duplicates).
+model DuplicateCandidate {
+  id        String   @id @default(cuid())
+  /// the newer work
+  workId    String
+  /// the existing work it may duplicate
+  otherId   String
+  score     Float
+  reasons   String[] @default([])
+  /// OPEN | MERGED | DISMISSED
+  status    String   @default("OPEN")
+  createdAt DateTime @default(now())
+
+  @@unique([workId, otherId])
+  @@index([status, createdAt])
 }
