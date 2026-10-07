@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { prisma, db } from "@/lib/db";
 import { pool } from "@/lib/http";
-import { toWebp, UnsupportedImageError } from "@/lib/images";
+import { isAvifSequence, toWebp, UnsupportedImageError } from "@/lib/images";
+import { pageKey, type PageTuple } from "@/lib/pages";
 import { r2Put } from "@/lib/r2";
 
 export interface IngestStats {
@@ -60,11 +62,15 @@ export interface PageSource {
   /** 1-based reading order */
   n: number;
   get: () => Promise<Buffer>;
+  /** dimensions known from the source's metadata; used when a file has to be stored untouched */
+  dims?: { width: number; height: number };
 }
 
 /**
  * Fetch every page of a chapter, normalise to WebP, upload to R2, and mark the chapter READY.
- * A chapter that comes up short is FAILED (and retried later), never published half-empty.
+ * Per-page data is written to the chapter as compact tuples (no row per page). Animated AVIF, which
+ * cannot be re-encoded, is stored untouched. A chapter that comes up short is FAILED (and retried
+ * later), never published half-empty.
  */
 export async function storeChapterPages(
   work: { id: string; mediaId: string },
@@ -84,10 +90,18 @@ export async function storeChapterPages(
       let lastErr: unknown;
       for (let i = 0; i < 3; i++) {
         try {
-          const img = await toWebp(await ref.get());
-          const key = `w/${work.mediaId}/${chapterId}/${ref.n}.webp`;
-          await r2Put(key, img.data);
-          return { order: ref.n, key, width: img.width, height: img.height, bytes: img.bytes, phash: img.phash };
+          const raw = await ref.get();
+          try {
+            const img = await toWebp(raw);
+            await r2Put(pageKey(work.mediaId, chapterId, ref.n), img.data);
+            return { tuple: [img.width, img.height, img.bytes] as PageTuple, phash: img.phash as string | null };
+          } catch (e) {
+            if (e instanceof UnsupportedImageError && isAvifSequence(raw)) {
+              await r2Put(pageKey(work.mediaId, chapterId, ref.n, "avif"), raw, "image/avif");
+              return { tuple: [ref.dims?.width ?? 0, ref.dims?.height ?? 0, raw.length, "avif"] as PageTuple, phash: null as string | null };
+            }
+            throw e;
+          }
         } catch (e) {
           if (e instanceof UnsupportedImageError) throw e; // permanent: do not retry
           lastErr = e;
@@ -98,14 +112,18 @@ export async function storeChapterPages(
     if (pages.length === 0) throw new Error("no pages");
     if (pages.length < Math.min(expected, refs.length)) throw new Error(`short chapter: ${pages.length}/${expected} pages`);
     await db(() =>
-      prisma.$transaction([
-        prisma.page.deleteMany({ where: { chapterId } }),
-        prisma.page.createMany({ data: pages.map((p) => ({ ...p, chapterId })) }),
-        prisma.chapter.update({
-          where: { id: chapterId },
-          data: { status: "READY", pageCount: pages.length, publishedAt, error: null },
-        }),
-      ]),
+      prisma.chapter.update({
+        where: { id: chapterId },
+        data: {
+          status: "READY",
+          pageCount: pages.length,
+          pageData: pages.map((p) => p.tuple) as unknown as number[][],
+          bytes: pages.reduce((a, p) => a + p.tuple[2], 0),
+          phash: pages.find((p) => p.phash)?.phash ?? null,
+          publishedAt,
+          error: null,
+        },
+      }),
     );
     stats.chaptersFetched++;
     stats.pagesStored += pages.length;
@@ -200,3 +218,6 @@ export async function endRun(runId: string | null, stats: IngestStats): Promise<
     }),
   );
 }
+
+/** Short stable hash for logs and error strings: lets us correlate a failure without printing a work's id or title. */
+export const anon = (s: string) => createHash("sha1").update(s).digest("hex").slice(0, 8);

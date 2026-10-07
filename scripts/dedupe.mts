@@ -97,7 +97,7 @@ console.log(`near-title matches queued: ${flagged}`);
 
 // 4 ─ confirm open candidates with first-page fingerprints
 const firstHash = async (workId: string) =>
-  (await prisma.page.findFirst({ where: { chapter: { workId }, phash: { not: null } }, orderBy: [{ chapter: { number: "asc" } }, { order: "asc" }], select: { phash: true } }))?.phash ?? null;
+  (await prisma.chapter.findFirst({ where: { workId, phash: { not: null } }, orderBy: { number: "asc" }, select: { phash: true } }))?.phash ?? null;
 let confirmed = 0, dismissed = 0;
 const open = await prisma.duplicateCandidate.findMany({ where: { status: "OPEN" }, take: 500 });
 for (const cand of open) {

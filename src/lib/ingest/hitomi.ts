@@ -47,9 +47,9 @@ async function processGallery(id: number, seed: number, c: Ctx): Promise<void> {
   });
   if (!info) return;
   stats.worksSeen++;
-  if (info.blocked) return void o.log(`  ${id} blocked upstream, skipped`);
-  if (!info.files?.length) return void o.log(`  ${id} no files, skipped`);
-  if (info.files.length > o.maxPages) return void o.log(`  ${id} ${info.files.length} pages > max-pages ${o.maxPages}, skipped`);
+  if (info.blocked) return;
+  if (!info.files?.length) return;
+  if (o.maxPages > 0 && info.files.length > o.maxPages) return; // 0 = no limit
 
   const n = hm.names(info);
   const verdict = classify(
@@ -59,7 +59,6 @@ async function processGallery(id: number, seed: number, c: Ctx): Promise<void> {
 
   if (verdict.verdict === "QUARANTINE") {
     stats.worksSuppressed++;
-    o.log(`  ${id} QUARANTINED (${verdict.reasons.join(", ")}) - metadata only`);
     if (!o.dryRun)
       await db(() =>
         prisma.suppressedSource.upsert({
@@ -74,7 +73,7 @@ async function processGallery(id: number, seed: number, c: Ctx): Promise<void> {
   if (o.dryRun) {
     c.created.n++;
     budget.worksLeft--;
-    return void o.log(`  ${id} ${verdict.verdict}${verdict.deferFetch ? "(defer)" : ""} ${info.type}/${info.language} ${info.files.length}p`);
+    return void o.log(`  dry-run: ${verdict.verdict}${verdict.deferFetch ? "(defer)" : ""} ${info.type}/${info.language} ${info.files.length}p`);
   }
 
   const externalId = String(id);
@@ -89,7 +88,7 @@ async function processGallery(id: number, seed: number, c: Ctx): Promise<void> {
     if (dup) {
       await attachSource(dup.id, hm.SITE, externalId, `https://hitomi.la/galleries/${id}.html`);
       stats.duplicates++;
-      return void o.log(`  ${id} DUPLICATE of #${dup.publicId}, source attached (nothing downloaded)`);
+      return void o.log(`  duplicate of #${dup.publicId}, source attached (nothing downloaded)`);
     }
     const siblings = (info.languages ?? []).map((l) => Number(l.galleryid)).filter(Number.isFinite);
     const created = await db(() =>
@@ -138,7 +137,7 @@ async function processGallery(id: number, seed: number, c: Ctx): Promise<void> {
   const work = ws.work;
 
   // explicit age markers: hold with NO downloads until an admin approves
-  if (work.deferFetch && work.reviewDecision !== "APPROVED") return void o.log(`  ${id} HELD (review before download) - nothing fetched`);
+  if (work.deferFetch && work.reviewDecision !== "APPROVED") return void o.log("  held (review before download), nothing fetched");
   if (work.publish === "REJECTED") return;
 
   await db(() =>
@@ -161,7 +160,7 @@ async function processGallery(id: number, seed: number, c: Ctx): Promise<void> {
       await storeChapterPages(
         work,
         chapter.id,
-        async () => info.files.map((f, i) => ({ n: i + 1, get: () => hm.downloadPage(f) })),
+        async () => info.files.map((f, i) => ({ n: i + 1, get: () => hm.downloadPage(f), dims: { width: f.width, height: f.height } })),
         info.files.length,
         parseDate(info),
         stats,
@@ -176,7 +175,7 @@ async function processGallery(id: number, seed: number, c: Ctx): Promise<void> {
   await coverP;
 
   const done = await finalizeWork(work.id, ws.id);
-  o.log(`  ${id} ${done.published ? "PUBLISHED" : done.held ? "HELD (review)" : "draft"} ${info.type}/${info.language} ${info.files.length}p`);
+  o.log(`  #${work.publicId} ${done.published ? "PUBLISHED" : done.held ? "HELD (review)" : "draft"} ${info.type}/${info.language} ${info.files.length}p`);
 }
 
 function parseDate(info: HGallery): Date | null {

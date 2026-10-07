@@ -1,11 +1,16 @@
 import { prisma } from "@/lib/db";
-import { r2Delete } from "@/lib/r2";
+import { pool } from "@/lib/http";
+import { r2Delete, r2List } from "@/lib/r2";
 
-/** Delete every stored image (pages + cover) for a work and drop its chapters. Returns how many objects were removed. */
+/**
+ * Delete every stored image for a work and drop its chapters. Lists the work's whole folder in R2,
+ * so files left behind by an interrupted chapter are removed too. Returns how many objects went.
+ */
 export async function purgeImages(workId: string, coverKey: string | null): Promise<number> {
-  const pages = await prisma.page.findMany({ where: { chapter: { workId } }, select: { key: true } });
-  for (const p of pages) await r2Delete(p.key).catch(() => {});
-  if (coverKey) await r2Delete(coverKey).catch(() => {});
-  await prisma.chapter.deleteMany({ where: { workId } }); // cascades Page rows
-  return pages.length + (coverKey ? 1 : 0);
+  const work = await prisma.work.findUnique({ where: { id: workId }, select: { mediaId: true } });
+  const keys = new Set<string>(coverKey ? [coverKey] : []);
+  if (work) for (const k of await r2List(`w/${work.mediaId}/`).catch(() => [])) keys.add(k);
+  await pool([...keys], 16, (k) => r2Delete(k).catch(() => {}));
+  await prisma.chapter.deleteMany({ where: { workId } });
+  return keys.size;
 }

@@ -24,7 +24,7 @@ export default async function Dashboard() {
     Promise.all([
       prisma.work.groupBy({ by: ["publish"], _count: true }),
       prisma.chapter.groupBy({ by: ["status"], _count: true }),
-      prisma.page.aggregate({ _count: true, _sum: { bytes: true } }),
+      prisma.chapter.aggregate({ where: { status: "READY" }, _sum: { pageCount: true, bytes: true } }),
       prisma.ingestRun.findMany({ orderBy: { startedAt: "desc" }, take: 6 }),
       prisma.work.groupBy({ by: ["language"], where: { publish: "PUBLISHED" }, _count: true, orderBy: { _count: { language: "desc" } }, take: 8 }),
       prisma.tag.findMany({ orderBy: { count: "desc" }, take: 8, select: { name: true, type: true, count: true } }),
@@ -40,7 +40,7 @@ export default async function Dashboard() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Published works" value={n(byPublish, "PUBLISHED")} sub={`${n(byPublish, "DRAFT")} draft, ${n(byPublish, "REJECTED")} rejected`} />
         <Stat label="Chapters ready" value={n(chapters, "READY")} sub={`${n(chapters, "QUEUED")} queued, ${n(chapters, "FAILED")} failed`} />
-        <Stat label="Pages stored" value={pages._count.toLocaleString()} sub={fmtBytes(Number(pages._sum.bytes ?? 0))} />
+        <Stat label="Pages stored" value={(pages._sum.pageCount ?? 0).toLocaleString()} sub={fmtBytes(Number(pages._sum.bytes ?? 0))} />
         <Stat label="Quarantined" value={suppressed} sub="metadata only, never downloaded" />
       </div>
 

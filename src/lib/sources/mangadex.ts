@@ -18,6 +18,7 @@ export interface MdManga {
     description: L10n;
     originalLanguage: string;
     year: number | null;
+    createdAt: string;
     status: string;
     contentRating: string;
     tags: { id: string; attributes: { name: L10n; group: string } }[];
@@ -50,6 +51,20 @@ export async function listPopular(offset: number, limit = 100): Promise<{ data: 
     `&order[followedCount]=desc&${INCLUDES}`;
   return api.json(url);
 }
+
+/**
+ * The whole catalogue, oldest first, starting at `since` (UTC, "YYYY-MM-DDTHH:MM:SS"). MangaDex refuses
+ * offsets past 10,000, so callers walk forward by moving `since` to the last item's createdAt (keyset
+ * pagination) instead of increasing the offset.
+ */
+export async function listByCreated(since: string, offset: number, limit = 100): Promise<{ data: MdManga[]; total: number }> {
+  const url =
+    `${API}/manga?limit=${limit}&offset=${offset}&contentRating[]=pornographic&hasAvailableChapters=true` +
+    `&order[createdAt]=asc&createdAtSince=${since}&${INCLUDES}`;
+  return api.json(url);
+}
+
+export const toSince = (createdAt: string) => createdAt.slice(0, 19);
 
 export async function getManga(id: string): Promise<MdManga | null> {
   const res = await api.request(`${API}/manga/${id}?${INCLUDES}`);

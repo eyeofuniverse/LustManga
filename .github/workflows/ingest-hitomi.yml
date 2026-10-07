@@ -15,8 +15,8 @@ on:
         description: "comma list, e.g. en,ja (blank = en)"
         default: ""
       max_pages:
-        description: "skip galleries with more pages than this"
-        default: "600"
+        description: "skip galleries with more pages than this (0 = no limit)"
+        default: "0"
       max_minutes:
         description: "stop starting new work after this many minutes"
         default: "300"
@@ -69,7 +69,7 @@ jobs:
             esac
           fi
           [ -z "$LANGS" ] && [ "${{ github.event_name }}" = "schedule" ] && LANGS=en,ja
-          ARGS="--source=hitomi --mode=$MODE --limit=${LIMIT:-60} --max-pages=${{ github.event.inputs.max_pages || '600' }} --max-minutes=${{ github.event.inputs.max_minutes || '300' }}"
+          ARGS="--source=hitomi --mode=$MODE --limit=${LIMIT:-60} --max-pages=${{ github.event.inputs.max_pages || '0' }} --max-minutes=${{ github.event.inputs.max_minutes || '300' }}"
           [ -n "$LANGS" ] && ARGS="$ARGS --langs=$LANGS"
           [ "${{ github.event.inputs.dry_run }}" = "true" ] && ARGS="$ARGS --dry-run"
           npm run ingest -- $ARGS

@@ -35,3 +35,19 @@ export async function r2Delete(key: string): Promise<void> {
 }
 
 export const imgUrl = (key: string) => `https://${process.env.NEXT_PUBLIC_IMG_CDN_HOST}/${key}`;
+
+/** Every object key under a prefix (S3 ListObjectsV2, paginated). */
+export async function r2List(prefix: string): Promise<string[]> {
+  const { client, base } = cfg();
+  const keys: string[] = [];
+  let token: string | undefined;
+  do {
+    const url = `${base}?list-type=2&prefix=${encodeURIComponent(prefix)}${token ? `&continuation-token=${encodeURIComponent(token)}` : ""}`;
+    const res = await client.fetch(url);
+    if (!res.ok) throw new Error(`R2 list failed: HTTP ${res.status}`);
+    const xml = await res.text();
+    for (const m of xml.matchAll(/<Key>([^<]+)<\/Key>/g)) keys.push(m[1]);
+    token = xml.match(/<NextContinuationToken>([^<]+)<\/NextContinuationToken>/)?.[1];
+  } while (token);
+  return keys;
+}

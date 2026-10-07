@@ -152,13 +152,19 @@ model Chapter {
   volume  String?
   title   String?
   pageCount Int @default(0)
+  /// compact per-page data: [[width, height, bytes, ext?], ...] in reading order. Keys are derived
+  /// (w/{mediaId}/{chapterId}/{n}.{ext}) so a page costs bytes, not a database row.
+  pageData Json?
+  /// total stored bytes for this chapter
+  bytes Int @default(0)
+  /// perceptual hash of the first page (cross-source dedupe)
+  phash String?
   status  ChapterStatus @default(QUEUED)
   error   String?
   /// upstream chapter id on the source site
   sourceChapterId String?
   publishedAt DateTime?
 
-  pages Page[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
@@ -168,22 +174,6 @@ model Chapter {
   @@index([status])
 }
 
-model Page {
-  id        String  @id @default(cuid())
-  chapterId String
-  chapter   Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
-  /// 1-based reading order
-  order     Int
-  /// R2 object key
-  key       String
-  width     Int
-  height    Int
-  bytes     Int
-  /// perceptual hash (hex) for cross-source duplicate detection
-  phash     String?
-
-  @@unique([chapterId, order])
-}
 
 /// A link from our Work to the upstream gallery / series it came from.
 model WorkSource {

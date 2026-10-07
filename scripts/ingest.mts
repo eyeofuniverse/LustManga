@@ -1,6 +1,6 @@
 // npm run ingest -- --source=mangadex|hitomi|hentai2read [--mode=...] [--limit=N] [--max-minutes=N] [--langs=en,ja] [--dry-run]
 //   mangadex: --mode=popular|update  --max-chapters=N
-//   hitomi:   --mode=popular|recent|retry  --max-pages=N
+//   hitomi:   --mode=popular|recent|retry  --max-pages=N (0 = no limit)
 import { runMangadex } from "../src/lib/ingest/mangadex";
 import { runHitomi } from "../src/lib/ingest/hitomi";
 import { runHentai2Read } from "../src/lib/ingest/hentai2read";
@@ -26,19 +26,19 @@ if (source === "hitomi") {
   stats = await runHitomi({
     ...common,
     mode: arg("mode", "popular") as "popular" | "recent" | "retry",
-    maxPages: Number(arg("max-pages", "600")),
+    maxPages: Number(arg("max-pages", "0")),
   });
 } else if (source === "hentai2read") {
   stats = await runHentai2Read({
     ...common,
     mode: arg("mode", "popular") as "popular" | "recent" | "retry",
-    maxPages: Number(arg("max-pages", "600")),
+    maxPages: Number(arg("max-pages", "0")),
     maxChapters: Number(arg("max-chapters", "20")),
   });
 } else if (source === "mangadex") {
   stats = await runMangadex({
     ...common,
-    mode: arg("mode", "popular") as "popular" | "update",
+    mode: arg("mode", "popular") as "popular" | "backlog" | "update",
     maxChapters: Number(arg("max-chapters", "10")),
   });
 } else {

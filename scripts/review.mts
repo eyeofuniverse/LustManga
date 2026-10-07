@@ -6,18 +6,10 @@
 //   npm run review -- confirm <id...>         confirm a suppression after looking at it
 // There is deliberately no "approve" for suppressed works.
 import { prisma } from "../src/lib/db";
-import { r2Delete } from "../src/lib/r2";
+import { purgeImages } from "../src/lib/purge";
 
 const [cmd, ...rest] = process.argv.slice(2);
 const ids = rest.map(Number).filter(Number.isFinite);
-
-async function purgeImages(workId: string, coverKey: string | null) {
-  const pages = await prisma.page.findMany({ where: { chapter: { workId } }, select: { key: true } });
-  for (const p of pages) await r2Delete(p.key);
-  if (coverKey) await r2Delete(coverKey);
-  await prisma.chapter.deleteMany({ where: { workId } }); // cascades Page rows
-  return pages.length + (coverKey ? 1 : 0);
-}
 
 if (cmd === "list") {
   const works = await prisma.work.findMany({

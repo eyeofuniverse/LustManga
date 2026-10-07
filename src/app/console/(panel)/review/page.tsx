@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma, db } from "@/lib/db";
 import { cdn } from "@/lib/cdn";
+import { pagesOf } from "@/lib/pages";
 import { approveWork, rejectWork, confirmSuppressed } from "@/lib/admin/actions";
 import { ActionButton } from "@/components/console/ActionForm";
 
@@ -74,9 +75,10 @@ async function Held({ page }: { page: number }) {
     }),
   );
   const firstPages = await Promise.all(
-    works.map((w) =>
-      prisma.page.findMany({ where: { chapter: { workId: w.id } }, orderBy: [{ chapter: { number: "asc" } }, { order: "asc" }], take: 4, select: { key: true } }),
-    ),
+    works.map(async (w) => {
+      const ch = await prisma.chapter.findFirst({ where: { workId: w.id, status: "READY" }, orderBy: { number: "asc" }, select: { id: true, pageData: true } });
+      return ch ? pagesOf(ch, w.mediaId).slice(0, 4) : [];
+    }),
   );
   if (!works.length) return <p className="text-sm text-white/50">Nothing waiting. </p>;
   return (

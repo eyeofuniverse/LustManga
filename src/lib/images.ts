@@ -1,6 +1,6 @@
 import sharp from "sharp";
 
-/** The file can never be converted (animated AVIF, unknown format). Retrying is pointless. */
+/** The file can never be converted (unknown format). Retrying is pointless. */
 export class UnsupportedImageError extends Error {
   constructor(msg: string) {
     super(msg);
@@ -14,6 +14,7 @@ export interface Processed {
   height: number;
   bytes: number;
   phash: string;
+  animated: boolean;
 }
 
 /** 64-bit difference hash, hex. Cheap perceptual fingerprint for cross-source dedupe. */
@@ -26,30 +27,46 @@ export async function dhash(input: Buffer): Promise<string> {
   return hex;
 }
 
+/**
+ * Animated AVIF (brand "avis") is how Hitomi stores GIFs. libvips cannot decode it, but browsers can
+ * play it, so the caller stores such files untouched instead of failing the chapter.
+ */
+export const isAvifSequence = (buf: Buffer) => buf.subarray(4, 12).toString("latin1") === "ftypavis";
+
 const MAX_DIM = 16000; // WebP hard limit is 16383
+const MAX_FRAMES = 400; // beyond this an animation is stored as a still (memory and size)
 
 /**
- * Decode (throws on truncated/corrupt input), normalise to WebP, report size + hash.
- * This doubles as the integrity check: an image that doesn't decode never gets stored.
+ * Decode (throws on truncated/corrupt input), normalise to WebP, report size + hash. Animated GIF /
+ * WebP / APNG keep their animation. This doubles as the integrity check: an image that does not
+ * decode never gets stored.
  */
 export async function toWebp(input: Buffer, opts: { maxWidth?: number } = {}): Promise<Processed> {
   if (input.length < 500) throw new Error(`image too small (${input.length} bytes)`);
-  // animated AVIF (brand "avis") is how Hitomi stores GIFs; libvips cannot decode it
-  if (input.subarray(4, 12).toString("latin1") === "ftypavis") throw new UnsupportedImageError("animated image (AVIF sequence) is not supported");
-  let img = sharp(input, { failOn: "error", animated: false });
-  const meta = await img.metadata().catch((e: Error) => {
-    if (/unsupported image format/i.test(e.message)) throw new UnsupportedImageError(e.message);
-    throw e;
-  });
-  if (!meta.width || !meta.height) throw new Error("image has no dimensions");
-  if (meta.height > MAX_DIM || meta.width > MAX_DIM || (opts.maxWidth && meta.width > opts.maxWidth)) {
+  if (isAvifSequence(input)) throw new UnsupportedImageError("animated AVIF sequence cannot be re-encoded");
+
+  const probe = await sharp(input, { failOn: "error" })
+    .metadata()
+    .catch((e: Error) => {
+      if (/unsupported image format/i.test(e.message)) throw new UnsupportedImageError(e.message);
+      throw e;
+    });
+  if (!probe.width || !probe.height) throw new Error("image has no dimensions");
+
+  const frames = probe.pages ?? 1;
+  const animated = frames > 1 && frames <= MAX_FRAMES;
+  const frameHeight = animated ? (probe.pageHeight ?? Math.round(probe.height / frames)) : probe.height;
+
+  let img = sharp(input, { failOn: "error", animated });
+  if (probe.width > MAX_DIM || frameHeight > MAX_DIM || (opts.maxWidth && probe.width > opts.maxWidth)) {
     img = img.resize({
       width: opts.maxWidth ? Math.min(opts.maxWidth, MAX_DIM) : undefined,
-      height: MAX_DIM,
+      height: animated ? undefined : MAX_DIM,
       fit: "inside",
       withoutEnlargement: true,
     });
   }
-  const { data, info } = await img.webp({ quality: 82, effort: 4 }).toBuffer({ resolveWithObject: true });
-  return { data, width: info.width, height: info.height, bytes: data.length, phash: await dhash(data) };
+  const { data, info } = await img.webp({ quality: 80, effort: animated ? 2 : 4 }).toBuffer({ resolveWithObject: true });
+  const height = animated ? (info.pageHeight ?? Math.round(info.height / frames)) : info.height;
+  return { data, width: info.width, height, bytes: data.length, phash: await dhash(data), animated };
 }

@@ -11,7 +11,8 @@ import * as md from "@/lib/sources/mangadex";
 import type { MdChapter, MdManga } from "@/lib/sources/mangadex";
 
 export interface IngestOptions {
-  mode: "popular" | "update";
+  /** popular = most-followed first, then continues into backlog; backlog = the rest of the catalogue; update = revisit known works */
+  mode: "popular" | "backlog" | "update";
   /** stop after this many works were processed (skipped ones do not count) */
   limit: number;
   maxMinutes: number;
@@ -98,7 +99,6 @@ async function processManga(
 
   if (verdict.verdict === "QUARANTINE") {
     stats.worksSuppressed++;
-    o.log(`  ${m.id} QUARANTINED (${verdict.reasons.join(", ")}) - metadata only`);
     if (!o.dryRun)
       await db(() =>
         prisma.suppressedSource.upsert({
@@ -118,11 +118,10 @@ async function processManga(
     byLang.set(l, [...(byLang.get(l) ?? []), c]);
   }
   if (!byLang.size) {
-    o.log(`  ${m.id} no readable chapters, skipped`);
     return false;
   }
   if (o.dryRun) {
-    o.log(`  ${m.id} ${verdict.verdict}${verdict.deferFetch ? "(defer)" : ""} langs=${[...byLang].map(([l, c]) => `${l}:${c.length}`).join(",")}`);
+    o.log(`  dry-run: ${verdict.verdict}${verdict.deferFetch ? "(defer)" : ""} langs=${[...byLang].map(([l, c]) => `${l}:${c.length}`).join(",")}`);
     return true;
   }
 
@@ -163,7 +162,7 @@ async function processManga(
       if (dup) {
         await attachSource(dup.id, md.SITE, externalId, `https://mangadex.org/title/${m.id}`);
         stats.duplicates++;
-        o.log(`  ${externalId} DUPLICATE of #${dup.publicId}, source attached (nothing downloaded)`);
+        o.log(`  duplicate of #${dup.publicId}, source attached (nothing downloaded)`);
         continue;
       }
       const created = await db(() =>
@@ -209,7 +208,7 @@ async function processManga(
 
     // explicit age markers: hold with NO downloads until an admin approves
     if (work.deferFetch && work.reviewDecision !== "APPROVED") {
-      o.log(`  ${externalId} HELD (review before download) - nothing fetched`);
+      o.log("  held (review before download), nothing fetched");
       continue;
     }
     if (work.publish === "REJECTED") continue;
@@ -250,7 +249,7 @@ async function processManga(
 
     const done = await finalizeWork(work.id, ws.id);
     o.log(
-      `  ${externalId} ${done.published ? "PUBLISHED" : done.held ? "HELD (review)" : "draft"} chapters ${done.ready}/${picked.length}`,
+      `  #${work.publicId} [${lang}] ${done.published ? "PUBLISHED" : done.held ? "HELD (review)" : "draft"} chapters ${done.ready}/${picked.length}`,
     );
   }
   return true;
@@ -267,50 +266,96 @@ export async function runMangadex(o: IngestOptions): Promise<IngestStats> {
     try {
       if (await processManga(m, seed, o, stats, budget)) budget.worksLeft--;
     } catch (e) {
-      stats.errors.push(`manga ${m.id}: ${(e as Error).message}`);
-      o.log(`  ${m.id} ERROR ${(e as Error).message}`);
+      stats.errors.push(`manga: ${(e as Error).message}`);
+      o.log(`  error: ${(e as Error).message}`);
     }
   };
 
-  if (o.mode === "popular") {
+  /** Handle one page of listing results; returns how many items were reached before the budget ran out. */
+  const sweep = async (data: MdManga[], note: string): Promise<number> => {
+    const ids = data.map((x) => x.id);
+    const [follows, known, suppressed] = await Promise.all([
+      md.follows(ids),
+      db(() =>
+        prisma.workSource.findMany({
+          where: { site: md.SITE, OR: ids.map((id) => ({ externalId: { startsWith: `${id}:` } })) },
+          select: { externalId: true },
+        }),
+      ),
+      db(() => prisma.suppressedSource.findMany({ where: { site: md.SITE, externalId: { in: ids } }, select: { externalId: true } })),
+    ]);
+    const skip = new Set([...known.map((k) => k.externalId.split(":")[0]), ...suppressed.map((s) => s.externalId)]);
+    o.log(`${note} (${data.length} listed, ${skip.size} already known)`);
+    let i = 0;
+    for (; i < data.length && !budget.expired; i++) {
+      if (skip.has(data[i].id)) continue;
+      await handle(data[i], follows[data[i].id] ?? 0);
+    }
+    return i;
+  };
+
+  let phase: "popular" | "backlog" | "update" = o.mode;
+
+  if (phase === "popular") {
+    // most-followed first. MangaDex caps offsets at 10,000, so this covers the top of the catalogue.
     const key = "mangadex:popular:offset";
     const saved = await db(() => prisma.setting.findUnique({ where: { key } }));
     let offset = (saved?.value as { offset?: number } | null)?.offset ?? 0;
-    while (!budget.expired) {
-      if (offset > 9900) {
-        o.log("popular window exhausted (MangaDex caps offset at 10000) - windowed backfill needed for the rest");
+    while (!budget.expired && offset <= 9900) {
+      const page = await md.listPopular(offset);
+      if (!page.data.length) {
+        offset = 10_000;
         break;
       }
-      const page = await md.listPopular(offset);
-      if (!page.data.length) break;
-      const ids = page.data.map((x) => x.id);
-      const [follows, known, suppressed] = await Promise.all([
-        md.follows(ids),
-        db(() =>
-          prisma.workSource.findMany({
-            where: { site: md.SITE, OR: ids.map((id) => ({ externalId: { startsWith: `${id}:` } })) },
-            select: { externalId: true },
-          }),
-        ),
-        db(() => prisma.suppressedSource.findMany({ where: { site: md.SITE, externalId: { in: ids } }, select: { externalId: true } })),
-      ]);
-      const skip = new Set([...known.map((k) => k.externalId.split(":")[0]), ...suppressed.map((s) => s.externalId)]);
-      o.log(`popular offset ${offset} (${page.data.length} of ${page.total}, ${skip.size} already known)`);
-      let i = 0;
-      for (; i < page.data.length && !budget.expired; i++) {
-        const m = page.data[i];
-        if (skip.has(m.id)) continue;
-        await handle(m, follows[m.id] ?? 0);
-      }
-      offset += i; // resume exactly where we stopped
+      const reached = await sweep(page.data, `popular offset ${offset} of ${page.total}`);
+      offset += reached; // resume exactly where we stopped
       if (!o.dryRun)
-        await db(() =>
-          prisma.setting.upsert({ where: { key }, create: { key, value: { offset } }, update: { value: { offset } } }),
-        );
-      if (i < page.data.length) break;
+        await db(() => prisma.setting.upsert({ where: { key }, create: { key, value: { offset } }, update: { value: { offset } } }));
+      if (reached < page.data.length) break;
     }
-  } else {
-    // update: revisit works we already have - new chapters, retries of failed ones, other languages
+    if (offset > 9900 && !budget.expired) {
+      o.log("popular pass complete, continuing with the rest of the catalogue");
+      phase = "backlog";
+    }
+  }
+
+  if (phase === "backlog") {
+    // everything else, oldest first, with no offset limit (keyset on createdAt)
+    const key = "mangadex:backlog:cursor";
+    const saved = await db(() => prisma.setting.findUnique({ where: { key } }));
+    let cur = (saved?.value as { since?: string; offset?: number } | null) ?? {};
+    let since = cur.since ?? "2000-01-01T00:00:00";
+    let offset = cur.offset ?? 0;
+    while (!budget.expired) {
+      const page = await md.listByCreated(since, offset);
+      if (!page.data.length) {
+        o.log("backlog complete: the whole catalogue has been listed");
+        break;
+      }
+      const reached = await sweep(page.data, `backlog from ${since.slice(0, 10)} +${offset}`);
+      const last = page.data[page.data.length - 1];
+      const firstAt = md.toSince(page.data[0].attributes.createdAt);
+      if (reached < page.data.length) {
+        // stopped mid-page: restart at the first unprocessed item
+        since = md.toSince(page.data[reached].attributes.createdAt);
+        offset = 0;
+      } else if (md.toSince(last.attributes.createdAt) === firstAt && firstAt === since) {
+        offset += page.data.length; // a whole page shares one timestamp: step through it by offset
+      } else {
+        since = md.toSince(last.attributes.createdAt);
+        offset = 0;
+      }
+      if (!o.dryRun)
+        await db(() => prisma.setting.upsert({ where: { key }, create: { key, value: { since, offset } }, update: { value: { since, offset } } }));
+      if (page.data.length < 100 && reached >= page.data.length) {
+        o.log("backlog complete: reached the newest work");
+        break;
+      }
+    }
+  }
+
+  if (phase === "update") {
+    // revisit works we already have - new chapters, retries of failed ones, other languages
     const sources = await db(() =>
       prisma.workSource.findMany({
         where: { site: md.SITE, status: "ACTIVE" },

@@ -10,6 +10,7 @@ import {
   Budget,
   MAX_ATTEMPTS,
   beginRun,
+  anon,
   emptyStats,
   endRun,
   finalizeWork,
@@ -41,20 +42,19 @@ type Ctx = { o: H2ROptions; stats: IngestStats; budget: Budget; created: { n: nu
 async function processWork(slug: string, seedFallback: number, c: Ctx): Promise<void> {
   const { o, stats, budget } = c;
   const w = await h2r.getWork(slug).catch((e) => {
-    stats.errors.push(`work ${slug}: ${(e as Error).message}`);
+    stats.errors.push(`work ${anon(slug)}: ${(e as Error).message}`);
     return null;
   });
   if (!w) return;
   stats.worksSeen++;
   const totalPages = w.pages;
-  if (totalPages > o.maxPages) return void o.log(`  ${slug} ${totalPages} pages > max-pages ${o.maxPages}, skipped`);
+  if (o.maxPages > 0 && totalPages > o.maxPages) return; // 0 = no limit
 
   const tags = [...w.genres, ...w.content];
   const verdict = classify({ title: w.title, altTitles: [], description: null, tags }, await loadTerms());
 
   if (verdict.verdict === "QUARANTINE") {
     stats.worksSuppressed++;
-    o.log(`  ${slug} QUARANTINED (${verdict.reasons.join(", ")}) - metadata only`);
     if (!o.dryRun)
       await db(() =>
         prisma.suppressedSource.upsert({
@@ -71,7 +71,7 @@ async function processWork(slug: string, seedFallback: number, c: Ctx): Promise<
   if (o.dryRun) {
     c.created.n++;
     budget.worksLeft--;
-    return void o.log(`  ${slug} ${verdict.verdict}${verdict.deferFetch ? "(defer)" : ""} ${kind.toLowerCase()} ${totalPages}p ${w.chapters.length}ch`);
+    return void o.log(`  dry-run: ${verdict.verdict}${verdict.deferFetch ? "(defer)" : ""} ${kind.toLowerCase()} ${totalPages}p ${w.chapters.length}ch`);
   }
 
   let ws = await db(() =>
@@ -83,7 +83,7 @@ async function processWork(slug: string, seedFallback: number, c: Ctx): Promise<
     if (dup) {
       await attachSource(dup.id, h2r.SITE, slug, `https://hentai2read.com/${slug}/`);
       stats.duplicates++;
-      return void o.log(`  ${slug} DUPLICATE of #${dup.publicId}, source attached (nothing downloaded)`);
+      return void o.log(`  duplicate of #${dup.publicId}, source attached (nothing downloaded)`);
     }
     const created = await db(() =>
       prisma.work.create({
@@ -126,7 +126,7 @@ async function processWork(slug: string, seedFallback: number, c: Ctx): Promise<
   const work = ws.work;
 
   // explicit age markers: hold with NO downloads until an admin approves
-  if (work.deferFetch && work.reviewDecision !== "APPROVED") return void o.log(`  ${slug} HELD (review before download) - nothing fetched`);
+  if (work.deferFetch && work.reviewDecision !== "APPROVED") return void o.log("  held (review before download), nothing fetched");
   if (work.publish === "REJECTED") return;
 
   const chapters = w.chapters.length ? w.chapters : [{ slug: "1", number: 1 }];
@@ -171,12 +171,12 @@ async function processWork(slug: string, seedFallback: number, c: Ctx): Promise<
         needCover = false;
       }
     } catch (e) {
-      stats.errors.push(`work ${slug} ch ${chapterSlug}: ${(e as Error).message}`);
+      stats.errors.push(`work ${anon(slug)} ch ${chapterSlug}: ${(e as Error).message}`);
     }
   }
 
   const done = await finalizeWork(work.id, ws.id);
-  o.log(`  ${slug} ${done.published ? "PUBLISHED" : done.held ? "HELD (review)" : "draft"} ${kind.toLowerCase()} ${totalPages}p ${done.ready}/${chapters.length}ch`);
+  o.log(`  #${work.publicId} ${done.published ? "PUBLISHED" : done.held ? "HELD (review)" : "draft"} ${kind.toLowerCase()} ${totalPages}p ${done.ready}/${chapters.length}ch`);
 }
 
 export async function runHentai2Read(o: H2ROptions): Promise<IngestStats> {

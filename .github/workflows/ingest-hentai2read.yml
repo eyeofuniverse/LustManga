@@ -12,8 +12,8 @@ on:
         description: "max NEW works this run"
         default: "40"
       max_pages:
-        description: "skip works with more pages than this"
-        default: "600"
+        description: "skip works with more pages than this (0 = no limit)"
+        default: "0"
       max_minutes:
         description: "stop starting new work after this many minutes"
         default: "300"
@@ -64,6 +64,6 @@ jobs:
               *) MODE=popular; LIMIT=40 ;;
             esac
           fi
-          ARGS="--source=hentai2read --mode=$MODE --limit=${LIMIT:-40} --max-pages=${{ github.event.inputs.max_pages || '600' }} --max-minutes=${{ github.event.inputs.max_minutes || '300' }} --max-chapters=20"
+          ARGS="--source=hentai2read --mode=$MODE --limit=${LIMIT:-40} --max-pages=${{ github.event.inputs.max_pages || '0' }} --max-minutes=${{ github.event.inputs.max_minutes || '300' }} --max-chapters=20"
           [ "${{ github.event.inputs.dry_run }}" = "true" ] && ARGS="$ARGS --dry-run"
           npm run ingest -- $ARGS
