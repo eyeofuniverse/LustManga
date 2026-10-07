@@ -39,4 +39,5 @@ if (source === "hitomi") {
 
 console.log("\nsummary", JSON.stringify(stats, null, 2));
 await prisma.$disconnect();
-process.exit(stats.errors.length ? 1 : 0);
+// individual failures are recorded on the run; only a run that errored AND stored nothing is a failed job
+process.exit(stats.errors.length && !stats.pagesStored ? 1 : 0);

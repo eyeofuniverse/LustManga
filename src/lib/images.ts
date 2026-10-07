@@ -1,5 +1,13 @@
 import sharp from "sharp";
 
+/** The file can never be converted (animated AVIF, unknown format). Retrying is pointless. */
+export class UnsupportedImageError extends Error {
+  constructor(msg: string) {
+    super(msg);
+    this.name = "UnsupportedImageError";
+  }
+}
+
 export interface Processed {
   data: Buffer;
   width: number;
@@ -26,8 +34,13 @@ const MAX_DIM = 16000; // WebP hard limit is 16383
  */
 export async function toWebp(input: Buffer, opts: { maxWidth?: number } = {}): Promise<Processed> {
   if (input.length < 500) throw new Error(`image too small (${input.length} bytes)`);
+  // animated AVIF (brand "avis") is how Hitomi stores GIFs; libvips cannot decode it
+  if (input.subarray(4, 12).toString("latin1") === "ftypavis") throw new UnsupportedImageError("animated image (AVIF sequence) is not supported");
   let img = sharp(input, { failOn: "error", animated: false });
-  const meta = await img.metadata();
+  const meta = await img.metadata().catch((e: Error) => {
+    if (/unsupported image format/i.test(e.message)) throw new UnsupportedImageError(e.message);
+    throw e;
+  });
   if (!meta.width || !meta.height) throw new Error("image has no dimensions");
   if (meta.height > MAX_DIM || meta.width > MAX_DIM || (opts.maxWidth && meta.width > opts.maxWidth)) {
     img = img.resize({

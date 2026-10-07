@@ -1,6 +1,6 @@
 import { prisma, db } from "@/lib/db";
 import { pool } from "@/lib/http";
-import { toWebp } from "@/lib/images";
+import { toWebp, UnsupportedImageError } from "@/lib/images";
 import { r2Put } from "@/lib/r2";
 
 export interface IngestStats {
@@ -86,6 +86,7 @@ export async function storeChapterPages(
           await r2Put(key, img.data);
           return { order: ref.n, key, width: img.width, height: img.height, bytes: img.bytes, phash: img.phash };
         } catch (e) {
+          if (e instanceof UnsupportedImageError) throw e; // permanent: do not retry
           lastErr = e;
         }
       }
@@ -108,10 +109,15 @@ export async function storeChapterPages(
     budget.ok();
   } catch (e) {
     const msg = (e as Error).message.slice(0, 300);
+    const permanent = e instanceof UnsupportedImageError;
     await db(() =>
-      prisma.chapter.update({ where: { id: chapterId }, data: { status: "FAILED", error: msg, attempts: { increment: 1 } } }),
+      prisma.chapter.update({
+        where: { id: chapterId },
+        // permanent failures are parked at once; an admin can still reset them from Ingest runs
+        data: { status: "FAILED", error: permanent ? `unsupported: ${msg}` : msg, attempts: permanent ? MAX_ATTEMPTS : { increment: 1 } },
+      }),
     );
-    budget.fail(log);
+    if (!permanent) budget.fail(log); // a file we cannot convert says nothing about the source being down
     throw e;
   }
 }
