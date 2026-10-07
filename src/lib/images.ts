@@ -42,7 +42,9 @@ const MAX_FRAMES = 400; // beyond this an animation is stored as a still (memory
  * decode never gets stored.
  */
 export async function toWebp(input: Buffer, opts: { maxWidth?: number } = {}): Promise<Processed> {
-  if (input.length < 500) throw new Error(`image too small (${input.length} bytes)`);
+  // Not a size floor: a legitimately blank page is only a few hundred bytes. Decoding below is the real check;
+  // this just rejects empty bodies and stub responses before sharp is asked to look at them.
+  if (input.length < 24) throw new Error(`image too small (${input.length} bytes)`);
   if (isAvifSequence(input)) throw new UnsupportedImageError("animated AVIF sequence cannot be re-encoded");
 
   const probe = await sharp(input, { failOn: "error" })
