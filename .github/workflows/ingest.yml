@@ -62,6 +62,9 @@ jobs:
             if [ "${{ github.event.schedule }}" = "45 2,14 * * *" ]; then MODE=update; else MODE=popular; fi
           fi
           ARGS="--mode=$MODE --limit=${{ github.event.inputs.limit || '40' }} --max-chapters=${{ github.event.inputs.max_chapters || '25' }} --max-minutes=${{ github.event.inputs.max_minutes || '300' }}"
-          [ -n "${{ github.event.inputs.langs }}" ] && ARGS="$ARGS --langs=${{ github.event.inputs.langs }}"
+          LANGS="${{ github.event.inputs.langs }}"
+          # scheduled new-works pass: English + Japanese first; the update pass fills in other languages
+          [ -z "$LANGS" ] && [ "${{ github.event_name }}" = "schedule" ] && [ "$MODE" = "popular" ] && LANGS=en,ja
+          [ -n "$LANGS" ] && ARGS="$ARGS --langs=$LANGS"
           [ "${{ github.event.inputs.dry_run }}" = "true" ] && ARGS="$ARGS --dry-run"
           npm run ingest -- $ARGS
