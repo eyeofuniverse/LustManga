@@ -1,0 +1,232 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+  REJECTED
+}
+
+enum WorkKind {
+  ONESHOT
+  SERIES
+}
+
+enum WorkCategory {
+  DOUJINSHI
+  MANGA
+  ARTIST_CG
+  GAME_CG
+  WESTERN
+  IMAGE_SET
+  OTHER
+}
+
+enum TagType {
+  TAG
+  ARTIST
+  GROUP
+  PARODY
+  CHARACTER
+  LANGUAGE
+  CATEGORY
+}
+
+enum ChapterStatus {
+  QUEUED
+  FETCHING
+  READY
+  FAILED
+}
+
+enum SourceStatus {
+  ACTIVE
+  DEAD
+  BLOCKED
+}
+
+/// Outcome of the ingest safety gate (src/lib/safety). Only REVIEW and CLEAN
+/// ever reach the Work table; QUARANTINE is metadata-only (SuppressedSource).
+enum SafetyVerdict {
+  CLEAN
+  REVIEW
+}
+
+model Work {
+  id       String @id @default(cuid())
+  /// numeric public id used in URLs: /g/{publicId}-{slug}
+  publicId Int    @unique @default(autoincrement())
+  /// random folder name for this work's images in R2 (not guessable from publicId)
+  mediaId  String @unique @default(cuid())
+  slug     String
+
+  kind     WorkKind     @default(ONESHOT)
+  category WorkCategory @default(MANGA)
+
+  title         String
+  titleOriginal String?
+  altTitles     String[] @default([])
+  description   String?
+  /// ISO-ish language code: en, ja, zh, es, ...
+  language      String   @default("en")
+  /// all language variants of the same underlying work share this id
+  translationGroupId String?
+
+  pageCount Int     @default(0)
+  coverKey  String?
+  year      Int?
+
+  publish PublishStatus @default(DRAFT)
+  /// held for an admin to publish or reject (set by the safety gate)
+  needsReview  Boolean  @default(false)
+  safetyVerdict SafetyVerdict @default(CLEAN)
+  /// why it was held, e.g. ["tag:school uniform"]
+  safetyReasons String[] @default([])
+  /// REVIEW works with explicit age markers: no images are downloaded until an admin approves
+  deferFetch   Boolean  @default(false)
+  /// APPROVED | REJECTED, set by the admin
+  reviewDecision String?
+  reviewedAt   DateTime?
+  reviewedBy   String?
+  autoPublishedAt DateTime?
+
+  /// denormalised tag ids for fast AND / NOT filtering (GIN index, see db-setup)
+  tagIds Int[] @default([])
+  tags   Tag[] @relation("WorkTags")
+
+  views          Int @default(0)
+  favorites      Int @default(0)
+  /// popularity imported from the source (follows etc.), seeds "Popular"
+  seedPopularity Int @default(0)
+
+  chapters Chapter[]
+  sources  WorkSource[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@index([publish, createdAt])
+  @@index([publish, language, createdAt])
+  @@index([publish, seedPopularity])
+  @@index([needsReview, publish])
+  @@index([translationGroupId])
+  @@index([slug])
+}
+
+model Tag {
+  id    Int     @id @default(autoincrement())
+  type  TagType
+  name  String
+  slug  String
+  /// number of PUBLISHED works carrying this tag (maintained by recompute)
+  count Int     @default(0)
+  works Work[]  @relation("WorkTags")
+
+  @@unique([type, slug])
+  @@index([type, count])
+}
+
+model Chapter {
+  id      String @id @default(cuid())
+  workId  String
+  work    Work   @relation(fields: [workId], references: [id], onDelete: Cascade)
+  /// chapter number; one-shots use 1
+  number  Float
+  volume  String?
+  title   String?
+  pageCount Int @default(0)
+  status  ChapterStatus @default(QUEUED)
+  error   String?
+  /// upstream chapter id on the source site
+  sourceChapterId String?
+  publishedAt DateTime?
+
+  pages Page[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([workId, number])
+  @@index([workId, status])
+  @@index([status])
+}
+
+model Page {
+  id        String  @id @default(cuid())
+  chapterId String
+  chapter   Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  /// 1-based reading order
+  order     Int
+  /// R2 object key
+  key       String
+  width     Int
+  height    Int
+  bytes     Int
+  /// perceptual hash (hex) for cross-source duplicate detection
+  phash     String?
+
+  @@unique([chapterId, order])
+}
+
+/// A link from our Work to the upstream gallery / series it came from.
+model WorkSource {
+  id         String       @id @default(cuid())
+  workId     String
+  work       Work         @relation(fields: [workId], references: [id], onDelete: Cascade)
+  site       String
+  externalId String
+  url        String
+  status     SourceStatus @default(ACTIVE)
+  lastFetchedAt DateTime?
+  createdAt  DateTime     @default(now())
+
+  @@unique([site, externalId])
+  @@index([workId])
+}
+
+/// Works the safety gate quarantined. Metadata only — no images are ever
+/// downloaded or stored for these, and the id is kept so discovery never
+/// re-fetches them. There is deliberately no publish path for this table.
+model SuppressedSource {
+  id         String   @id @default(cuid())
+  site       String
+  externalId String
+  title      String
+  reasons    String[]
+  /// admin has looked at it and confirmed the suppression
+  confirmedAt DateTime?
+  createdAt  DateTime @default(now())
+
+  @@unique([site, externalId])
+}
+
+model IngestRun {
+  id         String    @id @default(cuid())
+  site       String
+  mode       String
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  ok         Boolean   @default(false)
+  worksSeen        Int @default(0)
+  worksCreated     Int @default(0)
+  worksHeld        Int @default(0)
+  worksSuppressed  Int @default(0)
+  chaptersFetched  Int @default(0)
+  pagesStored      Int @default(0)
+  errors     String[]  @default([])
+
+  @@index([site, startedAt])
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @default(now()) @updatedAt
+}

@@ -1,0 +1,63 @@
+name: Ingest MangaDex
+# Pulls adult-rated works from MangaDex: stores pages in R2 as WebP, creates Works.
+# Flagged works are held as DRAFT for an admin (see scripts/review.mts); clean works
+# auto-publish. Safe to re-run: targets are re-derived from the DB, popular mode
+# resumes from a saved cursor, update mode retries failed/new chapters.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "popular (new works, most-followed first) | update (new/failed chapters of known works)"
+        default: "popular"
+      limit:
+        description: "max works this run"
+        default: "40"
+      max_chapters:
+        description: "max chapters per work per language per run"
+        default: "25"
+      max_minutes:
+        description: "stop starting new work after this many minutes"
+        default: "300"
+      dry_run:
+        type: boolean
+        default: false
+  schedule:
+    - cron: "15 */6 * * *" # new works, most-followed first
+    - cron: "45 2,14 * * *" # catch new chapters + retry failures
+concurrency:
+  group: ingest-mangadex
+  cancel-in-progress: false
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Write .env
+        run: |
+          {
+            echo "DATABASE_URL=${{ secrets.DATABASE_URL }}"
+            echo "DB_RETRY_ATTEMPTS=12"
+            echo "DIRECT_URL=${{ secrets.DIRECT_URL }}"
+            echo "R2_ACCESS_KEY_ID=${{ secrets.R2_ACCESS_KEY_ID }}"
+            echo "R2_SECRET_ACCESS_KEY=${{ secrets.R2_SECRET_ACCESS_KEY }}"
+            echo "R2_ENDPOINT=${{ secrets.R2_ENDPOINT }}"
+            echo "R2_BUCKET=${{ secrets.R2_BUCKET }}"
+            echo "NEXT_PUBLIC_IMG_CDN_HOST=${{ secrets.NEXT_PUBLIC_IMG_CDN_HOST }}"
+          } > .env
+      - run: npx prisma generate
+      - name: Ingest
+        run: |
+          MODE="${{ github.event.inputs.mode }}"
+          # the 02:45/14:45 schedule is the update pass
+          if [ -z "$MODE" ]; then
+            if [ "${{ github.event.schedule }}" = "45 2,14 * * *" ]; then MODE=update; else MODE=popular; fi
+          fi
+          ARGS="--mode=$MODE --limit=${{ github.event.inputs.limit || '40' }} --max-chapters=${{ github.event.inputs.max_chapters || '25' }} --max-minutes=${{ github.event.inputs.max_minutes || '300' }}"
+          [ "${{ github.event.inputs.dry_run }}" = "true" ] && ARGS="$ARGS --dry-run"
+          npm run ingest -- $ARGS

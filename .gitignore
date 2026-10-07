@@ -3,3 +3,6 @@ node_modules/
 .env.*
 *.log
 probe/*-results.json
+.next/
+*.tsbuildinfo
+next-env.d.ts
