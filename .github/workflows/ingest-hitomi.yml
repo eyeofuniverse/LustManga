@@ -1,0 +1,75 @@
+name: Ingest Hitomi
+# Doujinshi / manga galleries from Hitomi: one Work per gallery (each language is its own
+# gallery; translations are linked through translationGroupId). Hard-tagged galleries are
+# recorded as metadata only; other flagged ones are held for an admin. Safe to re-run.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "popular (most-read of the year, resumable) | recent (newest uploads) | retry (finish failed galleries)"
+        default: "popular"
+      limit:
+        description: "max NEW works this run"
+        default: "60"
+      langs:
+        description: "comma list, e.g. en,ja (blank = en)"
+        default: ""
+      max_pages:
+        description: "skip galleries with more pages than this"
+        default: "600"
+      max_minutes:
+        description: "stop starting new work after this many minutes"
+        default: "300"
+      dry_run:
+        type: boolean
+        default: false
+  schedule:
+    - cron: "5 */4 * * *" # newest uploads first, cheap and quick
+    - cron: "35 1,9,17 * * *" # most-read, resumable cursor
+    - cron: "50 5,21 * * *" # retry galleries that failed
+concurrency:
+  group: ingest-hitomi
+  cancel-in-progress: false
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Write .env
+        run: |
+          {
+            echo "DATABASE_URL=${{ secrets.DATABASE_URL }}"
+            echo "DB_RETRY_ATTEMPTS=12"
+            echo "DIRECT_URL=${{ secrets.DIRECT_URL }}"
+            echo "R2_ACCESS_KEY_ID=${{ secrets.R2_ACCESS_KEY_ID }}"
+            echo "R2_SECRET_ACCESS_KEY=${{ secrets.R2_SECRET_ACCESS_KEY }}"
+            echo "R2_ENDPOINT=${{ secrets.R2_ENDPOINT }}"
+            echo "R2_BUCKET=${{ secrets.R2_BUCKET }}"
+            echo "NEXT_PUBLIC_IMG_CDN_HOST=${{ secrets.NEXT_PUBLIC_IMG_CDN_HOST }}"
+          } > .env
+      - run: npx prisma generate
+      - name: Health check
+        run: npm run health
+      - name: Ingest
+        run: |
+          MODE="${{ github.event.inputs.mode }}"
+          LIMIT="${{ github.event.inputs.limit }}"
+          LANGS="${{ github.event.inputs.langs }}"
+          if [ -z "$MODE" ]; then
+            case "${{ github.event.schedule }}" in
+              "5 */4 * * *") MODE=recent; LIMIT=40 ;;
+              "50 5,21 * * *") MODE=retry; LIMIT=40 ;;
+              *) MODE=popular; LIMIT=60 ;;
+            esac
+          fi
+          [ -z "$LANGS" ] && [ "${{ github.event_name }}" = "schedule" ] && LANGS=en,ja
+          ARGS="--source=hitomi --mode=$MODE --limit=${LIMIT:-60} --max-pages=${{ github.event.inputs.max_pages || '600' }} --max-minutes=${{ github.event.inputs.max_minutes || '300' }}"
+          [ -n "$LANGS" ] && ARGS="$ARGS --langs=$LANGS"
+          [ "${{ github.event.inputs.dry_run }}" = "true" ] && ARGS="$ARGS --dry-run"
+          npm run ingest -- $ARGS

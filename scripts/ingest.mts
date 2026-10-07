@@ -1,4 +1,8 @@
+// npm run ingest -- --source=mangadex|hitomi [--mode=...] [--limit=N] [--max-minutes=N] [--langs=en,ja] [--dry-run]
+//   mangadex: --mode=popular|update  --max-chapters=N
+//   hitomi:   --mode=popular|recent|retry  --max-pages=N
 import { runMangadex } from "../src/lib/ingest/mangadex";
+import { runHitomi } from "../src/lib/ingest/hitomi";
 import { prisma } from "../src/lib/db";
 
 const arg = (name: string, dflt: string) => {
@@ -7,15 +11,32 @@ const arg = (name: string, dflt: string) => {
 };
 const flag = (name: string) => process.argv.includes(`--${name}`);
 
-const stats = await runMangadex({
-  mode: arg("mode", "popular") as "popular" | "update",
+const source = arg("source", "mangadex");
+const common = {
   limit: Number(arg("limit", "5")),
   maxMinutes: Number(arg("max-minutes", "20")),
-  maxChapters: Number(arg("max-chapters", "10")),
   langs: arg("langs", "").split(",").filter(Boolean),
   dryRun: flag("dry-run"),
-  log: (m) => console.log(m),
-});
+  log: (m: string) => console.log(m),
+};
+
+let stats;
+if (source === "hitomi") {
+  stats = await runHitomi({
+    ...common,
+    mode: arg("mode", "popular") as "popular" | "recent" | "retry",
+    maxPages: Number(arg("max-pages", "600")),
+  });
+} else if (source === "mangadex") {
+  stats = await runMangadex({
+    ...common,
+    mode: arg("mode", "popular") as "popular" | "update",
+    maxChapters: Number(arg("max-chapters", "10")),
+  });
+} else {
+  throw new Error(`unknown --source=${source} (mangadex | hitomi)`);
+}
+
 console.log("\nsummary", JSON.stringify(stats, null, 2));
 await prisma.$disconnect();
 process.exit(stats.errors.length ? 1 : 0);
