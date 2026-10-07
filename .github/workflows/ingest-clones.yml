@@ -1,0 +1,93 @@
+name: Ingest clone sites
+# hentaifox, hentaiera and nhentai.xxx share one engine, so one adapter and one workflow cover all
+# three, as parallel jobs. Releases we already hold from another source are attached as an extra
+# source, not re-downloaded. Hard-tagged works are recorded as metadata only; other flagged ones are
+# held for an admin. Safe to re-run.
+on:
+  workflow_dispatch:
+    inputs:
+      site:
+        description: "hentaifox | hentaiera | nhentaixxx | all"
+        default: "all"
+      mode:
+        description: "popular (best first where the site has a list, else newest) | recent | retry"
+        default: "popular"
+      limit:
+        description: "max NEW works per site this run"
+        default: "60"
+      langs:
+        description: "comma list (en,ja,...) or 'all' for the unfiltered list; blank = en"
+        default: ""
+      max_pages:
+        description: "skip galleries with more pages than this (0 = no limit)"
+        default: "0"
+      max_minutes:
+        description: "stop starting new work after this many minutes"
+        default: "300"
+      dry_run:
+        type: boolean
+        default: false
+  schedule:
+    - cron: "25 */4 * * *" # newest uploads
+    - cron: "55 1,9,17 * * *" # best first / cursor sweep
+    - cron: "10 7,23 * * *" # retry galleries that failed
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      sites: ${{ steps.s.outputs.sites }}
+    steps:
+      - id: s
+        run: |
+          SITE="${{ github.event.inputs.site }}"
+          if [ -z "$SITE" ] || [ "$SITE" = "all" ]; then echo 'sites=["hentaifox","hentaiera","nhentaixxx"]' >> "$GITHUB_OUTPUT"; else echo "sites=[\"$SITE\"]" >> "$GITHUB_OUTPUT"; fi
+  ingest:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        site: ${{ fromJson(needs.plan.outputs.sites) }}
+    concurrency:
+      group: ingest-${{ matrix.site }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Write .env
+        run: |
+          {
+            echo "DATABASE_URL=${{ secrets.DATABASE_URL }}"
+            echo "DB_RETRY_ATTEMPTS=12"
+            echo "DIRECT_URL=${{ secrets.DIRECT_URL }}"
+            echo "R2_ACCESS_KEY_ID=${{ secrets.R2_ACCESS_KEY_ID }}"
+            echo "R2_SECRET_ACCESS_KEY=${{ secrets.R2_SECRET_ACCESS_KEY }}"
+            echo "R2_ENDPOINT=${{ secrets.R2_ENDPOINT }}"
+            echo "R2_BUCKET=${{ secrets.R2_BUCKET }}"
+            echo "NEXT_PUBLIC_IMG_CDN_HOST=${{ secrets.NEXT_PUBLIC_IMG_CDN_HOST }}"
+          } > .env
+      - run: npx prisma generate
+      - name: Health check
+        run: npm run health
+      - name: Ingest
+        run: |
+          MODE="${{ github.event.inputs.mode }}"
+          LIMIT="${{ github.event.inputs.limit }}"
+          LANGS="${{ github.event.inputs.langs }}"
+          if [ -z "$MODE" ]; then
+            case "${{ github.event.schedule }}" in
+              "25 */4 * * *") MODE=recent; LIMIT=40 ;;
+              "10 7,23 * * *") MODE=retry; LIMIT=40 ;;
+              *) MODE=popular; LIMIT=60 ;;
+            esac
+          fi
+          [ -z "$LANGS" ] && [ "${{ github.event_name }}" = "schedule" ] && LANGS=en,ja
+          ARGS="--source=${{ matrix.site }} --mode=$MODE --limit=${LIMIT:-60} --max-pages=${{ github.event.inputs.max_pages || '0' }} --max-minutes=${{ github.event.inputs.max_minutes || '300' }}"
+          [ -n "$LANGS" ] && ARGS="$ARGS --langs=$LANGS"
+          [ "${{ github.event.inputs.dry_run }}" = "true" ] && ARGS="$ARGS --dry-run"
+          npm run ingest -- $ARGS

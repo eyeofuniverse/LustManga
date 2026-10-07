@@ -1,9 +1,11 @@
-// npm run ingest -- --source=mangadex|hitomi|hentai2read [--mode=...] [--limit=N] [--max-minutes=N] [--langs=en,ja] [--dry-run]
+// npm run ingest -- --source=mangadex|hitomi|hentai2read|hentaifox|hentaiera|nhentaixxx [--mode=...] [--limit=N] [--max-minutes=N] [--langs=en,ja] [--dry-run]
 //   mangadex: --mode=popular|update  --max-chapters=N
 //   hitomi:   --mode=popular|recent|retry  --max-pages=N (0 = no limit)
 import { runMangadex } from "../src/lib/ingest/mangadex";
 import { runHitomi } from "../src/lib/ingest/hitomi";
 import { runHentai2Read } from "../src/lib/ingest/hentai2read";
+import { runImEngine } from "../src/lib/ingest/imengine";
+import { SITES } from "../src/lib/sources/imengine";
 import { prisma } from "../src/lib/db";
 
 const arg = (name: string, dflt: string) => {
@@ -35,6 +37,12 @@ if (source === "hitomi") {
     maxPages: Number(arg("max-pages", "0")),
     maxChapters: Number(arg("max-chapters", "20")),
   });
+} else if (source in SITES) {
+  stats = await runImEngine(source, {
+    ...common,
+    mode: arg("mode", "popular") as "popular" | "recent" | "retry",
+    maxPages: Number(arg("max-pages", "0")),
+  });
 } else if (source === "mangadex") {
   stats = await runMangadex({
     ...common,
@@ -42,7 +50,7 @@ if (source === "hitomi") {
     maxChapters: Number(arg("max-chapters", "10")),
   });
 } else {
-  throw new Error(`unknown --source=${source} (mangadex | hitomi | hentai2read)`);
+  throw new Error(`unknown --source=${source} (mangadex | hitomi | hentai2read | hentaifox | hentaiera | nhentaixxx)`);
 }
 
 console.log("\nsummary", JSON.stringify(stats, null, 2));
