@@ -25,10 +25,10 @@ on:
         default: false
   schedule:
     - cron: "5 */4 * * *" # newest uploads first, cheap and quick
-    - cron: "35 1,9,17 * * *" # most-read, resumable cursor
+    - cron: "35 */3 * * *" # most-read, resumable cursor, never finishes
     - cron: "50 5,21 * * *" # retry galleries that failed
 concurrency:
-  group: ingest-hitomi
+  group: ingest-hitomi-${{ github.event.inputs.mode || github.event.schedule }}
   cancel-in-progress: false
 jobs:
   ingest:
@@ -65,11 +65,11 @@ jobs:
             case "${{ github.event.schedule }}" in
               "5 */4 * * *") MODE=recent; LIMIT=40 ;;
               "50 5,21 * * *") MODE=retry; LIMIT=40 ;;
-              *) MODE=popular; LIMIT=60 ;;
+              *) MODE=popular; LIMIT=400 ;;
             esac
           fi
-          [ -z "$LANGS" ] && [ "${{ github.event_name }}" = "schedule" ] && LANGS=en,ja
-          ARGS="--source=hitomi --mode=$MODE --limit=${LIMIT:-60} --max-pages=${{ github.event.inputs.max_pages || '0' }} --max-minutes=${{ github.event.inputs.max_minutes || '300' }}"
+          [ -z "$LANGS" ] && [ "${{ github.event_name }}" = "schedule" ] && LANGS=en,ja,zh,ko,es,fr,de,ru,it,pt
+          ARGS="--source=hitomi --mode=$MODE --limit=${LIMIT:-60} --max-pages=${{ github.event.inputs.max_pages || '0' }} --max-minutes=${{ github.event.inputs.max_minutes || '170' }}"
           [ -n "$LANGS" ] && ARGS="$ARGS --langs=$LANGS"
           [ "${{ github.event.inputs.dry_run }}" = "true" ] && ARGS="$ARGS --dry-run"
           npm run ingest -- $ARGS

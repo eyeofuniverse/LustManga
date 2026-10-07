@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "popular (new works, most-followed first) | update (new/failed chapters of known works)"
+        description: "popular (most-followed first, then continues into the whole backlog) | backlog (skip straight to the backlog) | update (new/failed chapters of known works)"
         default: "popular"
       limit:
         description: "max works this run"
@@ -25,10 +25,10 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: "15 */6 * * *" # new works, most-followed first
-    - cron: "45 2,14 * * *" # catch new chapters + retry failures
+    - cron: "15 */3 * * *" # most-followed first, then the whole backlog
+    - cron: "45 1,7,13,19 * * *" # new chapters, failed retries, the other languages
 concurrency:
-  group: ingest-mangadex
+  group: ingest-mangadex-${{ github.event.inputs.mode || github.event.schedule }}
   cancel-in-progress: false
 jobs:
   ingest:
@@ -61,9 +61,9 @@ jobs:
           MODE="${{ github.event.inputs.mode }}"
           # the 02:45/14:45 schedule is the update pass
           if [ -z "$MODE" ]; then
-            if [ "${{ github.event.schedule }}" = "45 2,14 * * *" ]; then MODE=update; else MODE=popular; fi
+            if [ "${{ github.event.schedule }}" = "45 1,7,13,19 * * *" ]; then MODE=update; else MODE=popular; fi
           fi
-          ARGS="--mode=$MODE --limit=${{ github.event.inputs.limit || '40' }} --max-chapters=${{ github.event.inputs.max_chapters || '25' }} --max-minutes=${{ github.event.inputs.max_minutes || '300' }}"
+          ARGS="--mode=$MODE --limit=${{ github.event.inputs.limit || '150' }} --max-chapters=${{ github.event.inputs.max_chapters || '25' }} --max-minutes=${{ github.event.inputs.max_minutes || '170' }}"
           LANGS="${{ github.event.inputs.langs }}"
           # scheduled new-works pass: English + Japanese first; the update pass fills in other languages
           [ -z "$LANGS" ] && [ "${{ github.event_name }}" = "schedule" ] && [ "$MODE" = "popular" ] && LANGS=en,ja

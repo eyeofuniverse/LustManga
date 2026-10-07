@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       site:
-        description: "hentaifox | hentaiera | nhentaixxx | all"
+        description: "hentaifox | hentaiera | asmhentai | nhentaixxx | all"
         default: "all"
       mode:
         description: "popular (best first where the site has a list, else newest) | recent | retry"
@@ -29,7 +29,7 @@ on:
         default: false
   schedule:
     - cron: "25 */4 * * *" # newest uploads
-    - cron: "55 1,9,17 * * *" # best first / cursor sweep
+    - cron: "55 */3 * * *" # best first / cursor sweep, never finishes
     - cron: "10 7,23 * * *" # retry galleries that failed
 jobs:
   plan:
@@ -40,7 +40,7 @@ jobs:
       - id: s
         run: |
           SITE="${{ github.event.inputs.site }}"
-          if [ -z "$SITE" ] || [ "$SITE" = "all" ]; then echo 'sites=["hentaifox","hentaiera","nhentaixxx"]' >> "$GITHUB_OUTPUT"; else echo "sites=[\"$SITE\"]" >> "$GITHUB_OUTPUT"; fi
+          if [ -z "$SITE" ] || [ "$SITE" = "all" ]; then echo 'sites=["hentaifox","hentaiera","asmhentai","nhentaixxx"]' >> "$GITHUB_OUTPUT"; else echo "sites=[\"$SITE\"]" >> "$GITHUB_OUTPUT"; fi
   ingest:
     needs: plan
     runs-on: ubuntu-latest
@@ -50,7 +50,7 @@ jobs:
       matrix:
         site: ${{ fromJson(needs.plan.outputs.sites) }}
     concurrency:
-      group: ingest-${{ matrix.site }}
+      group: ingest-${{ matrix.site }}-${{ github.event.inputs.mode || github.event.schedule }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
@@ -83,11 +83,11 @@ jobs:
             case "${{ github.event.schedule }}" in
               "25 */4 * * *") MODE=recent; LIMIT=40 ;;
               "10 7,23 * * *") MODE=retry; LIMIT=40 ;;
-              *) MODE=popular; LIMIT=60 ;;
+              *) MODE=popular; LIMIT=300 ;;
             esac
           fi
-          [ -z "$LANGS" ] && [ "${{ github.event_name }}" = "schedule" ] && LANGS=en,ja
-          ARGS="--source=${{ matrix.site }} --mode=$MODE --limit=${LIMIT:-60} --max-pages=${{ github.event.inputs.max_pages || '0' }} --max-minutes=${{ github.event.inputs.max_minutes || '300' }}"
+          [ -z "$LANGS" ] && [ "${{ github.event_name }}" = "schedule" ] && LANGS=en,ja,zh,ko,es,fr
+          ARGS="--source=${{ matrix.site }} --mode=$MODE --limit=${LIMIT:-60} --max-pages=${{ github.event.inputs.max_pages || '0' }} --max-minutes=${{ github.event.inputs.max_minutes || '170' }}"
           [ -n "$LANGS" ] && ARGS="$ARGS --langs=$LANGS"
           [ "${{ github.event.inputs.dry_run }}" = "true" ] && ARGS="$ARGS --dry-run"
           npm run ingest -- $ARGS

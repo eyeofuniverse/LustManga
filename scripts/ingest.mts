@@ -1,4 +1,4 @@
-// npm run ingest -- --source=mangadex|hitomi|hentai2read|hentaifox|hentaiera|nhentaixxx [--mode=...] [--limit=N] [--max-minutes=N] [--langs=en,ja] [--dry-run]
+// npm run ingest -- --source=mangadex|hitomi|hentai2read|hentaifox|hentaiera|asmhentai|nhentaixxx [--mode=...] [--limit=N] [--max-minutes=N] [--langs=en,ja] [--dry-run]
 //   mangadex: --mode=popular|update  --max-chapters=N
 //   hitomi:   --mode=popular|recent|retry  --max-pages=N (0 = no limit)
 import { runMangadex } from "../src/lib/ingest/mangadex";
@@ -50,7 +50,7 @@ if (source === "hitomi") {
     maxChapters: Number(arg("max-chapters", "10")),
   });
 } else {
-  throw new Error(`unknown --source=${source} (mangadex | hitomi | hentai2read | hentaifox | hentaiera | nhentaixxx)`);
+  throw new Error(`unknown --source=${source} (mangadex | hitomi | hentai2read | hentaifox | hentaiera | asmhentai | nhentaixxx)`);
 }
 
 console.log("\nsummary", JSON.stringify(stats, null, 2));

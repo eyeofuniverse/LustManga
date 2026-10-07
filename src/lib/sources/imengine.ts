@@ -30,6 +30,13 @@ export const SITES: Record<string, SiteCfg> = {
     galleryPath: "/gallery/",
     listUrl: (mode, lang, page) => (mode === "popular" ? null : withPage(lang ? `/language/${lang}/` : "/", "query", page)),
   },
+  asmhentai: {
+    name: "asmhentai",
+    base: "https://asmhentai.com",
+    galleryPath: "/g/",
+    listUrl: (mode, lang, page) =>
+      withPage(lang ? `/language/${lang}/` : mode === "popular" ? "/popular/" : "/", "query", page),
+  },
   nhentaixxx: {
     name: "nhentaixxx",
     base: "https://nhentai.xxx",
@@ -107,7 +114,8 @@ export async function getGallery(cfg: SiteCfg, id: string): Promise<IMGallery | 
   if (!page) return null;
 
   const hidden = Object.fromEntries([...page.matchAll(/<input[^>]*id="(load_\w+|gallery_\w+)"[^>]*value="([^"]*)"/g)].map((m) => [m[1], m[2]]));
-  const pages = Number(hidden.load_pages) || 0;
+  // some sites carry no load_pages field; the visible "Pages: N" line is the fallback
+  const pages = Number(hidden.load_pages) || Number((decode(page).match(/Pages:?\s*(\d+)/i) ?? [])[1]) || 0;
   const title = decode((page.match(/<h1[^>]*>([\s\S]*?)<\/h1>/) ?? [])[1] ?? "");
   if (!title || !pages) return null;
 
