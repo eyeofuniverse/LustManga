@@ -1,3 +1,6 @@
+// A preview deployment has its own address and must never appear in search results (it duplicates the real site).
+const NOT_PRODUCTION = !!process.env.VERCEL_ENV && process.env.VERCEL_ENV !== "production";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // dev and production can run side by side (QA) without trampling each other's build output
@@ -18,6 +21,7 @@ const nextConfig = {
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
           { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          ...(NOT_PRODUCTION ? [{ key: "X-Robots-Tag", value: "noindex, nofollow" }] : []),
         ],
       },
     ];

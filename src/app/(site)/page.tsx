@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { BookOpen, Flame, Images, Library, Palette, Gamepad2, Globe2, Sparkles, type LucideIcon } from "lucide-react";
 import { currentPrefs } from "@/lib/prefs-server";
@@ -9,6 +10,60 @@ import { ScrollRow } from "@/components/work/ScrollRow";
 import { SectionHeader } from "@/components/work/Section";
 import { ContinueRow } from "@/components/work/ContinueRow";
 import { ReadButton } from "@/components/work/Actions";
+import { Faq, type QA } from "@/components/seo/Faq";
+import { HOME_DESCRIPTION, HOME_TITLE, ldJson, organizationLd, socialMeta, websiteLd } from "@/lib/seo";
+
+export const metadata: Metadata = {
+  title: { absolute: HOME_TITLE },
+  description: HOME_DESCRIPTION,
+  alternates: { canonical: "/" },
+  ...socialMeta({ title: HOME_TITLE, description: HOME_DESCRIPTION, path: "/" }),
+};
+
+const FAQ: QA[] = [
+  {
+    q: "Is LustManga free to read?",
+    text: "Yes. Every manga and doujinshi can be read online for free, with no account and no sign-up.",
+    a: "Yes. Every manga and doujinshi can be read online for free, with no account and no sign-up.",
+  },
+  {
+    q: "Which languages can I read in?",
+    text: "Works are available in many languages, including English, Japanese, Chinese, Spanish, French, Russian and more. Pick the languages you read once in Settings and every list follows them.",
+    a: (
+      <>
+        Works are available in many languages, including English, Japanese, Chinese, Spanish, French, Russian and more. Pick the languages you read once in <Link href="/settings" className="text-accent underline underline-offset-2">Settings</Link> and every list follows them.
+      </>
+    ),
+  },
+  {
+    q: "How do I find something specific?",
+    text: "Use the search box, or browse by tag, artist, circle, parody and character. Advanced search lets you include and exclude tags and filter by page count and upload date.",
+    a: (
+      <>
+        Use the search box, or browse by <Link href="/tags" className="text-accent underline underline-offset-2">tag</Link>, <Link href="/artists" className="text-accent underline underline-offset-2">artist</Link>, <Link href="/groups" className="text-accent underline underline-offset-2">circle</Link>, <Link href="/parodies" className="text-accent underline underline-offset-2">parody</Link> and <Link href="/characters" className="text-accent underline underline-offset-2">character</Link>. <Link href="/search/help" className="text-accent underline underline-offset-2">Advanced search</Link> lets you include and exclude tags and filter by page count and upload date.
+      </>
+    ),
+  },
+  {
+    q: "How does the reader work?",
+    text: "It reads like a book: swipe, tap the page edges or use the arrow keys to turn pages, with two-page spreads on wide screens, right-to-left mode for manga, zoom, and a scroll mode for long strips. It remembers where you stopped.",
+    a: "It reads like a book: swipe, tap the page edges or use the arrow keys to turn pages, with two-page spreads on wide screens, right-to-left mode for manga, zoom, and a scroll mode for long strips. It remembers where you stopped.",
+  },
+  {
+    q: "Do you store my reading history?",
+    text: "Your saved works and reading history stay in your own browser. There are no accounts and nothing is sent to us.",
+    a: "Your saved works and reading history stay in your own browser. There are no accounts and nothing is sent to us.",
+  },
+  {
+    q: "How do I report a problem or request a removal?",
+    text: "Use the report form for broken pages, copyright takedown requests, or anything that should not be here. We act first on takedown requests and on anything involving possible minors or non-consent.",
+    a: (
+      <>
+        Use the <Link href="/report-content" className="text-accent underline underline-offset-2">report form</Link> for broken pages, copyright takedown requests, or anything that should not be here. We act first on takedown requests and on anything involving possible minors or non-consent. See also the <Link href="/dmca" className="text-accent underline underline-offset-2">DMCA page</Link>.
+      </>
+    ),
+  },
+];
 
 const CAT: Record<string, { Icon: LucideIcon; tone: string }> = {
   DOUJINSHI: { Icon: Library, tone: "from-rose-500/25 to-orange-500/10" },
@@ -34,6 +89,7 @@ export default async function Home() {
 
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: ldJson([organizationLd(), websiteLd()]) }} />
       {/* ───────── spotlight ───────── */}
       <section className="relative isolate overflow-hidden border-b border-line">
         {spot && (
@@ -47,7 +103,12 @@ export default async function Home() {
             <div className="absolute inset-0 bg-gradient-to-r from-bg via-bg/50 to-transparent" />
           </div>
         )}
-        <div className="container-x grid items-center gap-6 py-8 sm:gap-8 sm:py-12 md:grid-cols-[auto_1fr] lg:gap-14 lg:py-16">
+        <div className="container-x pt-6 sm:pt-8">
+          <h1 className="font-display text-base font-extrabold tracking-tight text-muted sm:text-lg">
+            Read manga &amp; doujinshi online, <span className="text-text">free in every language</span>
+          </h1>
+        </div>
+        <div className="container-x grid items-center gap-6 pb-8 pt-4 sm:gap-8 sm:pb-12 sm:pt-6 md:grid-cols-[auto_1fr] lg:gap-14 lg:pb-16">
           {spot ? (
             <>
               <Link href={workHref(spot)} aria-label={spot.title} className="relative mx-auto block w-40 shrink-0 sm:w-52 md:mx-0 md:w-64 lg:w-72">
@@ -59,11 +120,11 @@ export default async function Home() {
                 <p className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1 text-xs font-bold uppercase tracking-wider text-accent">
                   <Flame className="h-3.5 w-3.5" /> Popular right now
                 </p>
-                <h1 className="font-display text-2xl font-extrabold leading-tight tracking-tight sm:text-4xl lg:text-5xl">
+                <h2 className="font-display text-2xl font-extrabold leading-tight tracking-tight sm:text-4xl lg:text-5xl">
                   <Link href={workHref(spot)} className="line-clamp-3 hover:text-accent">
                     {spot.title}
                   </Link>
-                </h1>
+                </h2>
                 <p className="mt-3 text-sm text-muted sm:text-base">
                   {categoryLabel(spot.category)} · {langLabel(spot.language)} · {spot.pageCount} pages
                 </p>
@@ -92,7 +153,7 @@ export default async function Home() {
           ) : (
             <div className="col-span-full mx-auto max-w-xl py-10 text-center">
               <Sparkles className="mx-auto mb-4 h-10 w-10 text-accent" />
-              <h1 className="font-display text-3xl font-extrabold sm:text-4xl">Welcome</h1>
+              <h2 className="font-display text-3xl font-extrabold sm:text-4xl">Welcome</h2>
               <p className="mt-3 text-muted">Nothing matches your language and hidden-tag settings yet. Try widening them.</p>
               <Link href="/settings" className="btn-primary mt-6">
                 Open settings
@@ -184,6 +245,8 @@ export default async function Home() {
           </ul>
         </section>
       )}
+
+      <Faq items={FAQ} />
     </>
   );
 }

@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHeading } from "@/components/work/Section";
+import { staticMeta } from "@/lib/seo";
 
-export const metadata: Metadata = { title: "Search help", description: "How to write advanced searches.", alternates: { canonical: "/search/help" } };
+export const metadata: Metadata = staticMeta({ title: "Search Help: Advanced Manga & Doujinshi Search", description: "How to search LustManga like a pro: include and exclude tags, filter by artist, parody, language, page count and upload date, with examples.", path: "/search/help" });
 
 const ROWS: [string, string][] = [
   ["school life", "Words are matched against titles"],

@@ -7,6 +7,9 @@ const COLS = [
     title: "Explore",
     links: [
       ["Browse all", "/browse"],
+      ["Doujinshi", "/category/doujinshi"],
+      ["Manga", "/category/manga"],
+      ["English", "/language/english"],
       ["Newest", "/browse?sort=new"],
       ["Tags", "/tags"],
       ["Artists", "/artists"],

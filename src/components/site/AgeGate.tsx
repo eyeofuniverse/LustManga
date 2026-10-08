@@ -39,9 +39,9 @@ export function AgeGate({ initialLangs }: { initialLangs: string[] }) {
         <div className="flex items-center gap-3">
           <LogoMark className="h-11 w-11" />
           <div>
-            <h1 id="gate-title" className="font-display text-xl font-extrabold leading-tight">
+            <h2 id="gate-title" className="font-display text-xl font-extrabold leading-tight">
               Adults only
-            </h1>
+            </h2>
             <p className="text-sm text-muted">This site contains explicit material.</p>
           </div>
         </div>

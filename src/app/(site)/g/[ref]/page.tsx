@@ -8,7 +8,8 @@ import { categoryLabel, compact, langLabel, tagHref, timeAgo, workHref } from "@
 import { cdn } from "@/lib/cdn";
 import { cleanDescription } from "@/lib/text";
 import { idParam } from "@/lib/url";
-import { SITE_URL } from "@/lib/site";
+import { findRedirect } from "@/lib/redirects";
+import { breadcrumbLd, hreflangFor, ldJson, socialMeta, workDescription, workLd, workTitle, type WorkForSeo } from "@/lib/seo";
 import { CoverImage } from "@/components/work/CoverImage";
 import { ChapterList } from "@/components/work/ChapterList";
 import { FavoriteButton, ReadButton, ReportLink, ShareButton, ViewPing } from "@/components/work/Actions";
@@ -19,18 +20,38 @@ import { SectionHeader } from "@/components/work/Section";
 type Params = Promise<{ ref: string }>;
 const idOf = (ref: string) => idParam(ref);
 
+/** What the SEO helpers need to know about a work, from the loaded page data. */
+const forSeo = (w: NonNullable<Awaited<ReturnType<typeof getWork>>>): WorkForSeo => ({
+  publicId: w.publicId,
+  slug: w.slug,
+  title: w.title,
+  titleOriginal: w.titleOriginal,
+  description: cleanDescription(w.description),
+  language: w.language,
+  category: w.category,
+  pageCount: w.pageCount,
+  coverKey: w.coverKey,
+  createdAt: w.createdAt,
+  tags: w.tags,
+});
+
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const id = idOf((await params).ref);
   const w = id ? await getWork(id) : null;
-  if (!w) return { title: "Not found" };
-  const cover = cdn(w.coverKey);
-  const desc = `Read ${w.title} online. ${categoryLabel(w.category)} in ${langLabel(w.language)}, ${w.pageCount} pages.`;
+  if (!w) return { title: "Not found", robots: { index: false, follow: false } };
+  const seo = forSeo(w);
+  const title = workTitle(seo);
+  const description = workDescription(seo);
+  const path = workHref(w);
+  // translations of the same work point at each other, so a reader is sent to the copy in their language
+  const variants = await getVariants(w.translationGroupId, w.id);
+  const languages = hreflangFor(w, variants);
   return {
-    title: w.title,
-    description: desc,
-    alternates: { canonical: workHref(w) },
-    openGraph: { title: w.title, description: desc, type: "article", images: cover ? [{ url: cover }] : undefined },
-    twitter: { card: "summary_large_image", title: w.title, images: cover ? [cover] : undefined },
+    title,
+    description,
+    alternates: { canonical: path, ...(Object.keys(languages).length ? { languages } : {}) },
+    // the share card comes from opengraph-image.tsx in this folder
+    ...socialMeta({ title, description, path, type: "book", image: false }),
   };
 }
 
@@ -47,7 +68,12 @@ export default async function WorkPage({ params }: { params: Params }) {
   const id = idOf(ref);
   if (!id) notFound();
   const w = await getWork(id);
-  if (!w) notFound();
+  if (!w) {
+    // a work merged into another keeps sending visitors (and search engines) to the one that survived
+    const to = await findRedirect(`/g/${id}`);
+    if (to) permanentRedirect(to);
+    notFound();
+  }
   if (decodeURIComponent(ref) !== `${w.publicId}-${w.slug || "work"}`) permanentRedirect(workHref(w));
 
   const prefs = await currentPrefs();
@@ -57,22 +83,14 @@ export default async function WorkPage({ params }: { params: Params }) {
   const artists = (w.byType.ARTIST ?? []).map((t) => t.name);
   const about = cleanDescription(w.description);
 
-  const ld = {
-    "@context": "https://schema.org",
-    "@type": w.kind === "SERIES" ? "ComicSeries" : "Book",
-    name: w.title,
-    url: `${SITE_URL}${workHref(w)}`,
-    inLanguage: w.language,
-    image: cover ?? undefined,
-    numberOfPages: w.pageCount,
-    author: artists.map((name) => ({ "@type": "Person", name })),
-    genre: (w.byType.TAG ?? []).slice(0, 12).map((t) => t.name),
-    isFamilyFriendly: false,
-  };
+  const ld = [
+    workLd(forSeo(w), { kind: w.kind, cover, variants, chapters: w.chapters.length }),
+    breadcrumbLd([{ name: "Home", path: "/" }, { name: "Browse", path: "/browse" }, { name: w.title, path: workHref(w) }]),
+  ];
 
   return (
     <div className="container-x py-6 sm:py-10">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld).replace(/</g, "\\u003c") }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: ldJson(ld) }} />
       <ViewPing publicId={w.publicId} />
 
       <nav aria-label="Breadcrumb" className="mb-5 flex flex-wrap items-center gap-x-2 text-sm text-muted">

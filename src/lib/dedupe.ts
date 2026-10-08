@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma, db } from "@/lib/db";
 import { purgeImages } from "@/lib/purge";
+import { recordRedirect } from "@/lib/redirects";
 
 /* ───────────────────────────── normalisation ───────────────────────────── */
 
@@ -161,5 +162,7 @@ export async function mergeWorks(keepId: string, dropId: string): Promise<{ purg
   ]);
   const purged = await purgeImages(dropId, drop.coverKey);
   await prisma.work.delete({ where: { id: dropId } });
+  // the dropped work's address keeps working: it now sends visitors to the one it was merged into
+  if (drop.publish === "PUBLISHED") await recordRedirect(`/g/${drop.publicId}`, `/g/${keep.publicId}`).catch(() => {});
   return { purged };
 }

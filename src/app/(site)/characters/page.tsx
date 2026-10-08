@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { TagDirectory } from "@/components/work/TagDirectory";
+import { listingMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = { title: "Characters", description: "Every character, by popularity or A to Z.", alternates: { canonical: "/characters" } };
+export const generateMetadata = ({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }): Promise<Metadata> =>
+  listingMetadata({ title: "Doujinshi by Character A-Z", description: "Every character featured on LustManga, by popularity or A to Z. Find doujinshi and manga starring your favourite characters and read them free.", base: "/characters", searchParams });
 
 export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   return (

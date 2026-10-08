@@ -49,6 +49,7 @@ jobs:
             echo "R2_ENDPOINT=${{ secrets.R2_ENDPOINT }}"
             echo "R2_BUCKET=${{ secrets.R2_BUCKET }}"
             echo "NEXT_PUBLIC_IMG_CDN_HOST=${{ secrets.NEXT_PUBLIC_IMG_CDN_HOST }}"
+            echo "NEXT_PUBLIC_SITE_URL=${{ secrets.NEXT_PUBLIC_SITE_URL }}"
           } > .env
       - run: npx prisma generate
       - name: Health check
@@ -67,3 +68,11 @@ jobs:
           ARGS="--source=hentai2read --mode=$MODE --limit=${LIMIT:-40} --max-pages=${{ github.event.inputs.max_pages || '0' }} --max-minutes=${{ github.event.inputs.max_minutes || '170' }} --max-chapters=20"
           [ "${{ github.event.inputs.dry_run }}" = "true" ] && ARGS="$ARGS --dry-run"
           npm run ingest -- $ARGS
+      - name: Refresh tag counts
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: npm run recompute
+      - name: Notify search engines (IndexNow)
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: npm run indexnow

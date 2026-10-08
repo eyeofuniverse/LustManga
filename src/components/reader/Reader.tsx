@@ -294,6 +294,10 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
 
   return (
     <div data-theme="dark" className="min-h-dvh bg-black text-white" style={{ ["--reader-dim" as string]: String(1 - prefs.dim / 100) }}>
+      <h1 className="sr-only">
+        {work.title}
+        {chapters.length > 1 ? `, chapter ${chapter.number}` : ""}
+      </h1>
       <p className="sr-only" aria-live="polite">
         Page {label} of {total}
       </p>

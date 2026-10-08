@@ -9,13 +9,16 @@ import { PAGE_SIZE } from "@/lib/site";
 import { FilterBar } from "@/components/work/FilterBar";
 import { EmptyState, WorkGrid } from "@/components/work/WorkCard";
 import { Pagination } from "@/components/work/Pagination";
+import { breadcrumbLd, itemListLd, ldJson, listingMetadata } from "@/lib/seo";
 import { PageHeading } from "@/components/work/Section";
 
-export const metadata: Metadata = {
-  title: "Browse manga & doujinshi",
-  description: "Browse every manga and doujinshi by popularity or newest, in any language.",
-  alternates: { canonical: "/browse" },
-};
+export const generateMetadata = ({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }): Promise<Metadata> =>
+  listingMetadata({
+    title: "Browse All Manga & Doujinshi",
+    description: "Browse every manga and doujinshi on LustManga by popularity or newest. Filter by language and category, and read online free.",
+    base: "/browse",
+    searchParams,
+  });
 
 export default async function Browse({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = flatParams(await searchParams);
@@ -32,8 +35,11 @@ export default async function Browse({ searchParams }: { searchParams: Promise<R
   // a page number past the end (an old bookmark, a shrunken list) goes back to the first page instead of an empty screen
   if (!items.length && f.page > 1) redirect(withQuery("/browse", sp, { page: undefined }));
 
+  const ld = [breadcrumbLd([{ name: "Home", path: "/" }, { name: "Browse", path: "/browse" }]), itemListLd(items, (f.page - 1) * PAGE_SIZE)];
+
   return (
     <div className="container-x py-6 sm:py-10">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: ldJson(ld) }} />
       <PageHeading title="Browse" sub={total.n ? `${total.n.toLocaleString()}${total.capped ? "+" : ""} works` : undefined} eyebrow={f.sort === "new" ? "Newest first" : "Most popular first"} />
       <FilterBar base="/browse" params={sp} sort={f.sort} langs={f.langs} cats={f.cats} />
       <div className="mt-6 sm:mt-8">

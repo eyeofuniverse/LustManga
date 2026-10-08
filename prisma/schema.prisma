@@ -366,3 +366,11 @@ model Report {
   @@index([status, createdAt])
   @@index([ipHash, createdAt])
 }
+
+/// Permanent redirects for URLs that used to exist: a work merged into another during dedupe keeps
+/// sending visitors (and search engines) to the surviving page instead of a 404.
+model RedirectMap {
+  fromPath  String   @id
+  toPath    String
+  createdAt DateTime @default(now())
+}

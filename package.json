@@ -20,7 +20,9 @@
     "cleanup": "tsx --env-file=.env scripts/cleanup.mts",
     "qa": "tsx --env-file=.env e2e/qa.mts",
     "flows": "tsx --env-file=.env e2e/flows.mts",
-    "backfill-thumbs": "tsx --env-file=.env scripts/backfill-thumbs.mts"
+    "backfill-thumbs": "tsx --env-file=.env scripts/backfill-thumbs.mts",
+    "indexnow": "tsx --env-file=.env scripts/indexnow.mts",
+    "seo": "tsx --env-file=.env e2e/seo.mts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

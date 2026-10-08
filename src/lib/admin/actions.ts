@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import type { SafetyTier, TagType } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireAdmin, type AdminIdentity } from "@/lib/admin/auth";
@@ -9,10 +10,17 @@ import { mergeWorks, pickSurvivor } from "@/lib/dedupe";
 import { isCoreTerm } from "@/lib/safety/core";
 import { loadTerms } from "@/lib/safety/load-terms";
 import { slug } from "@/lib/tags";
+import { pingIndexNow } from "@/lib/indexnow";
+import { workHref } from "@/lib/format";
 
 export type ActionResult = { ok: true; message: string } | { ok: false; message: string };
 const ok = (message: string): ActionResult => ({ ok: true, message });
 const fail = (message: string): ActionResult => ({ ok: false, message });
+
+/** A work just went live: tell search engines once the response has been sent (never blocks or fails the action). */
+function announce(publicId: number, slug: string) {
+  after(() => pingIndexNow([workHref({ publicId, slug })]).then(() => undefined));
+}
 
 async function audit(me: AdminIdentity, action: string, targetType: string, targetId: string, diff?: object) {
   await prisma.auditLog
@@ -25,7 +33,7 @@ async function audit(me: AdminIdentity, action: string, targetType: string, targ
 /** Admin decides a flagged work is a false positive. Publishes now if images exist, else once the next ingest run stores them. */
 export async function approveWork(publicId: number): Promise<ActionResult> {
   const me = await requireAdmin("MOD");
-  const w = await prisma.work.findUnique({ where: { publicId }, select: { id: true, coverKey: true, pageCount: true, publish: true, title: true } });
+  const w = await prisma.work.findUnique({ where: { publicId }, select: { id: true, slug: true, coverKey: true, pageCount: true, publish: true, title: true } });
   if (!w) return fail("Work not found");
   const live = !!w.coverKey && w.pageCount > 0;
   await prisma.work.update({
@@ -36,6 +44,7 @@ export async function approveWork(publicId: number): Promise<ActionResult> {
     },
   });
   await audit(me, "work.approve", "work", String(publicId), { live });
+  if (live) announce(publicId, w.slug);
   revalidatePath("/console", "layout");
   return ok(live ? `#${publicId} approved and published` : `#${publicId} approved: images are fetched on the next ingest run, then it goes live`);
 }
@@ -57,7 +66,7 @@ export async function rejectWork(publicId: number): Promise<ActionResult> {
 
 export async function setWorkPublish(publicId: number, to: "PUBLISHED" | "DRAFT"): Promise<ActionResult> {
   const me = await requireAdmin("MOD");
-  const w = await prisma.work.findUnique({ where: { publicId }, select: { id: true, coverKey: true, pageCount: true, deferFetch: true, needsReview: true } });
+  const w = await prisma.work.findUnique({ where: { publicId }, select: { id: true, slug: true, coverKey: true, pageCount: true, deferFetch: true, needsReview: true } });
   if (!w) return fail("Work not found");
   if (to === "PUBLISHED") {
     if (!w.coverKey || w.pageCount === 0) return fail("No images stored yet: approve it so the next ingest run fetches them");
@@ -70,6 +79,7 @@ export async function setWorkPublish(publicId: number, to: "PUBLISHED" | "DRAFT"
     await prisma.work.update({ where: { id: w.id }, data: { publish: "DRAFT", reviewDecision: "UNPUBLISHED", reviewedAt: new Date(), reviewedBy: me.email } });
   }
   await audit(me, `work.${to === "PUBLISHED" ? "publish" : "unpublish"}`, "work", String(publicId));
+  if (to === "PUBLISHED") announce(publicId, w.slug);
   revalidatePath("/console", "layout");
   return ok(`#${publicId} ${to === "PUBLISHED" ? "published" : "moved to draft"}`);
 }
