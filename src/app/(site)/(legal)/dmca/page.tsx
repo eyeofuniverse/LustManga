@@ -12,7 +12,7 @@ export default function Page() {
 
       <h2>How to send a notice</h2>
       <p>
-        Use the <Link href="/report-content">report form</Link> (choose &ldquo;Copyright / takedown request&rdquo;) or email <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>. Please include:
+        Use the <Link href="/report-content">report form</Link> (choose &ldquo;Copyright / takedown request&rdquo;){CONTACT_EMAIL ? <> or email <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a></> : null}. Please include:
       </p>
       <ol>
         <li>Your name and a way to contact you.</li>

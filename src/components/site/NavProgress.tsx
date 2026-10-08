@@ -13,10 +13,12 @@ function Bar() {
   const [w, setW] = useState(0);
   const [on, setOn] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const giveUp = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // the new page arrived: finish and fade
   useEffect(() => {
     clearInterval(timer.current);
+    clearTimeout(giveUp.current);
     setW(100);
     const t = setTimeout(() => {
       setOn(false);
@@ -36,11 +38,19 @@ function Bar() {
       setOn(true);
       setW(12);
       timer.current = setInterval(() => setW((x) => (x < 85 ? x + (85 - x) * 0.12 : x)), 180);
+      // a click that never navigates (blocked, offline, an error page) must not leave the bar hanging
+      clearTimeout(giveUp.current);
+      giveUp.current = setTimeout(() => {
+        clearInterval(timer.current);
+        setOn(false);
+        setW(0);
+      }, 12_000);
     };
     document.addEventListener("click", onClick, true);
     return () => {
       document.removeEventListener("click", onClick, true);
       clearInterval(timer.current);
+      clearTimeout(giveUp.current);
     };
   }, []);
 

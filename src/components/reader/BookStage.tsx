@@ -13,7 +13,7 @@ import type { ReaderPage } from "./types";
  * Gestures move the DOM directly (no React state per pointer move), so a swipe stays at 60fps even with big images.
  */
 export interface BookHandle {
-  go(dir: 1 | -1): void;
+  go(dir: 1 | -1, crossChapters?: boolean): void;
   toggleZoom(): void;
 }
 interface Props {
@@ -155,14 +155,15 @@ export function BookStage({ ref, slides, pages, index, rtl, brightness, endCard,
 
   /* ───────── turning ───────── */
   const go = useCallback(
-    (dir: 1 | -1) => {
+    (dir: 1 | -1, crossChapters = true) => {
+      clearTimeout(tapTimer.current); // a pending "tap in the middle" must not toggle the bars after this page turn
       const { index: i, count: n } = live.current;
       const to = i + dir;
       if (to < 0 || to >= n) {
         // nothing further: a small nudge, then let the reader decide (previous / next chapter)
         place(dir * (live.current.rtl ? 1 : -1) * 28, 120);
         setTimeout(() => place(0, 260), 120);
-        live.current.onEdge(dir);
+        if (crossChapters) live.current.onEdge(dir);
         return;
       }
       if (typeof navigator.vibrate === "function") navigator.vibrate(6);
@@ -341,7 +342,8 @@ export function BookStage({ ref, slides, pages, index, rtl, brightness, endCard,
       const now = Date.now();
       if (Math.abs(delta) < 12 || now - lastWheel.current < 480 || now - born.current < 800) return; // one turn per flick, not one per inertia event
       lastWheel.current = now;
-      go(horizontal && live.current.rtl ? (delta > 0 ? -1 : 1) : delta > 0 ? 1 : -1);
+      // a wheel flick turns pages but never jumps chapters: its momentum would carry a reader straight past the end card
+      go(horizontal && live.current.rtl ? (delta > 0 ? -1 : 1) : delta > 0 ? 1 : -1, false);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);

@@ -90,8 +90,9 @@ export function useHistory() {
 export function recordProgress(id: number, ch: number, page: number, total: number) {
   const cur = read<HistoryEntry[]>(HIST, EMPTY_HIST);
   const prev = cur.find((h) => h.id === id);
+  // a chapter counts as read once most of it has been seen, not merely opened
   const done = new Set(prev?.done ?? []);
-  done.add(ch);
+  if (total > 0 && page / total >= 0.85) done.add(ch);
   const entry: HistoryEntry = { id, ch, page, total, at: Date.now(), done: [...done].sort((a, b) => a - b) };
   write(HIST, [entry, ...cur.filter((h) => h.id !== id)].slice(0, 120));
 }

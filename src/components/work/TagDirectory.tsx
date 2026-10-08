@@ -4,6 +4,7 @@ import type { TagType } from "@prisma/client";
 import { listTags } from "@/lib/queries";
 import { compact, tagHref } from "@/lib/format";
 import { flatParams, intParam, withQuery } from "@/lib/url";
+import { MAX_PAGE } from "@/lib/filters";
 import { Pagination } from "./Pagination";
 import { PageHeading } from "./Section";
 
@@ -28,7 +29,7 @@ export async function TagDirectory({
   tabs?: { label: string; href: string; active: boolean }[];
 }) {
   const sp = flatParams(searchParams);
-  const page = intParam(sp.page);
+  const page = intParam(sp.page, 1, 1, MAX_PAGE);
   const sort = sp.sort === "name" ? "name" : "popular";
   const letter = sp.letter && LETTERS.includes(sp.letter.toUpperCase()) ? sp.letter.toUpperCase() : undefined;
   const q = (sp.q ?? "").trim().slice(0, 60) || undefined;
@@ -40,13 +41,13 @@ export async function TagDirectory({
       <PageHeading title={title} sub={sub} />
 
       {tabs && (
-        <div className="mb-5 inline-flex rounded-xl bg-surface-2 p-1" role="tablist">
+        <nav className="mb-5 inline-flex rounded-xl bg-surface-2 p-1" aria-label="Sections">
           {tabs.map((t) => (
-            <Link key={t.href} href={t.href} role="tab" aria-selected={t.active} className={`inline-flex h-10 items-center rounded-lg px-4 text-sm font-semibold transition ${t.active ? "bg-surface text-text shadow-sm" : "text-muted hover:text-text"}`}>
+            <Link key={t.href} href={t.href} aria-current={t.active ? "page" : undefined} className={`inline-flex h-10 items-center rounded-lg px-4 text-sm font-semibold transition ${t.active ? "bg-surface text-text shadow-sm" : "text-muted hover:text-text"}`}>
               {t.label}
             </Link>
           ))}
-        </div>
+        </nav>
       )}
 
       <div className="flex flex-wrap items-center gap-3">

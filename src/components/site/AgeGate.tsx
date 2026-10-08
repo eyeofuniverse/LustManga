@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
-import { AGE_COOKIE, PREFS_COOKIE, serializePrefs } from "@/lib/prefs";
+import { AGE_COOKIE, PREFS_COOKIE, serializePrefs, writeCookie } from "@/lib/prefs";
 import { LANGUAGES } from "@/lib/format";
 import { LogoMark } from "./Logo";
 
@@ -27,9 +27,8 @@ export function AgeGate({ initialLangs }: { initialLangs: string[] }) {
   if (!open) return null;
 
   const accept = () => {
-    const year = 60 * 60 * 24 * 365;
-    document.cookie = `${AGE_COOKIE}=1; path=/; max-age=${year}; samesite=lax`;
-    document.cookie = `${PREFS_COOKIE}=${serializePrefs({ langs: all ? [] : langs, hide: [] })}; path=/; max-age=${year}; samesite=lax`;
+    writeCookie(AGE_COOKIE, "1");
+    writeCookie(PREFS_COOKIE, serializePrefs({ langs: all ? [] : langs, hide: [] }));
     setOpen(false);
     router.refresh();
   };

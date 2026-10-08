@@ -3,7 +3,8 @@ import Link from "next/link";
 import { currentPrefs } from "@/lib/prefs-server";
 import { countWorks, listWorks, prefFilters } from "@/lib/queries";
 import { parseFilters } from "@/lib/filters";
-import { flatParams } from "@/lib/url";
+import { redirect } from "next/navigation";
+import { flatParams, withQuery } from "@/lib/url";
 import { PAGE_SIZE } from "@/lib/site";
 import { FilterBar } from "@/components/work/FilterBar";
 import { EmptyState, WorkGrid } from "@/components/work/WorkCard";
@@ -28,6 +29,8 @@ export default async function Browse({ searchParams }: { searchParams: Promise<R
     page: f.page,
   };
   const [{ items, hasNext }, total] = await Promise.all([listWorks(opts), countWorks(opts)]);
+  // a page number past the end (an old bookmark, a shrunken list) goes back to the first page instead of an empty screen
+  if (!items.length && f.page > 1) redirect(withQuery("/browse", sp, { page: undefined }));
 
   return (
     <div className="container-x py-6 sm:py-10">

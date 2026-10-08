@@ -14,7 +14,7 @@ export function SavedGrid({ kind }: { kind: "favorites" | "history" }) {
   const fav = useFavorites();
   const hist = useHistory();
   const ids = kind === "favorites" ? fav.ids : hist.items.map((h) => h.id);
-  const key = ids.slice(0, 120).join(",");
+  const key = ids.join(",");
   const [cards, setCards] = useState<Work[] | null>(null);
 
   useEffect(() => {
@@ -23,9 +23,12 @@ export function SavedGrid({ kind }: { kind: "favorites" | "history" }) {
       return;
     }
     const ctrl = new AbortController();
-    fetch(`/api/works?ids=${key}`, { signal: ctrl.signal })
-      .then((r) => r.json())
-      .then((d: { items: Work[] }) => setCards(d.items))
+    // up to 500 saved works: ask in chunks so every one of them shows up, in the saved order
+    const all = key.split(",");
+    const chunks: string[][] = [];
+    for (let i = 0; i < all.length; i += 100) chunks.push(all.slice(i, i + 100));
+    Promise.all(chunks.map((c) => fetch(`/api/works?ids=${c.join(",")}`, { signal: ctrl.signal }).then((r) => r.json() as Promise<{ items: Work[] }>)))
+      .then((parts) => setCards(parts.flatMap((p) => p.items)))
       .catch(() => {});
     return () => ctrl.abort();
   }, [key]);

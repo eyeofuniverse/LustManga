@@ -54,7 +54,7 @@ export function Footer() {
             <ul className="space-y-1.5">
               {c.links.map(([label, href]) => (
                 <li key={href}>
-                  <Link href={href} className="inline-block py-1 text-sm text-muted transition hover:text-text">
+                  <Link href={href} prefetch={href === "/random" ? false : undefined} className="inline-block py-1 text-sm text-muted transition hover:text-text">
                     {label}
                   </Link>
                 </li>

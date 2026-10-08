@@ -1,6 +1,7 @@
 export const SITE_NAME = "LustManga";
 export const SITE_TAGLINE = "Manga & doujinshi, all languages";
-export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL || "contact@example.com";
+/** Set NEXT_PUBLIC_CONTACT_EMAIL. Left empty, the legal pages point to the report form instead of showing a made-up address. */
+export const CONTACT_EMAIL = process.env.NEXT_PUBLIC_CONTACT_EMAIL || "";
 
 /** Canonical origin for metadata, sitemaps and share links. */
 export const SITE_URL = (

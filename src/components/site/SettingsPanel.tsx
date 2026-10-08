@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Check, EyeOff, Moon, Plus, Search, Sun, Trash2, X } from "lucide-react";
 import { usePrefs } from "./PrefsProvider";
+import { MAX_HIDDEN } from "@/lib/prefs";
 import { LANGUAGES } from "@/lib/format";
 import { DEFAULT_READER, useFavorites, useHistory, useReaderPrefs } from "@/lib/library";
 import type { SuggestResult } from "@/lib/types";
@@ -81,7 +82,8 @@ export function SettingsPanel() {
           <Search className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-muted" aria-hidden="true" />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a tag to hide" aria-label="Find a tag to hide" className="h-12 w-full rounded-xl border border-line bg-surface-2/70 pl-10 pr-3 text-sm placeholder:text-muted/80 focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/30" />
         </div>
-        {found.length > 0 && (
+        {prefs.hide.length >= MAX_HIDDEN && <p className="text-sm text-warn">You can hide up to {MAX_HIDDEN} tags. Unhide one to add another.</p>}
+        {found.length > 0 && prefs.hide.length < MAX_HIDDEN && (
           <ul className="flex flex-wrap gap-2" aria-label="Matching tags">
             {found.map((t) => (
               <li key={t.id}>

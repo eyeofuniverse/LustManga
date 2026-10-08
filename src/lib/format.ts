@@ -58,7 +58,7 @@ export function timeAgo(date: Date | string | number): string {
 export const isNew = (createdAt: Date | string, days = 3) => Date.now() - new Date(createdAt).getTime() < days * 86_400_000;
 
 /** URL for a work: the numeric id is what routes; the slug is only for readability and SEO. */
-export const workHref = (w: { publicId: number; slug: string }) => `/g/${w.publicId}-${w.slug || "work"}`;
+export const workHref = (w: { publicId: number; slug: string }) => `/g/${w.publicId}-${encodeURIComponent(w.slug || "work")}`;
 export const readHref = (publicId: number, chapter = 1, page?: number) => `/read/${publicId}/${chapter}${page ? `?p=${page}` : ""}`;
 
 export const TAG_TYPES = ["tag", "artist", "group", "parody", "character", "language", "category"] as const;

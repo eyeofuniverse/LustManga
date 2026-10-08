@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, permanentRedirect } from "next/navigation";
+import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { currentPrefs } from "@/lib/prefs-server";
 import { countWorks, getTag, listWorks, prefFilters, tagTypeOf } from "@/lib/queries";
 import { parseFilters } from "@/lib/filters";
-import { flatParams } from "@/lib/url";
+import { flatParams, withQuery } from "@/lib/url";
 import { PAGE_SIZE } from "@/lib/site";
 import { TAG_TYPE_LABEL, tagHref, type TagTypeSlug } from "@/lib/format";
 import { FilterBar } from "@/components/work/FilterBar";
@@ -59,6 +59,7 @@ export default async function TagPage({ params, searchParams }: { params: Params
   };
   const base = tagHref(type, tag.slug);
   const [{ items, hasNext }, total] = await Promise.all([listWorks(opts), countWorks(opts)]);
+  if (!items.length && f.page > 1) redirect(withQuery(base, sp, { page: undefined }));
   const directory = type === "tag" ? "/tags" : type === "artist" || type === "group" ? "/artists" : type === "parody" ? "/parodies" : type === "character" ? "/characters" : "/browse";
 
   return (

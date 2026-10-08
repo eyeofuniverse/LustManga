@@ -46,7 +46,8 @@ export function FilterBar({
           <Link href={h({ lang: "all" })} className={`chip min-h-[36px] ${langs.length === 0 ? "chip-active" : ""}`} aria-current={langs.length === 0 ? "true" : undefined}>
             All languages
           </Link>
-          {LANGUAGES.slice(0, 10).map((l) => {
+          {/* the ten most common, plus any other language that is switched on so it can be switched off again */}
+          {[...LANGUAGES.slice(0, 10), ...LANGUAGES.slice(10).filter((l) => langs.includes(l.code))].map((l) => {
             const on = langs.includes(l.code);
             const next = toggle(langs, l.code);
             return (

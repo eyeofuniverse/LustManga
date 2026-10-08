@@ -19,7 +19,7 @@ export default function Page() {
         <Link href="/report-content">report form</Link>. We act on these reports first and remove the item.
       </p>
       <p>
-        Questions about this statement: <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
+        Questions about this statement: {CONTACT_EMAIL ? <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> : <Link href="/report-content">use the report form</Link>}.
       </p>
     </>
   );

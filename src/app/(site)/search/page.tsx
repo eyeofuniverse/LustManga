@@ -5,7 +5,8 @@ import { currentPrefs } from "@/lib/prefs-server";
 import { countWorks, listWorks, popularTags, prefFilters, resolveTerms } from "@/lib/queries";
 import { isEmptyQuery, parseQuery } from "@/lib/search";
 import { parseFilters } from "@/lib/filters";
-import { flatParams } from "@/lib/url";
+import { redirect } from "next/navigation";
+import { flatParams, withQuery } from "@/lib/url";
 import { PAGE_SIZE } from "@/lib/site";
 import { compact, tagHref } from "@/lib/format";
 import { FilterBar } from "@/components/work/FilterBar";
@@ -74,6 +75,8 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   };
   const noMatch = r.missing.length > 0; // a required tag that does not exist can match nothing
   const [{ items, hasNext }, total] = noMatch ? [{ items: [], hasNext: false }, { n: 0, capped: false }] : await Promise.all([listWorks(opts), countWorks(opts)]);
+
+  if (!items.length && f.page > 1 && !noMatch) redirect(withQuery("/search", sp, { page: undefined }));
 
   return (
     <div className="container-x py-6 sm:py-10">

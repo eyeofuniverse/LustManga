@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { PREFS_COOKIE, serializePrefs, type HiddenTag, type Prefs } from "@/lib/prefs";
+import { MAX_HIDDEN, PREFS_COOKIE, serializePrefs, writeCookie, type HiddenTag, type Prefs } from "@/lib/prefs";
 
 interface PrefsApi {
   prefs: Prefs;
@@ -22,7 +22,7 @@ export function PrefsProvider({ initial, children }: { initial: Prefs; children:
   const save = useCallback(
     (next: Prefs) => {
       setPrefs(next);
-      document.cookie = `${PREFS_COOKIE}=${serializePrefs(next)}; path=/; max-age=31536000; samesite=lax`;
+      writeCookie(PREFS_COOKIE, serializePrefs(next));
       router.refresh();
     },
     [router],
@@ -34,7 +34,7 @@ export function PrefsProvider({ initial, children }: { initial: Prefs; children:
       setLangs: (langs) => save({ ...prefs, langs }),
       toggleLang: (code) =>
         save({ ...prefs, langs: prefs.langs.includes(code) ? prefs.langs.filter((l) => l !== code) : [...prefs.langs, code] }),
-      hideTag: (tag) => (prefs.hide.some((h) => h.id === tag.id) ? undefined : save({ ...prefs, hide: [...prefs.hide, tag] })),
+      hideTag: (tag) => (prefs.hide.some((h) => h.id === tag.id) || prefs.hide.length >= MAX_HIDDEN ? undefined : save({ ...prefs, hide: [...prefs.hide, tag] })),
       unhideTag: (id) => save({ ...prefs, hide: prefs.hide.filter((h) => h.id !== id) }),
     }),
     [prefs, save],

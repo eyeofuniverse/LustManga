@@ -55,7 +55,7 @@ jobs:
           } > .env
       - run: npx prisma generate
       - name: Health check
-        run: npm run health
+        run: npm run health -- --need=mangadex
       - name: Ingest
         run: |
           MODE="${{ github.event.inputs.mode }}"

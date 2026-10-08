@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CheckCircle2, Send } from "lucide-react";
+import { workNumber } from "@/lib/url";
 
 const KINDS = [
   { v: "DMCA", l: "Copyright / takedown request" },
@@ -19,13 +20,18 @@ export function ReportForm({ work }: { work?: number }) {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setState("sending");
     setError("");
+    const email = contact.trim();
+    if ((kind === "DMCA" || email) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError(kind === "DMCA" ? "A takedown request needs a valid email address so we can reply." : "That email address does not look right.");
+      return;
+    }
+    setState("sending");
     try {
       const r = await fetch("/api/report", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kind, work: workId.replace(/\D/g, "") || undefined, details, contact: contact || undefined }),
+        body: JSON.stringify({ kind, work: workNumber(workId), details, contact: email || undefined }),
       });
       const j = (await r.json()) as { ok: boolean; error?: string };
       if (!j.ok) throw new Error(j.error ?? "Could not send the report.");

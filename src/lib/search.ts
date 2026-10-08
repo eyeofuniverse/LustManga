@@ -70,6 +70,8 @@ function parseNum(value: string, unit: boolean): NumCond | null {
   if (!m) return null;
   let n = Number(m[2]);
   if (unit) n *= UNIT_DAYS[(m[3] ?? "d").toLowerCase()];
+  // far past anything real, and past what the database integer holds
+  n = Math.min(n, unit ? 36_500 : 100_000);
   return { op: (m[1] as Op) ?? "=", n };
 }
 
@@ -109,5 +111,6 @@ export const normText = (s: string) =>
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
 
+/** Nothing to match on. A query of only punctuation ("!!!") normalises to nothing and counts as empty. */
 export const isEmptyQuery = (p: ParsedQuery) =>
-  !p.text.length && !p.excludeText.length && !p.terms.length && !p.pages.length && !p.uploaded.length;
+  !p.text.some((t) => normText(t)) && !p.excludeText.some((t) => normText(t)) && !p.terms.length && !p.pages.length && !p.uploaded.length;

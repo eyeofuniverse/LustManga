@@ -58,6 +58,19 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
     });
   const lastY = useRef(0);
   const book = useRef<BookHandle>(null);
+  const headerEl = useRef<HTMLElement>(null);
+  const uiRef = useRef(ui);
+  uiRef.current = ui;
+  const focusBars = useRef(false);
+  useEffect(() => {
+    if (!ui || !focusBars.current) return;
+    focusBars.current = false;
+    // the bars fade in over 300ms and "visibility" only reads as visible a moment after that starts
+    const t = setTimeout(() => headerEl.current?.querySelector<HTMLElement>("a,button")?.focus(), 60);
+    return () => clearTimeout(t);
+  }, [ui]);
+  const sheetRef = useRef(sheet);
+  sheetRef.current = sheet;
   const at = Math.min(page, total); // the "end of chapter" card counts as page total + 1
   const slideIdx = slideOfPage(slides, page);
   const slide = slides[slideIdx];
@@ -160,7 +173,27 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
 
   // start position (scroll mode): place the page before the first paint
   useLayoutEffect(() => {
-    if (scrollMode && startPage > 1) document.getElementById(startPage > total ? "end" : `pg-${startPage}`)?.scrollIntoView({ block: "start" });
+    if (!scrollMode || startPage <= 1) return;
+    const target = () => document.getElementById(startPage > total ? "end" : `pg-${startPage}`);
+    target()?.scrollIntoView({ block: "start" });
+    // Next scrolls a freshly navigated page back to the top just after it mounts, which would undo the line above.
+    // Put the page back once that has happened, unless the visitor has already started scrolling themselves.
+    let touched = false;
+    const mark = () => (touched = true);
+    window.addEventListener("wheel", mark, { passive: true, once: true });
+    window.addEventListener("touchmove", mark, { passive: true, once: true });
+    window.addEventListener("keydown", mark, { once: true });
+    const fix = () => {
+      const el = target();
+      if (!touched && el && Math.abs(el.getBoundingClientRect().top) > 40) el.scrollIntoView({ block: "start" });
+    };
+    const timers = [setTimeout(fix, 60), setTimeout(fix, 300), setTimeout(fix, 900)];
+    return () => {
+      timers.forEach(clearTimeout);
+      window.removeEventListener("wheel", mark);
+      window.removeEventListener("touchmove", mark);
+      window.removeEventListener("keydown", mark);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -209,6 +242,20 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
       const el = e.target as HTMLElement;
       if (el.tagName === "INPUT" || el.tagName === "SELECT" || el.tagName === "TEXTAREA") return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // Space / Enter on a focused button or link is that control's own action, not "next page"
+      if ((e.key === " " || e.key === "Enter") && (el.tagName === "BUTTON" || el.tagName === "A")) return;
+      // with the bars tucked away, Tab brings them back and puts the focus on the first control
+      if (e.key === "Tab" && !uiRef.current && !sheetRef.current) {
+        e.preventDefault();
+        focusBars.current = true; // focus once the bars are actually visible again (see the effect below)
+        setUi(true);
+        return;
+      }
+      // a dialog is open: the page behind it must not turn
+      if (sheetRef.current) {
+        if (e.key === "Escape" || e.key === "s") setSheet(false);
+        return;
+      }
       if (hint) dismissHint();
       const fwd = prefs.rtl && !scrollMode ? "ArrowLeft" : "ArrowRight";
       const back = prefs.rtl && !scrollMode ? "ArrowRight" : "ArrowLeft";
@@ -241,7 +288,8 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
     return () => document.removeEventListener("fullscreenchange", on);
   }, []);
 
-  const barCls = `fixed inset-x-0 z-30 transition duration-300 ${ui ? "opacity-100" : "pointer-events-none opacity-0"}`;
+  // hidden bars leave the tab order and the accessibility tree too (visibility), not just the eye
+  const barCls = `fixed inset-x-0 z-30 transition-[opacity,transform,visibility] duration-300 ${ui ? "visible opacity-100" : "invisible pointer-events-none opacity-0"}`;
   const endCard = <EndCard work={work} chapter={chapter.number} next={next} prev={prev} onNext={() => goChapter(next)} />;
 
   return (
@@ -251,7 +299,7 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
       </p>
 
       {/* ───────── top bar ───────── */}
-      <header className={`${barCls} top-0 ${ui ? "translate-y-0" : "-translate-y-3"}`}>
+      <header ref={headerEl} className={`${barCls} top-0 ${ui ? "translate-y-0" : "-translate-y-3"}`}>
         <div className="mx-auto flex h-14 max-w-5xl items-center gap-1 border-b border-white/10 bg-black/80 px-2 backdrop-blur-xl sm:mt-2 sm:rounded-2xl sm:border">
           <Link href={workHref(work)} className="btn-icon !text-white/80 hover:!bg-white/10" aria-label="Back to details">
             <ArrowLeft className="h-5 w-5" />

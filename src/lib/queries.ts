@@ -65,7 +65,7 @@ function where(o: ListOpts): Prisma.Sql {
   for (const u of o.uploaded ?? []) {
     // "age < 7d" means created AFTER now-7d, so the comparison flips
     const flip: Record<string, string> = { "<": ">", ">": "<", "<=": ">=", ">=": "<=", "=": "=" };
-    c.push(Prisma.sql`w."createdAt" ${OPS[flip[u.op]]} now() - make_interval(days => ${u.n})`);
+    c.push(Prisma.sql`w."createdAt" ${OPS[flip[u.op]]} now() - make_interval(days => ${u.n}::int)`);
   }
   if (o.excludeId) c.push(Prisma.sql`w."publicId" <> ${o.excludeId}`);
   return Prisma.join(c, " AND ");
@@ -228,7 +228,8 @@ export async function getRelated(work: { publicId: number; language: string; tag
 
 /* ───────────────────────────── reader ───────────────────────────── */
 
-export async function getReaderData(publicId: number, chapterNumber: number) {
+/** Cached per request: the page and its metadata both ask for it. */
+export const getReaderData = cache(async (publicId: number, chapterNumber: number) => {
   const work = await db(() =>
     prisma.work.findFirst({
       where: { publicId, publish: "PUBLISHED" },
@@ -245,7 +246,7 @@ export async function getReaderData(publicId: number, chapterNumber: number) {
   if (!current) return null;
   const i = chapters.findIndex((c) => c.number === chapterNumber);
   return { work, chapters, current, prev: chapters[i - 1]?.number ?? null, next: chapters[i + 1]?.number ?? null };
-}
+});
 
 /* ───────────────────────────── lists by id, random ───────────────────────────── */
 

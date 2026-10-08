@@ -7,6 +7,7 @@ import { getRelated, getVariants, getWork } from "@/lib/queries";
 import { categoryLabel, compact, langLabel, tagHref, timeAgo, workHref } from "@/lib/format";
 import { cdn } from "@/lib/cdn";
 import { cleanDescription } from "@/lib/text";
+import { idParam } from "@/lib/url";
 import { SITE_URL } from "@/lib/site";
 import { CoverImage } from "@/components/work/CoverImage";
 import { ChapterList } from "@/components/work/ChapterList";
@@ -16,10 +17,7 @@ import { WorkCard } from "@/components/work/WorkCard";
 import { SectionHeader } from "@/components/work/Section";
 
 type Params = Promise<{ ref: string }>;
-const idOf = (ref: string) => {
-  const n = Number.parseInt(ref, 10);
-  return Number.isInteger(n) && n > 0 ? n : null;
-};
+const idOf = (ref: string) => idParam(ref);
 
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const id = idOf((await params).ref);

@@ -76,6 +76,11 @@ const browser = await chromium.launch();
   ok(/\/(tag|artist|parody|character|group|g)\//.test(p.url()), "arrow keys + Enter open a suggestion", p.url());
   await p.goto(BASE + "/search?q=" + encodeURIComponent(`tag:"${TAG.replace(/-/g, " ")}" pages:>5`));
   ok((await p.locator("ul li article").count()) > 0, "advanced syntax (tag: + pages:>) returns results");
+  // uploaded: used to crash the query (the day count reached Postgres as a bigint); newest works are within the last year
+  const up = await p.goto(BASE + "/search?lang=all&q=" + encodeURIComponent("uploaded:<1y"));
+  ok(up?.status() === 200 && (await p.locator("ul li article").count()) > 0, "uploaded:<1y returns the recently added works");
+  const old = await p.goto(BASE + "/search?lang=all&q=" + encodeURIComponent("uploaded:>20y"));
+  ok(old?.status() === 200 && (await p.locator("ul li article").count()) === 0, "uploaded:>20y returns nothing, without an error");
   await p.goto(BASE + "/search?q=" + encodeURIComponent("tag:definitely-not-a-real-tag"));
   ok((await text(p, "h2")).includes("No results"), "an unknown tag shows a clear empty state");
   await ctx.close();
@@ -125,7 +130,7 @@ const browser = await chromium.launch();
   await p.waitForTimeout(1500);
   const hist = JSON.parse((await p.evaluate(() => localStorage.getItem("lm:history"))) ?? "[]");
   ok(hist[0]?.id === Number(SERIES) && hist[0]?.page >= 3, "scrolling records reading progress", JSON.stringify(hist[0]));
-  const sliderVal = await p.getByRole("slider", { name: "Page" }).inputValue();
+  const sliderVal = await p.getByRole("slider", { name: "Page", includeHidden: true }).inputValue();
   ok(Number(sliderVal) >= 3, "the page slider follows the scroll", sliderVal);
   await p.goto(BASE + `/g/${SERIES}`);
   await p.waitForTimeout(600);
@@ -133,7 +138,7 @@ const browser = await chromium.launch();
   await p.locator("a.btn-primary").first().click();
   await p.waitForURL(/read\/.*\?p=/);
   await p.waitForSelector("[data-n]");
-  await p.waitForTimeout(800);
+  await p.waitForFunction(() => Math.abs(document.getElementById("pg-" + (new URLSearchParams(location.search).get("p") ?? "1"))?.getBoundingClientRect().top ?? 9999) < 120, undefined, { timeout: 6000 }).catch(() => {});
   const top = await p.evaluate(() => Math.round(document.getElementById("pg-" + (new URLSearchParams(location.search).get("p") ?? "1"))?.getBoundingClientRect().top ?? 9999));
   ok(Math.abs(top) < 120, "Continue lands on the saved page", `top=${top}`);
   await p.keyboard.press("m");
@@ -249,7 +254,7 @@ for (const rtl of [false, true]) {
   await p.mouse.dblclick(vp.width / 2, vp.height / 2);
   await p.waitForTimeout(350);
   ok(/scale\(2\.4\)/.test(await zoomOf()), "book: double-tap zooms in", await zoomOf());
-  ok((await p.getByRole("button", { name: "Reset zoom" }).count()) === 1, "book: the zoom button reflects the zoom state");
+  ok((await p.getByRole("button", { name: "Reset zoom", includeHidden: true }).count()) === 1, "book: the zoom button reflects the zoom state");
   await drag(p, 0.6, 0.4); // panning while zoomed must not turn the page
   ok(await onPage(p, 1), "book: dragging while zoomed pans instead of turning");
   await p.mouse.dblclick(vp.width / 2, vp.height / 2);
@@ -368,7 +373,7 @@ for (const rtl of [false, true]) {
   const ctx = await ctxFor(browser);
   const p = await ctx.newPage();
   await p.goto(BASE + "/random");
-  await p.waitForURL((u) => /\/g\/\d+-/.test(u.pathname), { timeout: 15000 }).catch(() => {}); // /random redirects, then the slug is canonicalised
+  await p.waitForURL((u) => /\/g\/\d+-/.test(u.pathname), { timeout: 40000 }).catch(() => {}); // /random redirects, then the slug is canonicalised (slow when the database is far away)
   ok(/\/g\/\d+-/.test(p.url()), "random lands on a work page", p.url());
   const bad = await p.goto(BASE + "/g/99999999");
   ok(bad?.status() === 404, "a missing work is a real 404");
@@ -383,6 +388,83 @@ for (const rtl of [false, true]) {
   ok((await text(p, "[role=status] h2")).includes("Report received"), "report form submits");
   const removed = await prisma.report.deleteMany({ where: { details: { startsWith: "QA TEST" } } });
   ok(removed.count >= 1, "(cleanup) test report was stored, now removed", String(removed.count));
+  await ctx.close();
+}
+
+/* ───────── 10. hostile input never becomes a server error ───────── */
+{
+  const ctx = await ctxFor(browser);
+  const urls = [
+    "/g/99999999999", "/g/0", "/g/-5", "/read/99999999999/1", "/read/74/NaN", "/read/74/1e99", "/read/74/1?p=abc",
+    "/search?q=pages:%3E99999999999", "/search?q=uploaded:%3C99999999999y", "/search?q=tag:%00", "/search?q=%00", "/search?q=%21%21%21",
+    "/browse?page=abc", "/browse?page=99999999", "/browse?page=-4", "/browse?lang=zz,en&cat=NOPE&sort=weird",
+    "/tags?page=99999", "/tags?q=%25", "/artists?letter=%00", "/tag/big-breasts?page=99999",
+    "/api/works?ids=1,2,abc,99999999999", "/api/suggest?q=%00%00", "/api/suggest?q=%25%25",
+  ];
+  const bad: string[] = [];
+  for (const u of urls) {
+    const r = await ctx.request.get(BASE + u, { maxRedirects: 3 });
+    if (r.status() >= 500) bad.push(`${u} -> ${r.status()}`);
+  }
+  ok(bad.length === 0, `${urls.length} hostile or malformed URLs: none is a 5xx`, bad.join("; "));
+
+  // a work whose title is Japanese/Chinese has a non-ASCII slug: redirecting to it must not put raw characters in the Location header
+  const uni = process.env.QA_UNICODE ?? "115";
+  const bare = await ctx.request.get(BASE + "/g/" + uni, { maxRedirects: 0 });
+  const loc = bare.headers()["location"] ?? "";
+  ok(bare.status() === 308 && /^[!-~]+$/.test(loc), "a bare link to a work with a non-ASCII title redirects to a valid URL", `${bare.status()} ${loc}`);
+  const landed = await ctx.request.get(BASE + "/g/" + uni);
+  ok(landed.status() === 200, "...and that page loads", String(landed.status()));
+
+  const view = await ctx.request.post(BASE + "/api/view", { data: { id: 99999999999 } });
+  ok(view.status() === 400, "view ping with an oversized id is rejected, not a crash", String(view.status()));
+  const rep = await ctx.request.post(BASE + "/api/report", { data: { kind: "DMCA", details: "QA TEST not an email", contact: "not-an-email" } });
+  ok(rep.status() === 400, "a takedown request without a real email is refused", String(rep.status()));
+  const rep2 = await ctx.request.post(BASE + "/api/report", { data: { kind: "BROKEN", work: 99999999999, details: "QA TEST oversized work id" } });
+  ok(rep2.status() === 400, "a report with an oversized work number is refused, not a crash", String(rep2.status()));
+
+  // a long ?page deep into a list lands back on page 1 instead of an empty screen
+  const p = await ctx.newPage();
+  await p.goto(BASE + "/browse?lang=all&page=500");
+  ok(!p.url().includes("page=500") && (await p.locator("article").count()) > 0, "a page number past the end goes back to the first page", p.url());
+  await p.goto(BASE + "/search?q=%21%21%21");
+  ok((await p.getByRole("link", { name: "How to write advanced searches" }).count()) === 1, "a query of only punctuation shows the search help, not every work");
+  await ctx.close();
+}
+
+/* ───────── 11. reader: keyboard, focus and dialogs ───────── */
+{
+  const ctx = await ctxFor(browser, { storage: BOOK(false) });
+  const p = await ctx.newPage();
+  await p.goto(BASE + `/read/${SERIES}/1`);
+  await p.waitForSelector('[aria-roledescription="slide"][aria-hidden="false"] img');
+  await p.waitForTimeout(600);
+  // the settings dialog is modal: arrows and space must not turn the page behind it
+  await p.keyboard.press("s");
+  await p.getByRole("dialog", { name: "Reader settings" }).waitFor({ timeout: 3000 });
+  await p.keyboard.press("ArrowRight");
+  await p.keyboard.press(" ");
+  ok(await onPage(p, 1), "reader: keys do not turn the page behind the settings dialog");
+  await p.keyboard.press("Escape");
+  await p.waitForTimeout(300);
+  ok((await p.getByRole("dialog").count()) === 0, "reader: Escape closes the settings dialog");
+
+  // with the bars tucked away, Tab brings them back with focus on the first control
+  await p.waitForTimeout(3600);
+  const hidden = await p.locator("header").first().evaluate((el) => getComputedStyle(el).visibility);
+  ok(hidden === "hidden", "reader: the hidden bars are out of the tab order (visibility)", hidden);
+  await p.keyboard.press("Tab");
+  await p.waitForTimeout(500);
+  const focused = await p.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? document.activeElement?.tagName);
+  ok(focused === "Back to details", "reader: Tab reveals the bars and focuses the first control", String(focused));
+
+  // Space on a focused button is that button's action, not "next page"
+  await p.keyboard.press("Tab");
+  await p.keyboard.press("Tab");
+  await p.keyboard.press("Tab"); // zoom, mode, then fullscreen or settings
+  await p.keyboard.press(" ");
+  await p.waitForTimeout(300);
+  ok(await onPage(p, 1), "reader: Space on a focused button does not also turn the page");
   await ctx.close();
 }
 

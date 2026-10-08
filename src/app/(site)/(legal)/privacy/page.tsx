@@ -30,7 +30,7 @@ export default function Page() {
 
       <h2>Your choices</h2>
       <p>
-        You can clear everything we store about you from <Link href="/settings">Settings</Link>, or by clearing your browser data. To ask about anything else, write to <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>. {SITE_NAME} is for adults only.
+        You can clear everything we store about you from <Link href="/settings">Settings</Link>, or by clearing your browser data. To ask about anything else, {CONTACT_EMAIL ? <>write to <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a></> : <>use the <Link href="/report-content">report form</Link></>}. {SITE_NAME} is for adults only.
       </p>
     </>
   );
