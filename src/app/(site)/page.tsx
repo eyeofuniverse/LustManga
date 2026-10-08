@@ -2,12 +2,13 @@ import Link from "next/link";
 import { BookOpen, Flame, Images, Library, Palette, Gamepad2, Globe2, Sparkles, type LucideIcon } from "lucide-react";
 import { currentPrefs } from "@/lib/prefs-server";
 import { categoryCounts, getWork, homeLists, popularTags } from "@/lib/queries";
-import { categoryLabel, compact, langLabel, readHref, tagHref, workHref } from "@/lib/format";
+import { categoryLabel, compact, langLabel, tagHref, workHref } from "@/lib/format";
 import { CoverImage } from "@/components/work/CoverImage";
 import { WorkCard, WorkGrid } from "@/components/work/WorkCard";
 import { ScrollRow } from "@/components/work/ScrollRow";
 import { SectionHeader } from "@/components/work/Section";
 import { ContinueRow } from "@/components/work/ContinueRow";
+import { ReadButton } from "@/components/work/Actions";
 
 const CAT: Record<string, { Icon: LucideIcon; tone: string }> = {
   DOUJINSHI: { Icon: Library, tone: "from-rose-500/25 to-orange-500/10" },
@@ -81,9 +82,7 @@ export default async function Home() {
                   </ul>
                 )}
                 <div className="mt-6 flex flex-wrap justify-center gap-3 md:justify-start">
-                  <Link href={readHref(spot.publicId, 1)} className="btn-primary h-12 px-8">
-                    <BookOpen className="h-5 w-5" /> Start reading
-                  </Link>
+                  <ReadButton publicId={spot.publicId} chapters={spotFull?.chapters.map((c) => c.number) ?? [1]} className="px-8" />
                   <Link href={workHref(spot)} className="btn-soft h-12 px-6">
                     Details
                   </Link>

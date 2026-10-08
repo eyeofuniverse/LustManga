@@ -63,6 +63,8 @@ export function BookStage({ ref, slides, pages, index, rtl, brightness, endCard,
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null);
   const tapTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const lastWheel = useRef(0);
+  // momentum scrolling and a double-click on the button that opened the book must not turn its first pages
+  const born = useRef(Date.now());
   const count = slides.length;
   const vIndex = (i: number) => (rtl ? count - 1 - i : i);
   const reduce = useRef(false);
@@ -295,6 +297,7 @@ export function BookStage({ ref, slides, pages, index, rtl, brightness, endCard,
 
   const tap = (x: number, y: number) => {
     const now = Date.now();
+    if (now - born.current < 450) return;
     const prev = lastTap.current;
     if (prev && now - prev.t < DOUBLE_TAP_MS && Math.hypot(x - prev.x, y - prev.y) < 40) {
       clearTap();
@@ -336,7 +339,7 @@ export function BookStage({ ref, slides, pages, index, rtl, brightness, endCard,
       const horizontal = Math.abs(e.deltaX) > Math.abs(e.deltaY);
       const delta = horizontal ? e.deltaX : e.deltaY;
       const now = Date.now();
-      if (Math.abs(delta) < 12 || now - lastWheel.current < 480) return; // one turn per flick, not one per inertia event
+      if (Math.abs(delta) < 12 || now - lastWheel.current < 480 || now - born.current < 800) return; // one turn per flick, not one per inertia event
       lastWheel.current = now;
       go(horizontal && live.current.rtl ? (delta > 0 ? -1 : 1) : delta > 0 ? 1 : -1);
     };

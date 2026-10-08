@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Play } from "lucide-react";
-import { useHistory } from "@/lib/library";
+import { isFinished, useHistory } from "@/lib/library";
 import { readHref, workHref } from "@/lib/format";
 import type { WorkCard } from "@/lib/types";
 import { CoverImage } from "./CoverImage";
@@ -37,10 +37,11 @@ export function ContinueRow() {
       <ScrollRow label="Continue reading">
         {cards.map((w) => {
           const h = items.find((x) => x.id === w.publicId)!;
+          const done = isFinished(h);
           const pct = Math.min(100, Math.round((h.page / Math.max(h.total, 1)) * 100));
           return (
             <li key={w.publicId}>
-              <Link href={readHref(w.publicId, h.ch, h.page)} className="group block" aria-label={`Continue ${w.title} at page ${h.page}`}>
+              <Link href={done ? workHref(w) : readHref(w.publicId, h.ch, h.page)} className="group block" aria-label={done ? `${w.title}: finished chapter ${h.ch}, open for the next one` : `Continue ${w.title} at page ${h.page}`}>
                 <div className="relative aspect-[2/3] overflow-hidden rounded-2xl bg-surface-2 shadow-card ring-1 ring-line transition duration-300 group-hover:-translate-y-1 group-hover:shadow-glow">
                   <CoverImage coverKey={w.coverKey} />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
@@ -51,7 +52,7 @@ export function ContinueRow() {
                   </span>
                   <div className="absolute inset-x-2.5 bottom-2.5">
                     <p className="mb-1.5 text-[11px] font-bold text-white/90">
-                      Page {h.page} of {h.total}
+                      {done ? "Finished, what's next?" : `Page ${h.page} of ${h.total}`}
                     </p>
                     <div className="h-1 overflow-hidden rounded-full bg-white/25">
                       <div className="h-full rounded-full bg-accent-fill" style={{ width: `${pct}%` }} />

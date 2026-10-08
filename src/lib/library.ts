@@ -96,6 +96,31 @@ export function recordProgress(id: number, ch: number, page: number, total: numb
   write(HIST, [entry, ...cur.filter((h) => h.id !== id)].slice(0, 120));
 }
 
+/** the visitor read through to the last page of the chapter they were in */
+export const isFinished = (h: HistoryEntry | undefined) => !!h && h.total > 0 && h.page >= h.total;
+
+export interface ResumePoint {
+  ch: number;
+  /** omitted = from the first page */
+  page?: number;
+  kind: "start" | "continue" | "next" | "again";
+}
+
+/**
+ * Where "Start reading / Continue" should send someone. Mid-chapter: back to that page. Finished a chapter:
+ * the start of the next one (or, with nothing left, the beginning again) rather than dropping them on the very last page.
+ */
+export function resumePoint(h: HistoryEntry | undefined, chapters: number[]): ResumePoint {
+  const first = chapters[0] ?? 1;
+  if (!h || !chapters.includes(h.ch)) return { ch: first, kind: "start" };
+  if (isFinished(h)) {
+    const next = chapters[chapters.indexOf(h.ch) + 1];
+    return next != null ? { ch: next, kind: "next" } : { ch: first, kind: "again" };
+  }
+  if (h.page > 1) return { ch: h.ch, page: h.page, kind: "continue" };
+  return h.ch === first ? { ch: first, kind: "start" } : { ch: h.ch, kind: "continue" };
+}
+
 /* ───────── reader preferences ───────── */
 
 export interface ReaderPrefs {

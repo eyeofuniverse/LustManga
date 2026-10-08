@@ -54,7 +54,7 @@ export default async function WorkPage({ params }: { params: Params }) {
 
   const prefs = await currentPrefs();
   const [variants, related] = await Promise.all([getVariants(w.translationGroupId, w.id), getRelated(w, prefs)]);
-  const first = w.chapters[0]?.number ?? 1;
+  const chapterNumbers = w.chapters.map((c) => c.number);
   const cover = cdn(w.coverKey);
   const artists = (w.byType.ARTIST ?? []).map((t) => t.name);
   const about = cleanDescription(w.description);
@@ -105,7 +105,7 @@ export default async function WorkPage({ params }: { params: Params }) {
           </header>
 
           <div className="flex flex-wrap items-stretch justify-center gap-2.5 lg:justify-start">
-            <ReadButton publicId={w.publicId} firstChapter={first} />
+            <ReadButton publicId={w.publicId} chapters={chapterNumbers} />
             <FavoriteButton publicId={w.publicId} />
             <ShareButton title={w.title} />
             <ReportLink publicId={w.publicId} />

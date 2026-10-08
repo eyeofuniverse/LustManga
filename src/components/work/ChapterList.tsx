@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ArrowDownUp, Check, Play } from "lucide-react";
-import { useHistory } from "@/lib/library";
+import { isFinished, useHistory } from "@/lib/library";
 import { readHref } from "@/lib/format";
 
 interface Ch {
@@ -58,7 +58,7 @@ export function ChapterList({ publicId, chapters }: { publicId: number; chapters
           return (
             <li key={c.number}>
               <Link
-                href={readHref(publicId, c.number, isCurrent && h ? h.page : undefined)}
+                href={readHref(publicId, c.number, isCurrent && h && !isFinished(h) ? h.page : undefined)}
                 className={`flex min-h-[56px] items-center gap-3 px-4 py-3 transition hover:bg-surface-2 ${isCurrent ? "bg-accent/10" : ""}`}
               >
                 <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg text-xs font-bold ${isCurrent ? "bg-accent-fill text-white" : read ? "bg-good/15 text-good" : "bg-surface-2 text-muted"}`}>
@@ -72,7 +72,7 @@ export function ChapterList({ publicId, chapters }: { publicId: number; chapters
                   <span className="block text-xs text-muted">
                     {c.volume ? `Vol. ${c.volume} · ` : ""}
                     {c.pageCount} pages
-                    {isCurrent && h ? ` · you are on page ${h.page}` : ""}
+                    {isCurrent && h ? (isFinished(h) ? " · finished" : ` · you are on page ${h.page}`) : ""}
                   </span>
                 </span>
               </Link>

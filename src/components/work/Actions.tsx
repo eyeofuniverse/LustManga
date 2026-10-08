@@ -3,19 +3,19 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { BookOpen, Check, EyeOff, Flag, Heart, Link2, Play, Share2 } from "lucide-react";
-import { useFavorites, useHistory } from "@/lib/library";
+import { resumePoint, useFavorites, useHistory } from "@/lib/library";
 import { readHref } from "@/lib/format";
 import { usePrefs } from "@/components/site/PrefsProvider";
 
-/** Start reading, or pick up exactly where the visitor left off. */
-export function ReadButton({ publicId, firstChapter, className = "" }: { publicId: number; firstChapter: number; className?: string }) {
+/** Start reading, or pick up where the visitor left off (the next chapter if they finished one, the beginning if they finished it all). */
+export function ReadButton({ publicId, chapters, className = "" }: { publicId: number; chapters: number[]; className?: string }) {
   const { byId } = useHistory();
-  const h = byId(publicId);
-  const resume = h && h.page > 1 ? h : null;
+  const r = resumePoint(byId(publicId), chapters);
+  const label = { start: "Start reading", continue: r.page ? `Continue (page ${r.page})` : `Continue (chapter ${r.ch})`, next: `Next: chapter ${r.ch}`, again: "Read again" }[r.kind];
   return (
-    <Link href={resume ? readHref(publicId, resume.ch, resume.page) : readHref(publicId, firstChapter)} className={`btn-primary h-12 flex-1 sm:flex-none sm:px-8 ${className}`}>
-      {resume ? <Play className="h-5 w-5 fill-current" /> : <BookOpen className="h-5 w-5" />}
-      {resume ? `Continue (page ${resume.page})` : "Start reading"}
+    <Link href={readHref(publicId, r.ch, r.page)} className={`btn-primary h-12 flex-1 sm:flex-none sm:px-8 ${className}`}>
+      {r.kind === "start" || r.kind === "again" ? <BookOpen className="h-5 w-5" /> : <Play className="h-5 w-5 fill-current" />}
+      {label}
     </Link>
   );
 }

@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Clock, Heart, Play, Trash2, X } from "lucide-react";
-import { useFavorites, useHistory } from "@/lib/library";
-import { readHref } from "@/lib/format";
+import { isFinished, useFavorites, useHistory } from "@/lib/library";
+import { readHref, workHref } from "@/lib/format";
 import type { WorkCard as Work } from "@/lib/types";
 import { WorkCard, GridSkeleton, EmptyState } from "./WorkCard";
 import { PageHeading } from "./Section";
@@ -64,8 +64,8 @@ export function SavedGrid({ kind }: { kind: "favorites" | "history" }) {
               <li key={w.publicId} className="relative">
                 <WorkCard work={w} index={i} />
                 {h && h.page > 1 && !isFav && (
-                  <Link href={readHref(w.publicId, h.ch, h.page)} className="btn-soft mt-2 h-10 w-full !min-h-0 text-xs">
-                    <Play className="h-3.5 w-3.5 fill-current" /> Continue, page {h.page}
+                  <Link href={isFinished(h) ? workHref(w) : readHref(w.publicId, h.ch, h.page)} className="btn-soft mt-2 h-10 w-full !min-h-0 text-xs">
+                    <Play className="h-3.5 w-3.5 fill-current" /> {isFinished(h) ? "Finished, what's next?" : `Continue, page ${h.page}`}
                   </Link>
                 )}
                 <button

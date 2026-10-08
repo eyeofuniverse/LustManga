@@ -8,6 +8,7 @@ const BASE = process.env.BASE_URL ?? "http://localhost:3200";
 const CDN = process.env.NEXT_PUBLIC_IMG_CDN_HOST ?? "img-cdn.lustpages.com";
 const SERIES = process.env.QA_SERIES ?? "74";
 const TAG = process.env.QA_TAG ?? "big-breasts";
+const ONESHOT = process.env.QA_ONESHOT ?? "113";
 
 const png = await sharp({ create: { width: 600, height: 900, channels: 3, background: "#553c8a" } }).png().toBuffer();
 const results: [boolean, string][] = [];
@@ -141,6 +142,34 @@ const browser = await chromium.launch();
   await ctx.close();
 }
 
+/* ───────── 5b. start / continue / finished ───────── */
+{
+  const hist = (e: object) => ({ "lm:history": JSON.stringify([{ at: Date.now(), done: [(e as { ch: number }).ch], ...e }]), "lm:reader-hint": "1" });
+  const cases: { name: string; id: string; entry: object; label: string; url: string }[] = [
+    { name: "no history", id: SERIES, entry: { id: -1, ch: 1, page: 1, total: 1 }, label: "Start reading", url: "/1?p=1" },
+    { name: "mid-chapter", id: SERIES, entry: { id: Number(SERIES), ch: 1, page: 7, total: 34 }, label: "Continue (page 7)", url: "/1?p=7" },
+    { name: "finished chapter 1 of a series", id: SERIES, entry: { id: Number(SERIES), ch: 1, page: 34, total: 34 }, label: "Next: chapter 2", url: "/2?p=1" },
+    { name: "finished a one-shot", id: ONESHOT, entry: { id: Number(ONESHOT), ch: 1, page: 20, total: 20 }, label: "Read again", url: "/1?p=1" },
+  ];
+  for (const c of cases) {
+    const ctx = await ctxFor(browser, { storage: hist(c.entry) });
+    const p = await ctx.newPage();
+    await p.goto(BASE + `/g/${c.id}`);
+    await p.waitForTimeout(900);
+    const btn = p.locator("a.btn-primary").first();
+    const label = (await btn.innerText()).trim();
+    ok(label === c.label, `${c.name}: the button says "${label}"`, label);
+    await btn.click();
+    await p.waitForURL((u) => u.pathname.startsWith("/read/"), { timeout: 15000 });
+    await p.waitForTimeout(1500);
+    const where = await p.evaluate(() => location.pathname + location.search);
+    const page = await p.evaluate(() => (document.querySelector('input[aria-label="Page"]') as HTMLInputElement | null)?.value);
+    ok(where.endsWith(c.url), `${c.name}: opens ${where}`, where);
+    if (c.name !== "mid-chapter") ok(page === "1", `${c.name}: and starts on page 1 (not the end)`, String(page));
+    await ctx.close();
+  }
+}
+
 /* ───────── 6. reader: the book (swipe, keys, tap zones, right-to-left) ───────── */
 const BOOK = (rtl: boolean, extra: Record<string, unknown> = {}) => ({
   "lm:reader": JSON.stringify({ mode: "book", rtl, spread: "off", width: 860, dim: 0, ...extra }),
@@ -216,6 +245,7 @@ for (const rtl of [false, true]) {
   const vp = p.viewportSize()!;
   const zoomOf = () => p.locator('[aria-roledescription="carousel"] > div').first().evaluate((el) => (el as HTMLElement).style.transform);
   ok((await zoomOf()) === "", "book: starts un-zoomed");
+  await p.waitForTimeout(600); // taps in the first moments after opening are ignored on purpose (double-click on the open button)
   await p.mouse.dblclick(vp.width / 2, vp.height / 2);
   await p.waitForTimeout(350);
   ok(/scale\(2\.4\)/.test(await zoomOf()), "book: double-tap zooms in", await zoomOf());
@@ -338,6 +368,7 @@ for (const rtl of [false, true]) {
   const ctx = await ctxFor(browser);
   const p = await ctx.newPage();
   await p.goto(BASE + "/random");
+  await p.waitForURL((u) => /\/g\/\d+-/.test(u.pathname), { timeout: 15000 }).catch(() => {}); // /random redirects, then the slug is canonicalised
   ok(/\/g\/\d+-/.test(p.url()), "random lands on a work page", p.url());
   const bad = await p.goto(BASE + "/g/99999999");
   ok(bad?.status() === 404, "a missing work is a real 404");
