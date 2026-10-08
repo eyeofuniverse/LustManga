@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { esc } from "./sitemap-xml";
+import { normalizeSiteUrl } from "./site";
 import {
   abs, breadcrumbLd, clip, excerpt, faqLd, hreflangFor, isFiltered, itemListLd, ldJson, listingMeta, socialMeta, tagSeo, titleCase,
   withPage, workDescription, workLd, workTitle, type WorkForSeo,
@@ -50,6 +52,11 @@ test("tag names become title case, but names that already have capitals or are n
 test("paginated titles are unique", () => {
   assert.equal(withPage("Browse", 1), "Browse");
   assert.equal(withPage("Browse", 3), "Browse - Page 3");
+});
+
+test("a control character in a title cannot break a feed or a sitemap", () => {
+  assert.equal(esc("bad\u0008title\u0000!\u001f"), "badtitle!");
+  assert.equal(esc("tab\tand\nnewline stay"), "tab\tand\nnewline stay");
 });
 
 test("a work title leads with the name, says what it is, and marks a translation", () => {
@@ -167,4 +174,16 @@ test("social cards: og:url only when a page names itself", () => {
 test("faq structured data mirrors the questions", () => {
   const ld = faqLd([{ q: "Q?", a: "A." }]);
   assert.equal(ld.mainEntity[0].acceptedAnswer.text, "A.");
+});
+
+test("the site address is cleaned up whatever was typed into the setting", () => {
+  assert.equal(normalizeSiteUrl("https://example.com"), "https://example.com");
+  assert.equal(normalizeSiteUrl("https://example.com/"), "https://example.com");
+  assert.equal(normalizeSiteUrl("example.com"), "https://example.com");
+  assert.equal(normalizeSiteUrl("  https://Example.com/en/page?x=1 "), "https://example.com");
+  assert.equal(normalizeSiteUrl("http://localhost:3200/"), "http://localhost:3200");
+  assert.equal(normalizeSiteUrl("lust-manga.vercel.app"), "https://lust-manga.vercel.app");
+  assert.equal(normalizeSiteUrl(""), "");
+  assert.equal(normalizeSiteUrl(undefined), "");
+  assert.equal(normalizeSiteUrl("http://"), "");
 });

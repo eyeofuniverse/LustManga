@@ -50,9 +50,9 @@ const FAQ: QA[] = [
     a: "It reads like a book: swipe, tap the page edges or use the arrow keys to turn pages, with two-page spreads on wide screens, right-to-left mode for manga, zoom, and a scroll mode for long strips. It remembers where you stopped.",
   },
   {
-    q: "Do you store my reading history?",
-    text: "Your saved works and reading history stay in your own browser. There are no accounts and nothing is sent to us.",
-    a: "Your saved works and reading history stay in your own browser. There are no accounts and nothing is sent to us.",
+    q: "Where is my reading history kept?",
+    text: "Your saved works and reading history are stored in your own browser, not on our servers. There are no accounts.",
+    a: "Your saved works and reading history are stored in your own browser, not on our servers. There are no accounts.",
   },
   {
     q: "How do I report a problem or request a removal?",

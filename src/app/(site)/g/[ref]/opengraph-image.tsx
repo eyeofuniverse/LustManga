@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 import { prisma } from "@/lib/db";
 import { categoryLabel, langLabel } from "@/lib/format";
-import { coverDataUri, loadTitleFont, needsCjkFont } from "@/lib/og";
+import { cannotDraw, coverDataUri, loadTitleFonts, needsExtraFont } from "@/lib/og";
 import { clip, titleCase } from "@/lib/seo";
 import { SITE_NAME } from "@/lib/site";
 import { idParam } from "@/lib/url";
@@ -26,13 +26,14 @@ export default async function Image({ params }: { params: Promise<{ ref: string 
 
   const title = w?.title ?? SITE_NAME;
   const meta = w ? [langLabel(w.language), categoryLabel(w.category), `${w.pageCount} pages`] : [];
-  const tags = (w?.tags ?? []).map((t) => titleCase(t.name));
+  const tags = (w?.tags ?? []).map((t) => titleCase(t.name)).filter((t) => !cannotDraw(t));
   const cover = await coverDataUri(w?.coverKey ?? null);
   const everyChar = [title, ...meta, ...tags, "Read online free", SITE_NAME].join("");
-  const cjk = needsCjkFont(everyChar);
-  const font = cjk ? await loadTitleFont(everyChar) : null;
-  // no font for a title the default one cannot draw: show a plain line rather than boxes
-  const shownTitle = cjk && !font ? `${categoryLabel(w?.category ?? "MANGA")} #${id ?? ""}` : clip(title, 90);
+  const extra = needsExtraFont(everyChar);
+  const fonts = extra ? await loadTitleFonts(everyChar) : [];
+  // a title the card cannot draw (no font could be loaded, or a script it cannot shape) becomes a plain label, never boxes
+  const undrawable = cannotDraw(title) || (needsExtraFont(title) && fonts.length === 0);
+  const shownTitle = undrawable ? `${categoryLabel(w?.category ?? "MANGA")} #${id ?? ""}` : clip(title, 90);
   const fontSize = shownTitle.length > 60 ? 44 : shownTitle.length > 34 ? 54 : 64;
 
   return new ImageResponse(
@@ -45,7 +46,7 @@ export default async function Image({ params }: { params: Promise<{ ref: string 
           color: "#fff",
           backgroundColor: "#0b0b10",
           backgroundImage: "radial-gradient(circle at 20% 0%, rgba(139,92,246,0.3), rgba(11,11,16,0) 55%), radial-gradient(circle at 0% 100%, rgba(255,71,133,0.28), rgba(11,11,16,0) 50%)",
-          ...(font ? { fontFamily: '"Noto Sans JP"' } : {}),
+          ...(fonts.length ? { fontFamily: fonts.map((f) => `"${f.name}"`).join(", ") } : {}),
         }}
       >
         <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", padding: "56px 56px 56px 72px", minWidth: 0 }}>
@@ -86,6 +87,6 @@ export default async function Image({ params }: { params: Promise<{ ref: string 
       </div>
     ),
     // passing `fonts: undefined` would stop the renderer loading its default font, so the key is only present when there is one
-    { ...size, ...(font ? { fonts: [{ name: "Noto Sans JP", data: font, weight: 800 as const, style: "normal" as const }] } : {}) },
+    { ...size, ...(fonts.length ? { fonts: fonts.map((f) => ({ name: f.name, data: f.data, weight: 800 as const, style: "normal" as const })) } : {}) },
   );
 }

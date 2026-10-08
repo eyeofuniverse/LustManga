@@ -23,7 +23,8 @@ async function load(params: Params) {
   if (!t) notFound();
   const decoded = decodeURIComponent(slug);
   const tag = await getTag(t, decoded);
-  if (!tag) notFound();
+  // a tag an admin has hidden has no public page, and must not be indexable through a remembered address
+  if (!tag || tag.hidden) notFound();
   return { type, tag, requested: decoded };
 }
 

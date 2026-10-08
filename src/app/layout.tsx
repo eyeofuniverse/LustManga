@@ -46,7 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="alternate" type="application/rss+xml" title={`${SITE_NAME}: new manga & doujinshi`} href="/feed.xml" />
         <link rel="search" type="application/opensearchdescription+xml" title={SITE_NAME} href="/opensearch.xml" />
         {/* covers are the largest element on most pages: open the connection to the image host early */}
-        <link rel="preconnect" href={`https://${process.env.NEXT_PUBLIC_IMG_CDN_HOST ?? "img-cdn.lustpages.com"}`} crossOrigin="" />
+        <link rel="preconnect" href={`https://${process.env.NEXT_PUBLIC_IMG_CDN_HOST ?? "img-cdn.lustpages.com"}`} />
       </head>
       <body>{children}</body>
     </html>

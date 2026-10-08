@@ -101,15 +101,17 @@ export const prefFilters = (p: Prefs): Pick<ListOpts, "langs" | "exclude"> => ({
 /* ───────────────────────────── tags ───────────────────────────── */
 
 const tagCols = { id: true, type: true, name: true, slug: true, count: true } as const;
+/** getTag also needs to know whether the tag is hidden, so its pages can 404 */
+const tagColsWithHidden = { ...tagCols, hidden: true } as const;
 
 /** Find a tag by type and slug (or by an old/merged spelling). Returns the canonical tag. */
 export const getTag = cache(async (type: TagType, slugOrName: string): Promise<TagLite | null> => {
   const s = makeSlug(slugOrName) || slugOrName.toLowerCase();
-  const direct = await db(() => prisma.tag.findUnique({ where: { type_slug: { type, slug: s } }, select: tagCols }));
+  const direct = await db(() => prisma.tag.findUnique({ where: { type_slug: { type, slug: s } }, select: tagColsWithHidden }));
   if (direct) return direct;
-  const alias = await db(() => prisma.tagAlias.findUnique({ where: { type_slug: { type, slug: s } }, include: { target: { select: tagCols } } }));
+  const alias = await db(() => prisma.tagAlias.findUnique({ where: { type_slug: { type, slug: s } }, include: { target: { select: tagColsWithHidden } } }));
   if (alias) return alias.target;
-  return db(() => prisma.tag.findFirst({ where: { type, name: { equals: slugOrName, mode: "insensitive" } }, select: tagCols }));
+  return db(() => prisma.tag.findFirst({ where: { type, name: { equals: slugOrName, mode: "insensitive" } }, select: tagColsWithHidden }));
 });
 
 /** Resolve search terms to tag ids. A positive term with no matching tag means "no results". */
@@ -195,17 +197,17 @@ export const getWork = cache(async (publicId: number) => {
   return { ...w, byType };
 });
 
-/** Other-language versions of the same work. */
-export async function getVariants(groupId: string | null, selfId: string) {
+/** Other-language versions of the same work. Cached per request: the page and its metadata (hreflang) both need it. */
+export const getVariants = cache(async (groupId: string | null, selfId: string) => {
   if (!groupId) return [];
   return db(() =>
     prisma.work.findMany({
       where: { translationGroupId: groupId, id: { not: selfId }, publish: "PUBLISHED", pageCount: { gt: 0 } },
       select: { publicId: true, slug: true, language: true, pageCount: true },
-      orderBy: { language: "asc" },
+      orderBy: [{ language: "asc" }, { publicId: "asc" }],
     }),
   );
-}
+});
 
 /** Works that share the most distinctive tags. */
 export async function getRelated(work: { publicId: number; language: string; tagIds: number[] }, prefs: Prefs, take = 12): Promise<WorkCard[]> {

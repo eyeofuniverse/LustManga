@@ -23,8 +23,11 @@ export function planSitemaps(tagCount: number, workCount: number): SitemapPart[]
   return parts;
 }
 
+/** Escape for XML, and drop the control characters XML forbids (a stray one in a title would make the whole file unreadable). */
 export const esc = (v: string | number) =>
-  String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+  String(v)
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
 
 export function renderUrlset(entries: SitemapEntry[]): string {
   const body = entries

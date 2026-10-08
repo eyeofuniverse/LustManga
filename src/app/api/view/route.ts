@@ -28,7 +28,8 @@ export async function POST(req: Request) {
   if (req.headers.get("cookie")?.includes(`${cookie}=1`)) return new NextResponse(null, { status: 204 });
 
   if (tooMany(clientIp(req))) return new NextResponse(null, { status: 204 });
-  await prisma.work.updateMany({ where: { publicId: id, publish: "PUBLISHED" }, data: { views: { increment: 1 } } }).catch(() => {});
+  // raw SQL on purpose: a Prisma update would also bump updatedAt, and the sitemap reports that as "last modified"
+  await prisma.$executeRaw`UPDATE "Work" SET views = views + 1 WHERE "publicId" = ${id} AND publish = 'PUBLISHED'`.catch(() => {});
   const res = new NextResponse(null, { status: 204 });
   res.cookies.set(cookie, "1", { maxAge: 6 * 3600, path: "/", sameSite: "lax" });
   return res;

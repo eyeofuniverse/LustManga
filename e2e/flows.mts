@@ -23,6 +23,9 @@ async function ctxFor(browser: Browser, opts: { width?: number; height?: number;
     isMobile: !!opts.mobile,
     hasTouch: !!opts.mobile,
   });
+  // FLOWS_TIMEOUT (ms) lets the suite run against a slow database; the default suits a healthy one
+  ctx.setDefaultNavigationTimeout(Number(process.env.FLOWS_TIMEOUT ?? 30_000));
+  ctx.setDefaultTimeout(Number(process.env.FLOWS_TIMEOUT ?? 30_000));
   if (opts.age !== false) await ctx.addCookies([{ name: "lm_age", value: "1", url: BASE }]);
   await ctx.route(`https://${CDN}/**`, (r) => r.fulfill({ status: 200, contentType: "image/png", body: png }));
   if (opts.storage) await ctx.addInitScript((s) => Object.entries(s).forEach(([k, v]) => localStorage.setItem(k, v)), opts.storage);

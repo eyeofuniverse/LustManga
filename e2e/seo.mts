@@ -306,6 +306,52 @@ const sitemapUrls: string[] = [];
   }
 }
 
+/* ───────────────── 10b. share cards for every kind of title ───────────────── */
+{
+  // Korean, Cyrillic and Arabic titles: the card must render (a font for the first two, a plain label for the last), never fail
+  for (const [label, id] of [["Korean", "929"], ["Cyrillic", "171"], ["Arabic", "13"]] as const) {
+    const loc = (await get(`/g/${id}`)).location;
+    if (!loc) {
+      console.log(`skip  ${label} title: work ${id} is not published here`);
+      continue;
+    }
+    const img = info((await get(loc)).html).ogImage;
+    const r = img ? await fetch(img.replace(/^https?:\/\/[^/]+/, BASE)) : null;
+    const buf = r ? Buffer.from(await r.arrayBuffer()) : Buffer.alloc(0);
+    const m = r?.ok ? await sharp(buf).metadata().catch(() => null) : null;
+    ok(!!r && r.status === 200 && m?.width === 1200 && m?.height === 630, `${label} title: share card renders at 1200x630`, `${r?.status} ${m?.width}x${m?.height}`);
+  }
+}
+
+/* ───────────────── 10c. the XML is really well-formed (a browser's parser, not a regex) ───────────────── */
+{
+  const { chromium } = await import("playwright");
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  await page.goto("about:blank");
+  const files = ["/sitemap.xml", "/sitemap-flat.xml", "/feed.xml", "/opensearch.xml", ...Array.from({ length: 4 }, (_, i) => `/sitemap/${i}.xml`)];
+  for (const f of files) {
+    const r = await fetch(BASE + f);
+    if (r.status === 404) continue; // a child file that does not exist for a catalogue this small
+    const xml = await r.text();
+    const err = await page.evaluate((x) => {
+      const doc = new DOMParser().parseFromString(x, "application/xml");
+      return doc.querySelector("parsererror")?.textContent?.slice(0, 160) ?? "";
+    }, xml);
+    ok(r.status === 200 && err === "", `${f}: parses as XML`, err || String(r.status));
+  }
+  await browser.close();
+}
+
+/* ───────────────── 10d. sitemap dates are honest ───────────────── */
+{
+  const child = sitemapUrls.length ? await get("/sitemap/" + ((await get("/sitemap.xml")).html.match(/\/sitemap\/(\d+)\.xml/g)!.length - 1) + ".xml") : null;
+  const dates = child ? all(child.html, /<lastmod>([^<]*)<\/lastmod>/g) : [];
+  const now = Date.now();
+  ok(dates.length > 0 && dates.every((d) => !Number.isNaN(Date.parse(d)) && Date.parse(d) <= now + 60_000), `sitemap lastmod: ${dates.length} dates, all valid and none in the future`);
+  ok(new Set(dates.map((d) => d.slice(0, 10))).size > 1 || dates.length < 20, "sitemap lastmod: not one identical date on every URL (that tells Google it is meaningless)", `${new Set(dates.map((d) => d.slice(0, 10))).size} distinct days`);
+}
+
 /* ───────────────── 11. feeds ───────────────── */
 {
   const rss = await get("/feed.xml");

@@ -16,6 +16,8 @@ export interface TagLite {
   name: string;
   slug: string;
   count: number;
+  /** an admin has hidden it from public pages */
+  hidden?: boolean;
 }
 
 export interface SuggestResult {
