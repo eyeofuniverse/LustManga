@@ -48,7 +48,16 @@ enrol an authenticator app, then delete the bootstrap secret.
 | `npm run dedupe` | merge cross-source duplicates |
 | `npm run rescan` | re-check stored works against the current safety terms |
 | `npm run verify` / `recompute` / `cleanup` / `health` | integrity, derived numbers, retention, dependency check |
-| `npm test` / `npm run typecheck` | 41 tests / type-check of `src` and `scripts` |
+| `npm run backfill-thumbs` | create the 280px card thumbnail for covers stored before thumbnails existed (new ingests do it automatically) |
+| `npm test` / `npm run typecheck` | 66 unit tests / type-check of `src` and `scripts` |
+| `npm run qa` / `npm run flows` | Playwright sweeps against a running server (`QA_BASE=http://localhost:3000`): layout, overflow, console and axe accessibility over every page and viewport / 48 behaviour checks (age gate, search, filters, library, reader) |
+
+## Frontend
+
+Next.js App Router, Tailwind with CSS-variable themes (dark default, light), mobile-first with a bottom nav on phones.
+Browse, tag/artist/group/parody/character directories, nhentai-style search syntax (`tag:"x"`, `-tag:x`, `pages:>20`, `uploaded:<7d`; see `/search/help`),
+language and hidden-tag preferences (cookies, applied server-side), local favorites and history, and a reader with scroll and paged modes, LTR/RTL, tap zones, swipe, keyboard, and resume.
+An age gate covers the whole site until confirmed. The legal pages under `src/app/(site)/(legal)` are draft text: have them reviewed before launch.
 
 ## Workflows (`.github/workflows`)
 

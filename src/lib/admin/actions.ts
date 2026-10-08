@@ -273,3 +273,13 @@ export async function dismissDuplicate(candidateId: string): Promise<ActionResul
   revalidatePath("/console", "layout");
   return ok("Marked as different works");
 }
+
+/* ───────────────────────────── visitor reports ───────────────────────────── */
+
+export async function setReportStatus(id: string, status: "RESOLVED" | "DISMISSED" | "OPEN"): Promise<ActionResult> {
+  const me = await requireAdmin("MOD");
+  await prisma.report.update({ where: { id }, data: { status } });
+  await audit(me, `report.${status.toLowerCase()}`, "report", id);
+  revalidatePath("/console", "layout");
+  return ok(status === "OPEN" ? "Reopened" : status === "RESOLVED" ? "Marked resolved" : "Dismissed");
+}

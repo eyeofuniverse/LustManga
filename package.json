@@ -17,12 +17,16 @@
     "health": "tsx --env-file=.env scripts/health.mts",
     "dedupe": "tsx --env-file=.env scripts/dedupe.mts",
     "rescan": "tsx --env-file=.env scripts/rescan.mts",
-    "cleanup": "tsx --env-file=.env scripts/cleanup.mts"
+    "cleanup": "tsx --env-file=.env scripts/cleanup.mts",
+    "qa": "tsx --env-file=.env e2e/qa.mts",
+    "flows": "tsx --env-file=.env e2e/flows.mts",
+    "backfill-thumbs": "tsx --env-file=.env scripts/backfill-thumbs.mts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
     "aws4fetch": "^1.0.20",
     "bcryptjs": "^3.0.3",
+    "lucide-react": "^1.52.0",
     "next": "15.5.25",
     "otplib": "^12.0.1",
     "qrcode": "^1.5.4",
@@ -34,12 +38,14 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@types/bcryptjs": "^3.0.0",
     "@types/node": "^22.10.5",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.0.4",
     "@types/react-dom": "^19.0.2",
     "autoprefixer": "^10.4.20",
+    "playwright": "^1.64.0",
     "postcss": "^8.5.1",
     "prisma": "^6.19.3",
     "tailwindcss": "^3.4.17",

@@ -1,0 +1,173 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound, permanentRedirect } from "next/navigation";
+import { CalendarDays, FileText, Languages, Layers } from "lucide-react";
+import { currentPrefs } from "@/lib/prefs-server";
+import { getRelated, getVariants, getWork } from "@/lib/queries";
+import { categoryLabel, compact, langLabel, tagHref, timeAgo, workHref } from "@/lib/format";
+import { cdn } from "@/lib/cdn";
+import { cleanDescription } from "@/lib/text";
+import { SITE_URL } from "@/lib/site";
+import { CoverImage } from "@/components/work/CoverImage";
+import { ChapterList } from "@/components/work/ChapterList";
+import { FavoriteButton, ReadButton, ReportLink, ShareButton, ViewPing } from "@/components/work/Actions";
+import { ScrollRow } from "@/components/work/ScrollRow";
+import { WorkCard } from "@/components/work/WorkCard";
+import { SectionHeader } from "@/components/work/Section";
+
+type Params = Promise<{ ref: string }>;
+const idOf = (ref: string) => {
+  const n = Number.parseInt(ref, 10);
+  return Number.isInteger(n) && n > 0 ? n : null;
+};
+
+export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
+  const id = idOf((await params).ref);
+  const w = id ? await getWork(id) : null;
+  if (!w) return { title: "Not found" };
+  const cover = cdn(w.coverKey);
+  const desc = `Read ${w.title} online. ${categoryLabel(w.category)} in ${langLabel(w.language)}, ${w.pageCount} pages.`;
+  return {
+    title: w.title,
+    description: desc,
+    alternates: { canonical: workHref(w) },
+    openGraph: { title: w.title, description: desc, type: "article", images: cover ? [{ url: cover }] : undefined },
+    twitter: { card: "summary_large_image", title: w.title, images: cover ? [cover] : undefined },
+  };
+}
+
+const GROUPS: { type: string; label: string }[] = [
+  { type: "PARODY", label: "Parodies" },
+  { type: "CHARACTER", label: "Characters" },
+  { type: "TAG", label: "Tags" },
+  { type: "ARTIST", label: "Artists" },
+  { type: "GROUP", label: "Groups" },
+];
+
+export default async function WorkPage({ params }: { params: Params }) {
+  const { ref } = await params;
+  const id = idOf(ref);
+  if (!id) notFound();
+  const w = await getWork(id);
+  if (!w) notFound();
+  if (decodeURIComponent(ref) !== `${w.publicId}-${w.slug || "work"}`) permanentRedirect(workHref(w));
+
+  const prefs = await currentPrefs();
+  const [variants, related] = await Promise.all([getVariants(w.translationGroupId, w.id), getRelated(w, prefs)]);
+  const first = w.chapters[0]?.number ?? 1;
+  const cover = cdn(w.coverKey);
+  const artists = (w.byType.ARTIST ?? []).map((t) => t.name);
+  const about = cleanDescription(w.description);
+
+  const ld = {
+    "@context": "https://schema.org",
+    "@type": w.kind === "SERIES" ? "ComicSeries" : "Book",
+    name: w.title,
+    url: `${SITE_URL}${workHref(w)}`,
+    inLanguage: w.language,
+    image: cover ?? undefined,
+    numberOfPages: w.pageCount,
+    author: artists.map((name) => ({ "@type": "Person", name })),
+    genre: (w.byType.TAG ?? []).slice(0, 12).map((t) => t.name),
+    isFamilyFriendly: false,
+  };
+
+  return (
+    <div className="container-x py-6 sm:py-10">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld).replace(/</g, "\\u003c") }} />
+      <ViewPing publicId={w.publicId} />
+
+      <nav aria-label="Breadcrumb" className="mb-5 flex flex-wrap items-center gap-x-2 text-sm text-muted">
+        <Link href="/" className="hover:text-accent">Home</Link>
+        <span aria-hidden="true">/</span>
+        <Link href={`/browse?cat=${w.category}`} className="hover:text-accent">{categoryLabel(w.category)}</Link>
+        <span aria-hidden="true">/</span>
+        <span className="line-clamp-1 text-text">{w.title}</span>
+      </nav>
+
+      <div className="grid gap-8 lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-12 xl:grid-cols-[340px_minmax(0,1fr)]">
+        <aside className="mx-auto w-full max-w-[260px] sm:max-w-[300px] lg:sticky lg:top-24 lg:max-w-none lg:self-start">
+          <div className="relative aspect-[2/3] overflow-hidden rounded-2xl bg-surface-2 shadow-[0_30px_80px_-24px_rgb(0_0_0/0.75)] ring-1 ring-line">
+            <CoverImage coverKey={w.coverKey} priority small={false} alt={`Cover of ${w.title}`} />
+          </div>
+        </aside>
+
+        <div className="min-w-0 space-y-7">
+          <header className="space-y-3 text-center lg:text-left">
+            <h1 className="font-display text-2xl font-extrabold leading-tight tracking-tight sm:text-3xl lg:text-4xl">{w.title}</h1>
+            {w.titleOriginal && w.titleOriginal !== w.title && <p className="text-sm text-muted sm:text-base">{w.titleOriginal}</p>}
+            <ul className="flex flex-wrap justify-center gap-x-5 gap-y-2 text-sm text-muted lg:justify-start" aria-label="Details">
+              <li className="inline-flex items-center gap-1.5"><Languages className="h-4 w-4" /> {langLabel(w.language)}</li>
+              <li className="inline-flex items-center gap-1.5"><Layers className="h-4 w-4" /> {categoryLabel(w.category)}</li>
+              <li className="inline-flex items-center gap-1.5"><FileText className="h-4 w-4" /> {w.pageCount} pages</li>
+              <li className="inline-flex items-center gap-1.5"><CalendarDays className="h-4 w-4" /> Added {timeAgo(w.createdAt)}</li>
+            </ul>
+          </header>
+
+          <div className="flex flex-wrap items-stretch justify-center gap-2.5 lg:justify-start">
+            <ReadButton publicId={w.publicId} firstChapter={first} />
+            <FavoriteButton publicId={w.publicId} />
+            <ShareButton title={w.title} />
+            <ReportLink publicId={w.publicId} />
+          </div>
+
+          {variants.length > 0 && (
+            <section aria-label="Other languages">
+              <h2 className="mb-2.5 text-sm font-bold uppercase tracking-wider text-muted">Also available in</h2>
+              <ul className="flex flex-wrap gap-2">
+                {variants.map((v) => (
+                  <li key={v.publicId}>
+                    <Link href={workHref(v)} className="chip min-h-[40px] px-3.5">
+                      {langLabel(v.language)}
+                      <span className="text-xs font-normal text-muted">{v.pageCount}p</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          <section aria-label="Tags" className="card divide-y divide-line">
+            {GROUPS.filter((g) => w.byType[g.type]?.length).map((g) => (
+              <div key={g.type} className="grid gap-2 px-4 py-3.5 sm:grid-cols-[110px_1fr] sm:gap-4">
+                <h2 className="pt-1.5 text-xs font-bold uppercase tracking-wider text-muted">{g.label}</h2>
+                <ul className="flex flex-wrap gap-1.5">
+                  {w.byType[g.type].map((t) => (
+                    <li key={t.id}>
+                      <Link href={tagHref(g.type.toLowerCase(), t.slug)} className="chip">
+                        {t.name}
+                        <span className="text-xs font-normal text-muted">{compact(t.count)}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </section>
+
+          {about && (
+            <section aria-label="Description">
+              <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-muted">About</h2>
+              <p className="line-clamp-6 whitespace-pre-line text-[15px] leading-relaxed text-text/90">{about}</p>
+            </section>
+          )}
+
+          {w.chapters.length > 1 && <ChapterList publicId={w.publicId} chapters={w.chapters} />}
+        </div>
+      </div>
+
+      {related.length > 0 && (
+        <section className="pt-14" aria-label="Related">
+          <SectionHeader title="You might also like" />
+          <ScrollRow label="Related works">
+            {related.map((r, i) => (
+              <li key={r.publicId}>
+                <WorkCard work={r} index={i} />
+              </li>
+            ))}
+          </ScrollRow>
+        </section>
+      )}
+    </div>
+  );
+}

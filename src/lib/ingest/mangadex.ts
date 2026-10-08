@@ -11,7 +11,9 @@ import {
   finalizeWork,
   offsetNewer,
   saveCursor,
+  scaleSeed,
   storeChapterPages,
+  writeCovers,
   takeDownWork,
   type IngestStats,
 } from "@/lib/ingest/shared";
@@ -64,10 +66,7 @@ function dedupeChapters(chs: MdChapter[]): { number: number; ch: MdChapter }[] {
 async function storeCover(mediaId: string, m: MdManga): Promise<string | null> {
   const url = md.coverUrl(m);
   if (!url) return null;
-  const img = await toWebp(await md.downloadPage(url), { maxWidth: 600 });
-  const key = `c/${mediaId}.webp`;
-  await r2Put(key, img.data);
-  return key;
+  return writeCovers(mediaId, await md.downloadPage(url));
 }
 
 async function storeChapter(
@@ -200,7 +199,7 @@ async function processManga(
             deferFetch: verdict.deferFetch,
             safetyVerdict: held ? "REVIEW" : "CLEAN",
             safetyReasons: verdict.reasons,
-            seedPopularity: seed,
+            seedPopularity: scaleSeed(seed, 250_000),
             sources: { create: { site: md.SITE, externalId, url: `https://mangadex.org/title/${m.id}` } },
           },
         }),

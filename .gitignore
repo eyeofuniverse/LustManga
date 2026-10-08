@@ -7,3 +7,5 @@ probe/*-results.json
 *.tsbuildinfo
 next-env.d.ts
 !.env.example
+qa-shots/
+.next-dev/

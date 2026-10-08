@@ -349,3 +349,20 @@ model DuplicateCandidate {
   @@unique([workId, otherId])
   @@index([status, createdAt])
 }
+
+/// Visitor reports: takedown requests, broken galleries, anything else. Reviewed in the console.
+model Report {
+  id        String   @id @default(cuid())
+  /// public id of the work being reported, if any
+  workId    Int?
+  kind      String   @default("OTHER") // DMCA | BROKEN | OTHER
+  details   String
+  contact   String?
+  /// one-way hash of the reporter's IP, only used to rate-limit
+  ipHash    String?
+  status    String   @default("OPEN") // OPEN | RESOLVED | DISMISSED
+  createdAt DateTime @default(now())
+
+  @@index([status, createdAt])
+  @@index([ipHash, createdAt])
+}

@@ -10,5 +10,5 @@ export default function ConsoleRootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <div className="min-h-screen bg-bg text-[#ececf1]">{children}</div>;
+  return <div data-theme="dark" className="min-h-screen bg-bg text-[#ececf1]">{children}</div>;
 }

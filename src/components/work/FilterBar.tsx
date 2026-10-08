@@ -1,0 +1,82 @@
+import Link from "next/link";
+import { Check, Clock, Flame } from "lucide-react";
+import { CATEGORIES, LANGUAGES } from "@/lib/format";
+import { withQuery } from "@/lib/url";
+
+/**
+ * Sort, language and category filters as plain links: they work without JavaScript, are shareable URLs, and
+ * scroll horizontally on phones instead of wrapping into a wall of chips.
+ */
+export function FilterBar({
+  base,
+  params,
+  sort,
+  langs,
+  cats,
+  showCategories = true,
+}: {
+  base: string;
+  params: Record<string, string | undefined>;
+  sort: "popular" | "new";
+  /** languages currently applied (from the URL or the visitor's saved choice) */
+  langs: string[];
+  cats: string[];
+  showCategories?: boolean;
+}) {
+  const h = (patch: Record<string, string | undefined>) => withQuery(base, params, { page: undefined, ...patch });
+  const toggle = (list: string[], v: string) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+  const seg = (active: boolean) =>
+    `inline-flex h-10 items-center gap-1.5 rounded-lg px-3.5 text-sm font-semibold transition ${active ? "bg-surface text-text shadow-sm" : "text-muted hover:text-text"}`;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+        <div className="inline-flex rounded-xl bg-surface-2 p-1" role="group" aria-label="Sort order">
+          <Link href={h({ sort: undefined })} className={seg(sort === "popular")} aria-current={sort === "popular" ? "true" : undefined}>
+            <Flame className="h-4 w-4" /> Popular
+          </Link>
+          <Link href={h({ sort: "new" })} className={seg(sort === "new")} aria-current={sort === "new" ? "true" : undefined}>
+            <Clock className="h-4 w-4" /> Newest
+          </Link>
+        </div>
+      </div>
+
+      <div className="-mx-4 overflow-x-auto px-4 no-scrollbar sm:mx-0 sm:px-0" role="group" aria-label="Languages">
+        <div className="flex w-max items-center gap-2 sm:w-auto sm:flex-wrap">
+          <Link href={h({ lang: "all" })} className={`chip min-h-[36px] ${langs.length === 0 ? "chip-active" : ""}`} aria-current={langs.length === 0 ? "true" : undefined}>
+            All languages
+          </Link>
+          {LANGUAGES.slice(0, 10).map((l) => {
+            const on = langs.includes(l.code);
+            const next = toggle(langs, l.code);
+            return (
+              <Link key={l.code} href={h({ lang: next.length ? next.join(",") : "all" })} className={`chip min-h-[36px] ${on ? "chip-active" : ""}`} aria-current={on ? "true" : undefined}>
+                {on && <Check className="h-3.5 w-3.5" />}
+                {l.label}
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+
+      {showCategories && (
+        <div className="-mx-4 overflow-x-auto px-4 no-scrollbar sm:mx-0 sm:px-0" role="group" aria-label="Categories">
+          <div className="flex w-max items-center gap-2 sm:w-auto sm:flex-wrap">
+            <Link href={h({ cat: undefined })} className={`chip min-h-[36px] ${cats.length === 0 ? "chip-active" : ""}`}>
+              Everything
+            </Link>
+            {CATEGORIES.map((c) => {
+              const on = cats.includes(c.value);
+              const next = toggle(cats, c.value);
+              return (
+                <Link key={c.value} href={h({ cat: next.length ? next.join(",") : undefined })} className={`chip min-h-[36px] ${on ? "chip-active" : ""}`} aria-current={on ? "true" : undefined}>
+                  {c.label}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

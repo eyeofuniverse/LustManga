@@ -2,5 +2,154 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: dark; }
-body { @apply bg-bg text-[#ececf1] antialiased; }
+/* ───────────────────────── design tokens ───────────────────────── */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: 11 11 16;
+  --surface: 20 20 29;
+  --surface-2: 29 29 42;
+  --surface-3: 42 42 59;
+  --text: 238 238 244;
+  --muted: 150 150 172;
+  --accent: 255 71 133;
+  --accent-fill: 214 28 96; /* white text on this is 5.0:1 */
+  --accent-2: 139 92 246;
+  --good: 52 211 153;
+  --warn: 251 191 36;
+}
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: 247 247 251;
+  --surface: 255 255 255;
+  --surface-2: 240 240 247;
+  --surface-3: 226 226 238;
+  --text: 22 22 32;
+  --muted: 98 98 120;
+  --accent: 226 34 100;
+  --accent-fill: 214 28 96;
+  --accent-2: 109 62 220;
+  --good: 5 150 105;
+  --warn: 161 98 7;
+}
+
+@layer base {
+  html {
+    background: rgb(var(--bg));
+    -webkit-text-size-adjust: 100%;
+    scroll-padding-top: 5rem;
+  }
+  body {
+    background: rgb(var(--bg));
+    color: rgb(var(--text));
+    font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+  ::selection {
+    background: rgb(var(--accent) / 0.35);
+  }
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  img {
+    -webkit-user-drag: none;
+  }
+  /* thin themed scrollbars on desktop */
+  @media (hover: hover) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: rgb(var(--surface-3)) transparent;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  .container-x {
+    @apply mx-auto w-full max-w-content px-4 sm:px-6 lg:px-8;
+  }
+  .skip-link {
+    @apply absolute left-3 top-3 z-[100] -translate-y-24 rounded-lg bg-accent-fill px-4 py-2 text-sm font-semibold text-white transition-transform focus:translate-y-0;
+  }
+  /* buttons */
+  .btn {
+    @apply inline-flex min-h-[44px] select-none items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition active:scale-[.97] disabled:pointer-events-none disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-accent-fill text-white shadow-[0_8px_24px_-8px_rgb(var(--accent)/0.7)] hover:brightness-110;
+  }
+  .btn-soft {
+    @apply btn bg-surface-2 text-text hover:bg-surface-3;
+  }
+  .btn-ghost {
+    @apply btn text-muted hover:bg-surface-2 hover:text-text;
+  }
+  .btn-icon {
+    @apply inline-flex h-11 w-11 select-none items-center justify-center rounded-xl text-muted transition hover:bg-surface-2 hover:text-text active:scale-95;
+  }
+  /* chips */
+  .chip {
+    @apply inline-flex min-h-[32px] items-center gap-1.5 rounded-lg bg-surface-2 px-2.5 py-1 text-[13px] font-medium text-text/90 transition hover:bg-surface-3;
+  }
+  .chip-active {
+    @apply bg-accent-fill text-white hover:bg-accent-fill hover:brightness-110;
+  }
+  .card {
+    @apply rounded-2xl border border-line bg-surface;
+  }
+  .section-title {
+    @apply font-display text-lg font-bold tracking-tight sm:text-xl;
+  }
+  /* skeleton shimmer */
+  .skeleton {
+    @apply relative overflow-hidden bg-surface-2;
+  }
+  .skeleton::after {
+    content: "";
+    @apply absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-text/[0.07] to-transparent;
+    animation: shimmer 1.4s infinite;
+  }
+  /* a finished skeleton stops animating (it stays in the DOM, invisible, so the tree never changes shape) */
+  .skeleton[data-done="true"]::after {
+    animation: none;
+    display: none;
+  }
+  .glass {
+    @apply border border-line bg-bg/70 backdrop-blur-xl;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .pb-safe {
+    padding-bottom: max(env(safe-area-inset-bottom), 0px);
+  }
+  .tap-none {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* while the age gate is up, the page behind it is blurred and inert */
+body[data-gate="1"] #site-content {
+  filter: blur(18px) saturate(0.8);
+  pointer-events: none;
+  user-select: none;
+}

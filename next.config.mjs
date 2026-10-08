@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // dev and production can run side by side (QA) without trampling each other's build output
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   reactStrictMode: true,
   eslint: { ignoreDuringBuilds: true },
   images: {

@@ -145,11 +145,18 @@ export async function storeChapterPages(
   }
 }
 
-/** Store a cover image (first page / cover art) at c/{mediaId}.webp and record the key. */
+/**
+ * Store a cover: the 600px version at c/{mediaId}.webp (work page, hero) and a 280px card thumbnail at
+ * c/{mediaId}-s.webp (lists). Cards are the bulk of the traffic, and the small one is about a fifth the size.
+ */
+export async function writeCovers(mediaId: string, source: Buffer): Promise<string> {
+  const [big, small] = await Promise.all([toWebp(source, { maxWidth: 600 }), toWebp(source, { maxWidth: 280 })]);
+  await Promise.all([r2Put(`c/${mediaId}.webp`, big.data), r2Put(`c/${mediaId}-s.webp`, small.data)]);
+  return `c/${mediaId}.webp`;
+}
+
 export async function storeCover(workId: string, mediaId: string, source: Buffer): Promise<string> {
-  const img = await toWebp(source, { maxWidth: 600 });
-  const key = `c/${mediaId}.webp`;
-  await r2Put(key, img.data);
+  const key = await writeCovers(mediaId, source);
   await db(() => prisma.work.update({ where: { id: workId }, data: { coverKey: key } }));
   return key;
 }
@@ -292,3 +299,11 @@ export async function takeDownWork(workId: string, reasons: string[]): Promise<b
   await db(() => prisma.work.delete({ where: { id: workId } })); // cascades chapters and sources
   return true;
 }
+
+/**
+ * Popularity seeds arrive on incompatible scales (MangaDex follows, Hentai2Read views, list rank elsewhere).
+ * Map raw counts onto the common 0..50000 scale the "Popular" ordering uses, logarithmically so a handful of
+ * huge numbers does not flatten everything else.
+ */
+export const scaleSeed = (raw: number, max: number): number =>
+  Math.min(50_000, Math.round((50_000 * Math.log1p(Math.max(0, raw))) / Math.log1p(max)));
