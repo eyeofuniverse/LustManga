@@ -122,16 +122,24 @@ export function SettingsPanel() {
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="space-y-1.5 text-sm font-semibold">
             Mode
-            <select value={reader.mode} onChange={(e) => setReader({ mode: e.target.value as "scroll" | "paged" })} className="h-12 w-full rounded-xl border border-line bg-surface-2 px-3 text-sm font-normal">
+            <select value={reader.mode} onChange={(e) => setReader({ mode: e.target.value as "auto" | "book" | "scroll" })} className="h-12 w-full rounded-xl border border-line bg-surface-2 px-3 text-sm font-normal">
+              <option value="auto">Auto (book, scroll for webtoons)</option>
+              <option value="book">Book: swipe to turn pages</option>
               <option value="scroll">Continuous scroll</option>
-              <option value="paged">One page at a time</option>
             </select>
           </label>
           <label className="space-y-1.5 text-sm font-semibold">
-            Paged direction
+            Book direction
             <select value={reader.rtl ? "rtl" : "ltr"} onChange={(e) => setReader({ rtl: e.target.value === "rtl" })} className="h-12 w-full rounded-xl border border-line bg-surface-2 px-3 text-sm font-normal">
               <option value="ltr">Left to right</option>
               <option value="rtl">Right to left (manga)</option>
+            </select>
+          </label>
+          <label className="space-y-1.5 text-sm font-semibold">
+            Two-page spreads
+            <select value={reader.spread} onChange={(e) => setReader({ spread: e.target.value as "auto" | "off" })} className="h-12 w-full rounded-xl border border-line bg-surface-2 px-3 text-sm font-normal">
+              <option value="auto">On wide screens</option>
+              <option value="off">Off</option>
             </select>
           </label>
         </div>

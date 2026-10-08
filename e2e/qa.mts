@@ -48,6 +48,7 @@ const PAGES: [string, string][] = [
   ["search-help", "/search/help"],
   ["work-series", `/g/${SERIES}`],
   ["work-oneshot", `/g/${ONESHOT}`],
+  ["reader-book", `/read/${SERIES}/1`],
   ["reader-scroll", `/read/${SERIES}/1`],
   ["favorites", "/favorites"],
   ["history", "/history"],
@@ -67,7 +68,7 @@ async function newContext(browser: import("playwright").Browser, vp: (typeof VIE
     colorScheme: THEME === "light" ? "light" : "dark",
   });
   if (opts.age !== false) await ctx.addCookies([{ name: "lm_age", value: "1", url: BASE }]);
-  await ctx.addInitScript((t) => localStorage.setItem("lm:theme", t), THEME);
+  await ctx.addInitScript((t) => { localStorage.setItem("lm:theme", t); localStorage.setItem("lm:reader-hint", "1"); }, THEME);
   if (!process.env.QA_NOROUTE) await ctx.route(`https://${CDN}/**`, (r) => r.fulfill({ status: 200, contentType: "image/png", body: placeholder, headers: { "cache-control": "public, max-age=3600" } }));
   return ctx;
 }
@@ -87,6 +88,8 @@ async function check(page: Page, vp: string, name: string, path: string, shot: b
   const onErr = (m: import("playwright").ConsoleMessage) => m.type() === "error" && !m.text().includes("Failed to load resource") && errors.push(m.text().slice(0, Number(process.env.QA_ERRLEN ?? 160)));
   page.on("console", onErr);
   page.on("pageerror", (e) => errors.push(`pageerror: ${e.message.slice(0, Number(process.env.QA_ERRLEN ?? 160))}`));
+  // the reader remembers its mode: pick the one this row is about (the first row has no origin yet, hence the catch)
+  if (name.startsWith("reader")) await page.evaluate((m) => localStorage.setItem("lm:reader", JSON.stringify({ mode: m })), name === "reader-scroll" ? "scroll" : "book").catch(() => {});
   const t0 = Date.now();
   const res = await page.goto(BASE + path, { waitUntil: "load" });
   await page.waitForTimeout(1500); // let hydration finish (errors can surface a second or two late)
@@ -111,7 +114,7 @@ async function check(page: Page, vp: string, name: string, path: string, shot: b
     });
     await page.waitForTimeout(700);
   }
-  if (shot) await page.screenshot({ path: `${OUT}/${THEME}-${vp}-${name}.png`, fullPage: name !== "reader-scroll" });
+  if (shot) await page.screenshot({ path: `${OUT}/${THEME}-${vp}-${name}.png`, fullPage: !name.startsWith("reader") });
   page.off("console", onErr);
   return { vp, page: name, status: res?.status() ?? 0, overflow, errors, axe, ms };
 }

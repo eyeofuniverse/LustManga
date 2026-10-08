@@ -99,20 +99,24 @@ export function recordProgress(id: number, ch: number, page: number, total: numb
 /* ───────── reader preferences ───────── */
 
 export interface ReaderPrefs {
-  mode: "scroll" | "paged";
-  /** paged mode direction */
+  /** "auto" is a book for normal pages and a scroll for tall webtoon strips */
+  mode: "auto" | "book" | "scroll";
+  /** book mode direction */
   rtl: boolean;
-  fit: "width" | "height";
+  /** book mode: two pages side by side on wide screens */
+  spread: "auto" | "off";
   /** max width of the page column in scroll mode, px */
   width: number;
   /** darken the page */
   dim: number;
 }
-export const DEFAULT_READER: ReaderPrefs = { mode: "scroll", rtl: false, fit: "width", width: 860, dim: 0 };
+export const DEFAULT_READER: ReaderPrefs = { mode: "auto", rtl: false, spread: "auto", width: 860, dim: 0 };
 const READER = "lm:reader";
 
 export function useReaderPrefs() {
-  const prefs = useSyncExternalStore(subscribe, () => read<ReaderPrefs>(READER, DEFAULT_READER), () => DEFAULT_READER);
+  const stored = useSyncExternalStore(subscribe, () => read<ReaderPrefs>(READER, DEFAULT_READER), () => DEFAULT_READER);
+  // earlier versions stored "paged" (one page at a time), which is what book mode is now
+  const prefs = (stored.mode as string) === "paged" ? { ...stored, mode: "book" as const } : stored;
   const set = useCallback((patch: Partial<ReaderPrefs>) => write(READER, { ...read<ReaderPrefs>(READER, DEFAULT_READER), ...patch }), []);
   return { prefs: { ...DEFAULT_READER, ...prefs }, set };
 }

@@ -2,19 +2,17 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft, ChevronLeft, ChevronRight, Columns2, Maximize2, Minimize2, MoveHorizontal, MoveVertical, RotateCcw, RotateCw, ScrollText, Settings2, X,
+  ArrowLeft, BookOpen, ChevronLeft, ChevronRight, Hand, Maximize2, Minimize2, MousePointerClick, RotateCcw, RotateCw, ScrollText, Settings2, Sparkles, X, ZoomIn, ZoomOut,
 } from "lucide-react";
 import { DEFAULT_READER, recordProgress, useReaderPrefs } from "@/lib/library";
 import { readHref, workHref } from "@/lib/format";
+import { buildSlides, isLongStrip, pageOfSlide, slideOfPage, wantsSpread } from "@/lib/spreads";
+import { BookStage, type BookHandle } from "./BookStage";
+import type { ReaderPage } from "./types";
 
-export interface ReaderPage {
-  n: number;
-  src: string;
-  w: number;
-  h: number;
-}
+export type { ReaderPage };
 interface Props {
   work: { publicId: number; slug: string; title: string };
   chapter: { number: number; title: string | null };
@@ -28,16 +26,26 @@ interface Props {
 // scroll mode renders real <img>s only near the reader, so a 2,000-page set never holds 2,000 decoded images
 const BEFORE = 6;
 const AFTER = 18;
+const HINT_KEY = "lm:reader-hint";
 
 export function Reader({ work, chapter, pages, prev, next, chapters, startPage }: Props) {
   const router = useRouter();
   const total = pages.length;
   const { prefs, set } = useReaderPrefs();
-  const scrollMode = prefs.mode === "scroll";
+  const strip = useMemo(() => isLongStrip(pages), [pages]);
+  // "auto" reads like a book, except tall webtoon strips which only make sense scrolling
+  const scrollMode = prefs.mode === "scroll" || (prefs.mode === "auto" && strip);
+  const [vp, setVp] = useState({ w: 0, h: 0 });
+  const spread = !scrollMode && prefs.spread === "auto" && wantsSpread(vp.w, vp.h);
+  const slides = useMemo(() => buildSlides(pages, spread), [pages, spread]);
+
   const [page, setPage] = useState(Math.min(Math.max(startPage, 1), total + 1));
   const [ui, setUi] = useState(true);
   const [sheet, setSheet] = useState(false);
   const [full, setFull] = useState(false);
+  const [zoomed, setZoomed] = useState(false);
+  const [hint, setHint] = useState(false);
+  const [toast, setToast] = useState(false);
   const [bust, setBust] = useState<Record<number, number>>({});
   const [failed, setFailed] = useState<Set<number>>(new Set());
   const markFailed = (n: number, bad: boolean) =>
@@ -49,9 +57,19 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
       return next;
     });
   const lastY = useRef(0);
-  const pointer = useRef<{ x: number; y: number; t: number } | null>(null);
-  const pagedBox = useRef<HTMLDivElement>(null);
+  const book = useRef<BookHandle>(null);
   const at = Math.min(page, total); // the "end of chapter" card counts as page total + 1
+  const slideIdx = slideOfPage(slides, page);
+  const slide = slides[slideIdx];
+  const shownPages = slide?.kind === "pages" ? slide.pages : [at];
+  const label = shownPages.length > 1 ? `${shownPages[0]}–${shownPages[shownPages.length - 1]}` : String(at);
+
+  useEffect(() => {
+    const on = () => setVp({ w: window.innerWidth, h: window.innerHeight });
+    on();
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
 
   /* ───────── progress ───────── */
   useEffect(() => {
@@ -72,6 +90,48 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
     return () => clearTimeout(t);
   }, [at]);
 
+  /* ───────── first-time hint, chrome that gets out of the way ───────── */
+  useEffect(() => {
+    if (scrollMode) return;
+    try {
+      if (!localStorage.getItem(HINT_KEY)) setHint(true);
+    } catch {
+      /* storage blocked: no hint */
+    }
+  }, [scrollMode]);
+  const dismissHint = useCallback(() => {
+    setHint(false);
+    try {
+      localStorage.setItem(HINT_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  useEffect(() => {
+    if (!hint) return;
+    const t = setTimeout(dismissHint, 7000);
+    return () => clearTimeout(t);
+  }, [hint, dismissHint]);
+
+  // a book gets out of the way: the bars tuck themselves away a moment after you open it
+  useEffect(() => {
+    if (scrollMode || hint) return;
+    const t = setTimeout(() => setUi(false), 3200);
+    return () => clearTimeout(t);
+  }, [scrollMode, hint]);
+
+  // a quick "12 / 40" when a page turns while the bars are hidden
+  const firstTurn = useRef(true);
+  useEffect(() => {
+    if (firstTurn.current) {
+      firstTurn.current = false;
+      return;
+    }
+    setToast(true);
+    const t = setTimeout(() => setToast(false), 1100);
+    return () => clearTimeout(t);
+  }, [label]);
+
   /* ───────── navigation ───────── */
   const jumpTo = useCallback(
     (n: number, smooth = false) => {
@@ -87,6 +147,7 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
   /** +1 = forward in reading order, -1 = back. Crosses chapter boundaries. */
   const step = useCallback(
     (dir: 1 | -1) => {
+      if (!scrollMode) return book.current?.go(dir);
       if (dir === 1) {
         if (page > total) return goChapter(next);
         return jumpTo(page + 1);
@@ -94,7 +155,7 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
       if (page <= 1) return goChapter(prev, true);
       return jumpTo(page - 1);
     },
-    [page, total, jumpTo, goChapter, next, prev],
+    [scrollMode, page, total, jumpTo, goChapter, next, prev],
   );
 
   // start position (scroll mode): place the page before the first paint
@@ -142,32 +203,24 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
     return () => window.removeEventListener("scroll", onScroll);
   }, [scrollMode]);
 
-  /* ───────── paged mode: preload neighbours, reset scroll ───────── */
-  useEffect(() => {
-    if (scrollMode) return;
-    pagedBox.current?.scrollTo({ top: 0 });
-    for (const n of [page + 1, page + 2, page + 3, page - 1]) {
-      const p = pages[n - 1];
-      if (p) new Image().src = p.src;
-    }
-  }, [scrollMode, page, pages]);
-
   /* ───────── keyboard ───────── */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement;
       if (el.tagName === "INPUT" || el.tagName === "SELECT" || el.tagName === "TEXTAREA") return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (hint) dismissHint();
       const fwd = prefs.rtl && !scrollMode ? "ArrowLeft" : "ArrowRight";
       const back = prefs.rtl && !scrollMode ? "ArrowRight" : "ArrowLeft";
       if (e.key === fwd || (e.key === "ArrowRight" && scrollMode)) { e.preventDefault(); step(1); }
       else if (e.key === back || (e.key === "ArrowLeft" && scrollMode)) { e.preventDefault(); step(-1); }
-      else if (!scrollMode && (e.key === " " || e.key === "PageDown")) { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
-      else if (!scrollMode && e.key === "PageUp") { e.preventDefault(); step(-1); }
+      else if (!scrollMode && (e.key === "ArrowDown" || e.key === "PageDown" || e.key === " ")) { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
+      else if (!scrollMode && (e.key === "ArrowUp" || e.key === "PageUp")) { e.preventDefault(); step(-1); }
       else if (e.key === "Home") { e.preventDefault(); jumpTo(1); }
       else if (e.key === "End") { e.preventDefault(); jumpTo(total); }
       else if (e.key === "f") toggleFull();
-      else if (e.key === "m") set({ mode: scrollMode ? "paged" : "scroll" });
+      else if (e.key === "m") set({ mode: scrollMode ? "book" : "scroll" });
+      else if (e.key === "z" && !scrollMode) book.current?.toggleZoom();
       else if (e.key === "s") setSheet((s) => !s);
       else if (e.key === "Escape") setSheet(false);
       else if (e.key === "[") goChapter(prev);
@@ -176,7 +229,7 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, jumpTo, prefs.rtl, scrollMode, total, prev, next]);
+  }, [step, jumpTo, prefs.rtl, scrollMode, total, prev, next, hint]);
 
   const toggleFull = () => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
@@ -188,36 +241,13 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
     return () => document.removeEventListener("fullscreenchange", on);
   }, []);
 
-  /* ───────── paged mode: tap zones and swipes ───────── */
-  const onPointerDown = (e: React.PointerEvent) => {
-    pointer.current = { x: e.clientX, y: e.clientY, t: Date.now() };
-  };
-  const onPointerUp = (e: React.PointerEvent) => {
-    const s = pointer.current;
-    pointer.current = null;
-    if (!s || (e.target as HTMLElement).closest("button,a,input,select")) return;
-    const dx = e.clientX - s.x;
-    const dy = e.clientY - s.y;
-    if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.6) {
-      // a swipe towards the left moves forward in left-to-right reading
-      const forward = prefs.rtl ? dx > 0 : dx < 0;
-      return step(forward ? 1 : -1);
-    }
-    if (Math.abs(dx) < 10 && Math.abs(dy) < 10 && Date.now() - s.t < 500) {
-      const x = e.clientX / window.innerWidth;
-      if (x < 0.3) step(prefs.rtl ? 1 : -1);
-      else if (x > 0.7) step(prefs.rtl ? -1 : 1);
-      else setUi((u) => !u);
-    }
-  };
-
-  const cur = pages[at - 1];
   const barCls = `fixed inset-x-0 z-30 transition duration-300 ${ui ? "opacity-100" : "pointer-events-none opacity-0"}`;
+  const endCard = <EndCard work={work} chapter={chapter.number} next={next} prev={prev} onNext={() => goChapter(next)} />;
 
   return (
     <div data-theme="dark" className="min-h-dvh bg-black text-white" style={{ ["--reader-dim" as string]: String(1 - prefs.dim / 100) }}>
       <p className="sr-only" aria-live="polite">
-        Page {at} of {total}
+        Page {label} of {total}
       </p>
 
       {/* ───────── top bar ───────── */}
@@ -229,11 +259,16 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
           <div className="min-w-0 flex-1 px-1">
             <p className="truncate text-sm font-semibold leading-tight">{work.title}</p>
             <p className="truncate text-xs text-white/60">
-              {chapters.length > 1 ? `Chapter ${chapter.number}${chapter.title ? ` · ${chapter.title}` : ""}` : "One-shot"} · page {at}/{total}
+              {chapters.length > 1 ? `Chapter ${chapter.number}${chapter.title ? ` · ${chapter.title}` : ""}` : "One-shot"} · page {label}/{total}
             </p>
           </div>
-          <button type="button" onClick={() => set({ mode: scrollMode ? "paged" : "scroll" })} className="btn-icon !text-white/80 hover:!bg-white/10" aria-label={scrollMode ? "Switch to paged mode" : "Switch to scroll mode"} title="Mode (M)">
-            {scrollMode ? <Columns2 className="h-5 w-5" /> : <ScrollText className="h-5 w-5" />}
+          {!scrollMode && (
+            <button type="button" onClick={() => book.current?.toggleZoom()} className="btn-icon !text-white/80 hover:!bg-white/10" aria-label={zoomed ? "Reset zoom" : "Zoom in"} title="Zoom (Z)">
+              {zoomed ? <ZoomOut className="h-5 w-5" /> : <ZoomIn className="h-5 w-5" />}
+            </button>
+          )}
+          <button type="button" onClick={() => set({ mode: scrollMode ? "book" : "scroll" })} className="btn-icon !text-white/80 hover:!bg-white/10" aria-label={scrollMode ? "Switch to book mode" : "Switch to scroll mode"} title="Mode (M)">
+            {scrollMode ? <BookOpen className="h-5 w-5" /> : <ScrollText className="h-5 w-5" />}
           </button>
           <button type="button" onClick={toggleFull} className="btn-icon hidden !text-white/80 hover:!bg-white/10 sm:inline-flex" aria-label={full ? "Exit fullscreen" : "Fullscreen"} title="Fullscreen (F)">
             {full ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
@@ -279,35 +314,40 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
               </div>
             );
           })}
-          <EndCard id="end" work={work} chapter={chapter.number} next={next} prev={prev} onNext={() => goChapter(next)} />
+          <section id="end" className="grid min-h-[70dvh] place-items-center" aria-label="End of chapter">
+            {endCard}
+          </section>
         </div>
       ) : (
-        <div
-          ref={pagedBox}
-          className="relative flex h-dvh touch-pan-y select-none items-start justify-center overflow-y-auto overflow-x-hidden"
-          onPointerDown={onPointerDown}
-          onPointerUp={onPointerUp}
-          style={{ filter: `brightness(var(--reader-dim))` }}
-        >
-          {page > total ? (
-            <div className="grid min-h-dvh w-full place-items-center">
-              <EndCard work={work} chapter={chapter.number} next={next} prev={prev} onNext={() => goChapter(next)} />
-            </div>
-          ) : (
-            cur && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                key={`${at}-${bust[at] ?? 0}`}
-                src={bust[at] ? `${cur.src}?r=${bust[at]}` : cur.src}
-                alt={`Page ${at}`}
-                width={cur.w || undefined}
-                height={cur.h || undefined}
-                decoding="async"
-                draggable={false}
-                className={prefs.fit === "height" ? "m-auto max-h-dvh w-auto max-w-full object-contain" : "mx-auto h-auto w-full max-w-[1100px]"}
-              />
-            )
-          )}
+        <BookStage
+          ref={book}
+          slides={slides}
+          pages={pages}
+          index={slideIdx}
+          rtl={prefs.rtl}
+          brightness={1 - prefs.dim / 100}
+          endCard={endCard}
+          onIndex={(i) => {
+            setPage(pageOfSlide(slides, i, total));
+            setUi(false);
+          }}
+          onEdge={(dir) => (dir === 1 ? goChapter(next) : goChapter(prev, true))}
+          onToggleUi={() => setUi((u) => !u)}
+          onZoomChange={setZoomed}
+        />
+      )}
+
+      {/* a hairline of progress that stays visible while the bars are away */}
+      {!scrollMode && (
+        <div aria-hidden="true" className="pointer-events-none fixed inset-x-0 bottom-0 z-20 h-[3px] bg-white/10" dir={prefs.rtl ? "rtl" : "ltr"}>
+          <div className="h-full bg-accent transition-[width] duration-300" style={{ width: `${(Math.min(shownPages[shownPages.length - 1] ?? at, total) / total) * 100}%` }} />
+        </div>
+      )}
+      {!scrollMode && !ui && !sheet && (
+        <div aria-hidden="true" className={`pointer-events-none fixed inset-x-0 bottom-6 z-20 flex justify-center transition duration-300 ${toast ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"}`}>
+          <span className="rounded-full bg-black/80 px-3.5 py-1.5 text-sm font-bold tabular-nums text-white shadow-lg backdrop-blur">
+            {label} / {total}
+          </span>
         </div>
       )}
 
@@ -328,13 +368,28 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
             className="h-11 min-w-0 flex-1 cursor-pointer accent-[rgb(var(--accent))]"
           />
           <span className="w-16 shrink-0 text-center text-xs font-semibold tabular-nums text-white/80">
-            {at} / {total}
+            {label} / {total}
           </span>
           <button type="button" disabled={next == null} onClick={() => goChapter(next)} className="btn-icon !text-white/80 hover:!bg-white/10 disabled:opacity-30" aria-label="Next chapter" title="Next chapter (])">
             <ChevronRight className="h-5 w-5" />
           </button>
         </div>
       </footer>
+
+      {/* ───────── first-time hint ───────── */}
+      {hint && !scrollMode && (
+        <button type="button" onClick={dismissHint} aria-label="Dismiss reading tips" className="fixed inset-0 z-40 grid place-items-center bg-black/80 px-6 text-white backdrop-blur-sm animate-fade">
+          <span className="block max-w-xs space-y-6 text-center">
+            <span className="block font-display text-xl font-extrabold">Read it like a book</span>
+            <span className="grid gap-4 text-left text-sm">
+              <Tip icon={<Hand className="h-5 w-5" />} title="Swipe to turn the page" body={prefs.rtl ? "Right to left, like manga." : "Drag the page left or right."} />
+              <Tip icon={<MousePointerClick className="h-5 w-5" />} title="Tap the edges" body="The middle brings back the menu." />
+              <Tip icon={<ZoomIn className="h-5 w-5" />} title="Pinch or double-tap" body="Zoom in on the details." />
+            </span>
+            <span className="inline-block rounded-full bg-accent-fill px-5 py-2.5 text-sm font-bold">Got it</span>
+          </span>
+        </button>
+      )}
 
       {/* ───────── settings ───────── */}
       {sheet && (
@@ -349,15 +404,22 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
             </div>
 
             <Group label="Reading mode">
-              <Seg value={prefs.mode} onChange={(v) => set({ mode: v })} options={[{ v: "scroll", l: "Scroll", I: ScrollText }, { v: "paged", l: "Paged", I: Columns2 }]} />
+              <Seg
+                value={prefs.mode}
+                onChange={(v) => set({ mode: v })}
+                options={[{ v: "auto", l: "Auto", I: Sparkles }, { v: "book", l: "Book", I: BookOpen }, { v: "scroll", l: "Scroll", I: ScrollText }]}
+              />
+              <p className="text-xs leading-relaxed text-white/50">
+                {prefs.mode === "auto" ? `Auto reads like a book and scrolls long webtoon strips.${strip ? " This one is a strip, so it scrolls." : ""}` : prefs.mode === "book" ? "Swipe to turn pages, like a printed book." : "One long page that you scroll."}
+              </p>
             </Group>
             {!scrollMode && (
               <>
                 <Group label="Direction">
                   <Seg value={prefs.rtl ? "rtl" : "ltr"} onChange={(v) => set({ rtl: v === "rtl" })} options={[{ v: "ltr", l: "Left to right" }, { v: "rtl", l: "Right to left" }]} />
                 </Group>
-                <Group label="Fit page to">
-                  <Seg value={prefs.fit} onChange={(v) => set({ fit: v })} options={[{ v: "width", l: "Width", I: MoveHorizontal }, { v: "height", l: "Height", I: MoveVertical }]} />
+                <Group label="Two-page spreads">
+                  <Seg value={prefs.spread} onChange={(v) => set({ spread: v })} options={[{ v: "auto", l: "On wide screens" }, { v: "off", l: "Off" }]} />
                 </Group>
               </>
             )}
@@ -380,11 +442,11 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
                 </select>
               </Group>
             )}
-            <button className="btn-ghost w-full !text-white/60" onClick={() => set(DEFAULT_READER)}>
+            <button className="btn-ghost w-full !text-white/60" onClick={() => { set(DEFAULT_READER); try { localStorage.removeItem(HINT_KEY); } catch { /* ignore */ } }}>
               <RotateCcw className="h-4 w-4" /> Reset to defaults
             </button>
             <p className="hidden text-xs leading-relaxed text-white/45 sm:block">
-              Keys: arrows turn pages, <kbd>Space</kbd> next, <kbd>M</kbd> mode, <kbd>F</kbd> fullscreen, <kbd>[</kbd> <kbd>]</kbd> chapters, <kbd>S</kbd> settings.
+              Keys: arrows turn pages, <kbd>Space</kbd> next, <kbd>Z</kbd> zoom, <kbd>M</kbd> mode, <kbd>F</kbd> fullscreen, <kbd>[</kbd> <kbd>]</kbd> chapters, <kbd>S</kbd> settings. The mouse wheel turns pages too.
             </p>
           </div>
         </div>
@@ -393,9 +455,21 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
   );
 }
 
-function EndCard({ id, work, chapter, next, prev, onNext }: { id?: string; work: Props["work"]; chapter: number; next: number | null; prev: number | null; onNext: () => void }) {
+function Tip({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
   return (
-    <section id={id} className="mx-auto grid min-h-[70dvh] max-w-sm place-items-center px-6 py-24 text-center" aria-label="End of chapter">
+    <span className="flex items-start gap-3.5">
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/10 text-accent">{icon}</span>
+      <span className="block">
+        <span className="block font-semibold">{title}</span>
+        <span className="block text-white/60">{body}</span>
+      </span>
+    </span>
+  );
+}
+
+function EndCard({ work, chapter, next, prev, onNext }: { work: Props["work"]; chapter: number; next: number | null; prev: number | null; onNext: () => void }) {
+  return (
+    <div className="mx-auto max-w-sm px-6 py-24 text-center">
       <div className="space-y-5">
         <p className="font-display text-sm font-bold uppercase tracking-[0.18em] text-accent">{next != null ? `End of chapter ${chapter}` : "The end"}</p>
         <h2 className="font-display text-2xl font-extrabold leading-tight">{next != null ? "Keep going?" : "You reached the last page"}</h2>
@@ -415,7 +489,7 @@ function EndCard({ id, work, chapter, next, prev, onNext }: { id?: string; work:
           )}
         </div>
       </div>
-    </section>
+    </div>
   );
 }
 

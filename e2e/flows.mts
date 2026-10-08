@@ -58,8 +58,8 @@ const browser = await chromium.launch();
 {
   const ctx = await ctxFor(browser);
   const p = await ctx.newPage();
-  await p.goto(BASE + "/");
-  await p.waitForTimeout(500);
+  await p.goto(BASE + "/", { waitUntil: "load" });
+  await p.waitForTimeout(1500); // hydration: the shortcut is attached by the client
   await p.keyboard.press("/");
   ok(await p.getByRole("combobox", { name: "Search" }).evaluate((el) => el === document.activeElement), "the / key focuses search");
   await p.getByRole("combobox", { name: "Search" }).fill("big bre");
@@ -114,7 +114,7 @@ const browser = await chromium.launch();
 
 /* ───────── 5. reader: scroll mode, progress, resume ───────── */
 {
-  const ctx = await ctxFor(browser);
+  const ctx = await ctxFor(browser, { storage: { "lm:reader": JSON.stringify({ mode: "scroll" }), "lm:reader-hint": "1" } });
   const p = await ctx.newPage();
   await p.goto(BASE + `/read/${SERIES}/1`);
   await p.waitForSelector("[data-n]");
@@ -137,29 +137,148 @@ const browser = await chromium.launch();
   ok(Math.abs(top) < 120, "Continue lands on the saved page", `top=${top}`);
   await p.keyboard.press("m");
   await p.waitForTimeout(500);
-  ok((await p.locator("[data-n]").count()) === 0, "M switches to paged mode");
+  ok((await p.locator("[data-n]").count()) === 0 && (await p.getByRole("region", { name: "Pages" }).count()) === 1, "M switches to book mode");
   await ctx.close();
 }
 
-/* ───────── 6. reader: paged mode, keys, right-to-left ───────── */
+/* ───────── 6. reader: the book (swipe, keys, tap zones, right-to-left) ───────── */
+const BOOK = (rtl: boolean, extra: Record<string, unknown> = {}) => ({
+  "lm:reader": JSON.stringify({ mode: "book", rtl, spread: "off", width: 860, dim: 0, ...extra }),
+  "lm:reader-hint": "1",
+});
+/** the page(s) of the slide that is actually on screen (neighbours are in the DOM but hidden) */
+const shown = (p: Page) => p.locator('[aria-roledescription="slide"][aria-hidden="false"] img').evaluateAll((els) => els.map((e) => (e as HTMLImageElement).alt));
+const onPage = async (p: Page, n: number) => {
+  await p.waitForFunction((alt) => [...document.querySelectorAll('[aria-roledescription="slide"][aria-hidden="false"] img')].some((e) => (e as HTMLImageElement).alt === alt), `Page ${n}`, { timeout: 4000 }).catch(() => {});
+  return (await shown(p)).includes(`Page ${n}`);
+};
+/** drag across the page like a finger: from x0 to x1 (fractions of the width) */
+const drag = async (p: Page, x0: number, x1: number, y = 0.5, slow = false) => {
+  const vp = p.viewportSize()!;
+  await p.mouse.move(vp.width * x0, vp.height * y);
+  await p.mouse.down();
+  // a lazy drag (slow) is not a flick, so only distance decides whether the page turns
+  const steps = slow ? 8 : 4;
+  for (let i = 1; i <= steps; i++) {
+    await p.mouse.move(vp.width * (x0 + ((x1 - x0) * i) / steps), vp.height * y);
+    if (slow) await p.waitForTimeout(90);
+  }
+  await p.mouse.up();
+};
 for (const rtl of [false, true]) {
-  const ctx = await ctxFor(browser, { storage: { "lm:reader": JSON.stringify({ mode: "paged", rtl, fit: "width", width: 860, dim: 0 }) } });
+  const dir = rtl ? "RTL" : "LTR";
+  const ctx = await ctxFor(browser, { storage: BOOK(rtl) });
   const p = await ctx.newPage();
   await p.goto(BASE + `/read/${SERIES}/1`);
-  await p.waitForSelector('img[alt="Page 1"]');
+  await p.waitForSelector('[aria-roledescription="slide"][aria-hidden="false"] img');
+  ok(await onPage(p, 1), `book ${dir}: opens on page 1`);
   const fwd = rtl ? "ArrowLeft" : "ArrowRight";
   const back = rtl ? "ArrowRight" : "ArrowLeft";
   await p.keyboard.press(fwd);
-  await p.waitForSelector('img[alt="Page 2"]', { timeout: 4000 }).catch(() => {});
-  ok(await p.locator('img[alt="Page 2"]').isVisible(), `paged ${rtl ? "RTL" : "LTR"}: ${fwd} goes to the next page`);
+  ok(await onPage(p, 2), `book ${dir}: ${fwd} turns to the next page`);
   await p.keyboard.press(back);
-  await p.waitForSelector('img[alt="Page 1"]', { timeout: 4000 }).catch(() => {});
-  ok(await p.locator('img[alt="Page 1"]').isVisible(), `paged ${rtl ? "RTL" : "LTR"}: ${back} goes back`);
+  ok(await onPage(p, 1), `book ${dir}: ${back} turns back`);
+
+  // swipe: dragging the page toward the spine goes forward (left in LTR, right in RTL)
+  await drag(p, rtl ? 0.3 : 0.7, rtl ? 0.7 : 0.3);
+  ok(await onPage(p, 2), `book ${dir}: swiping ${rtl ? "right" : "left"} turns forward`);
+  await drag(p, rtl ? 0.7 : 0.3, rtl ? 0.3 : 0.7);
+  ok(await onPage(p, 1), `book ${dir}: swiping ${rtl ? "left" : "right"} turns back`);
+  // a short drag is not enough: the page springs back
+  await drag(p, 0.5, rtl ? 0.58 : 0.42, 0.5, true);
+  await p.waitForTimeout(450);
+  ok(await onPage(p, 1), `book ${dir}: a tiny drag springs back`);
+  // past the first page there is nothing to turn to
+  await drag(p, rtl ? 0.7 : 0.3, rtl ? 0.3 : 0.7);
+  await p.waitForTimeout(450);
+  ok(await onPage(p, 1), `book ${dir}: swiping before page 1 stays on page 1`);
+
   // tap zones
   const vp = p.viewportSize()!;
   await p.mouse.click(Math.round(vp.width * (rtl ? 0.1 : 0.9)), Math.round(vp.height / 2));
-  await p.waitForSelector('img[alt="Page 2"]', { timeout: 4000 }).catch(() => {});
-  ok(await p.locator('img[alt="Page 2"]').isVisible(), `paged ${rtl ? "RTL" : "LTR"}: tapping the ${rtl ? "left" : "right"} edge advances`);
+  ok(await onPage(p, 2), `book ${dir}: tapping the ${rtl ? "left" : "right"} edge advances`);
+  await p.mouse.click(Math.round(vp.width * (rtl ? 0.9 : 0.1)), Math.round(vp.height / 2));
+  ok(await onPage(p, 1), `book ${dir}: tapping the ${rtl ? "right" : "left"} edge goes back`);
+
+  // the wheel turns pages too, one flick at a time
+  await p.mouse.move(vp.width / 2, vp.height / 2);
+  await p.mouse.wheel(0, 120);
+  ok(await onPage(p, 2), `book ${dir}: the mouse wheel turns the page`);
+  await ctx.close();
+}
+
+{
+  // zoom: double-click zooms in, again resets; arrows leave zoom behind
+  const ctx = await ctxFor(browser, { storage: BOOK(false) });
+  const p = await ctx.newPage();
+  await p.goto(BASE + `/read/${SERIES}/1`);
+  await p.waitForSelector('[aria-roledescription="slide"][aria-hidden="false"] img');
+  const vp = p.viewportSize()!;
+  const zoomOf = () => p.locator('[aria-roledescription="carousel"] > div').first().evaluate((el) => (el as HTMLElement).style.transform);
+  ok((await zoomOf()) === "", "book: starts un-zoomed");
+  await p.mouse.dblclick(vp.width / 2, vp.height / 2);
+  await p.waitForTimeout(350);
+  ok(/scale\(2\.4\)/.test(await zoomOf()), "book: double-tap zooms in", await zoomOf());
+  ok((await p.getByRole("button", { name: "Reset zoom" }).count()) === 1, "book: the zoom button reflects the zoom state");
+  await drag(p, 0.6, 0.4); // panning while zoomed must not turn the page
+  ok(await onPage(p, 1), "book: dragging while zoomed pans instead of turning");
+  await p.mouse.dblclick(vp.width / 2, vp.height / 2);
+  await p.waitForTimeout(350);
+  ok((await zoomOf()) === "", "book: double-tap again resets the zoom", await zoomOf());
+  await p.keyboard.press("z");
+  await p.waitForTimeout(350);
+  ok(/scale\(2\.4\)/.test(await zoomOf()), "book: Z toggles zoom");
+  await p.keyboard.press("ArrowRight");
+  ok(await onPage(p, 2), "book: turning the page works from a zoomed page");
+  await p.waitForTimeout(350);
+  ok((await zoomOf()) === "", "book: a new page starts un-zoomed", await zoomOf());
+  await ctx.close();
+}
+
+{
+  // spreads: two pages side by side on a wide screen, the cover on its own, RTL puts the first page on the right
+  for (const rtl of [false, true]) {
+    const ctx = await ctxFor(browser, { width: 1440, height: 800, storage: BOOK(rtl, { spread: "auto" }) });
+    const p = await ctx.newPage();
+    await p.goto(BASE + `/read/${SERIES}/1`);
+    await p.waitForSelector('[aria-roledescription="slide"][aria-hidden="false"] img');
+    ok((await shown(p)).length === 1 && (await onPage(p, 1)), `spread ${rtl ? "RTL" : "LTR"}: the cover stands alone`);
+    await p.keyboard.press(rtl ? "ArrowLeft" : "ArrowRight");
+    await p.waitForFunction(() => document.querySelectorAll('[aria-roledescription="slide"][aria-hidden="false"] img').length === 2, undefined, { timeout: 4000 }).catch(() => {});
+    const pair = await shown(p);
+    ok(pair.length === 2 && pair.includes("Page 2") && pair.includes("Page 3"), `spread ${rtl ? "RTL" : "LTR"}: pages 2 and 3 are shown together`, pair.join(","));
+    const xs = await p.locator('[aria-roledescription="slide"][aria-hidden="false"] img').evaluateAll((els) => els.map((e) => ({ alt: (e as HTMLImageElement).alt, x: e.getBoundingClientRect().x })));
+    const left = xs.sort((a, b) => a.x - b.x)[0]?.alt;
+    ok(left === (rtl ? "Page 3" : "Page 2"), `spread ${rtl ? "RTL" : "LTR"}: reading order puts ${rtl ? "page 3 on the left" : "page 2 on the left"}`, left);
+    await ctx.close();
+  }
+  // on a phone the same book is one page at a time
+  const phone = await ctxFor(browser, { width: 390, height: 844, mobile: true, storage: BOOK(false, { spread: "auto" }) });
+  const pp = await phone.newPage();
+  await pp.goto(BASE + `/read/${SERIES}/1`);
+  await pp.waitForSelector('[aria-roledescription="slide"][aria-hidden="false"] img');
+  await pp.keyboard.press("ArrowRight");
+  await onPage(pp, 2);
+  ok((await shown(pp)).length === 1, "spread: a phone shows one page at a time");
+  await phone.close();
+}
+
+{
+  // the first-run tip appears once and is remembered; an old "paged" setting becomes the book
+  const ctx = await ctxFor(browser, { storage: { "lm:reader": JSON.stringify({ mode: "paged", rtl: false }) } });
+  const p = await ctx.newPage();
+  await p.goto(BASE + `/read/${SERIES}/1`);
+  const tip = p.getByRole("button", { name: "Dismiss reading tips" });
+  await tip.waitFor({ timeout: 6000 }).catch(() => {});
+  ok(await tip.isVisible(), "book: first visit shows the reading tips");
+  ok((await p.getByRole("region", { name: "Pages" }).count()) === 1, "a stored \"paged\" preference opens as the book");
+  await tip.click();
+  await p.waitForTimeout(300);
+  ok((await tip.count()) === 0, "tips close on tap");
+  await p.reload();
+  await p.waitForSelector('[aria-roledescription="slide"][aria-hidden="false"] img');
+  await p.waitForTimeout(600);
+  ok((await p.getByRole("button", { name: "Dismiss reading tips" }).count()) === 0, "tips do not come back");
   await ctx.close();
 }
 

@@ -49,14 +49,14 @@ enrol an authenticator app, then delete the bootstrap secret.
 | `npm run rescan` | re-check stored works against the current safety terms |
 | `npm run verify` / `recompute` / `cleanup` / `health` | integrity, derived numbers, retention, dependency check |
 | `npm run backfill-thumbs` | create the 280px card thumbnail for covers stored before thumbnails existed (new ingests do it automatically) |
-| `npm test` / `npm run typecheck` | 66 unit tests / type-check of `src` and `scripts` |
-| `npm run qa` / `npm run flows` | Playwright sweeps against a running server (`QA_BASE=http://localhost:3000`): layout, overflow, console and axe accessibility over every page and viewport / 48 behaviour checks (age gate, search, filters, library, reader) |
+| `npm test` / `npm run typecheck` | 74 unit tests / type-check of `src` and `scripts` |
+| `npm run qa` / `npm run flows` | Playwright sweeps against a running server (`QA_BASE=http://localhost:3000`): layout, overflow, console and axe accessibility over every page and viewport / 81 behaviour checks (age gate, search, filters, library, reader) |
 
 ## Frontend
 
 Next.js App Router, Tailwind with CSS-variable themes (dark default, light), mobile-first with a bottom nav on phones.
 Browse, tag/artist/group/parody/character directories, nhentai-style search syntax (`tag:"x"`, `-tag:x`, `pages:>20`, `uploaded:<7d`; see `/search/help`),
-language and hidden-tag preferences (cookies, applied server-side), local favorites and history, and a reader with scroll and paged modes, LTR/RTL, tap zones, swipe, keyboard, and resume.
+language and hidden-tag preferences (cookies, applied server-side), local favorites and history, and a reader that works like a book: swipe (or drag, tap an edge, use the wheel or arrow keys) to turn pages with the page following your finger, two-page spreads on wide screens with the cover on its own, left-to-right or right-to-left, pinch / double-tap / `Z` to zoom, and resume where you left off. Tall webtoon strips fall back to a scroll automatically (Reader settings: Auto / Book / Scroll).
 An age gate covers the whole site until confirmed. The legal pages under `src/app/(site)/(legal)` are draft text: have them reviewed before launch.
 
 ## Workflows (`.github/workflows`)
