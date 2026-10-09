@@ -11,7 +11,7 @@ import { FilterBar } from "@/components/work/FilterBar";
 import { EmptyState, WorkGrid } from "@/components/work/WorkCard";
 import { Pagination } from "@/components/work/Pagination";
 import { PageHeading } from "@/components/work/Section";
-import { HideTagButton } from "@/components/work/Actions";
+import { FollowButton, HideTagButton } from "@/components/work/Actions";
 import { MIN_INDEXABLE_ENTRIES, breadcrumbLd, itemListLd, ldJson, listingMetadata, tagSeo } from "@/lib/seo";
 
 type Params = Promise<{ type: string; slug: string }>;
@@ -78,7 +78,10 @@ export default async function TagPage({ params, searchParams }: { params: Params
         <span className="text-text">{seo.h1}</span>
       </nav>
       <PageHeading title={seo.h1} eyebrow={SINGULAR[type]} sub={seo.description}>
-        <HideTagButton id={tag.id} name={tag.name} />
+        <div className="flex flex-wrap gap-2">
+          {!isLang && type !== "category" && <FollowButton id={tag.id} type={type} slug={tag.slug} name={seo.h1} />}
+          <HideTagButton id={tag.id} name={tag.name} />
+        </div>
       </PageHeading>
       <FilterBar base={base} params={sp} sort={f.sort} langs={isLang ? [] : f.langs} cats={f.cats} />
       <div className="mt-6 sm:mt-8">

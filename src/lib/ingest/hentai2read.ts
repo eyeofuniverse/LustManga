@@ -1,3 +1,4 @@
+import { statsToFields } from "@/lib/signals";
 import { prisma, db } from "@/lib/db";
 import { pool } from "@/lib/http";
 import { classify } from "@/lib/safety/classify";
@@ -88,6 +89,7 @@ async function processWork(slug: string, seedFallback: number, c: Ctx): Promise<
       stats.duplicates++;
       return void o.log(`  duplicate of #${dup.publicId}, source attached (nothing downloaded)`);
     }
+    const stat = statsToFields(h2r.SITE, { ...w.stats, views: w.stats.views ?? (w.views || undefined) });
     const created = await db(() =>
       prisma.work.create({
         data: {
@@ -103,7 +105,9 @@ async function processWork(slug: string, seedFallback: number, c: Ctx): Promise<
           deferFetch: verdict.deferFetch,
           safetyVerdict: held ? "REVIEW" : "CLEAN",
           safetyReasons: verdict.reasons,
-          seedPopularity: w.views ? scaleSeed(w.views, 1_500_000) : seedFallback,
+          ...stat,
+          seedPopularity: Math.max(w.views ? scaleSeed(w.views, 60_000_000) : seedFallback, stat.seedPopularity ?? 0),
+          statsAt: new Date(),
           sources: { create: { site: h2r.SITE, externalId: slug, url: `https://hentai2read.com/${slug}/` } },
         },
       }),

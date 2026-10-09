@@ -12,11 +12,11 @@ export type Slide = { kind: "pages"; pages: number[] } | { kind: "end" };
 
 export const isWide = (d: Dim) => d.w > 0 && d.h > 0 && d.w > d.h * 1.15;
 
-export function buildSlides(dims: Dim[], spread: boolean): Slide[] {
+export function buildSlides(dims: Dim[], spread: boolean, coverAlone = true): Slide[] {
   const out: Slide[] = [];
   let i = 0;
   while (i < dims.length) {
-    const pair = spread && i > 0 && i + 1 < dims.length && !isWide(dims[i]) && !isWide(dims[i + 1]);
+    const pair = spread && (i > 0 || !coverAlone) && i + 1 < dims.length && !isWide(dims[i]) && !isWide(dims[i + 1]);
     if (pair) {
       out.push({ kind: "pages", pages: [i + 1, i + 2] });
       i += 2;

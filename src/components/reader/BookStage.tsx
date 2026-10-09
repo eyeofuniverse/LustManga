@@ -24,6 +24,8 @@ interface Props {
   rtl: boolean;
   /** 0..1 brightness */
   brightness: number;
+  /** the CSS background behind the pages */
+  background: string;
   endCard: React.ReactNode;
   onIndex(index: number): void;
   /** the reader tried to go past the first (-1) or last (1) slide */
@@ -51,7 +53,7 @@ type Gesture = {
   s0: number;
 };
 
-export function BookStage({ ref, slides, pages, index, rtl, brightness, endCard, onIndex, onEdge, onToggleUi, onZoomChange }: Props) {
+export function BookStage({ ref, slides, pages, index, rtl, brightness, background, endCard, onIndex, onEdge, onToggleUi, onZoomChange }: Props) {
   const stage = useRef<HTMLDivElement>(null);
   const track = useRef<HTMLDivElement>(null);
   const zoomEl = useRef<HTMLDivElement>(null);
@@ -366,7 +368,7 @@ export function BookStage({ ref, slides, pages, index, rtl, brightness, endCard,
     <div
       ref={stage}
       className="fixed inset-0 touch-none select-none overflow-hidden overscroll-none"
-      style={{ background: "radial-gradient(120% 90% at 50% 40%, #1b1b24 0%, #0a0a0e 70%, #050507 100%)", filter: `brightness(${brightness})` }}
+      style={{ background, filter: `brightness(${brightness})` }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={(e) => release(e, false)}

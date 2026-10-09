@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, EyeOff, Moon, Plus, Search, Sun, Trash2, X } from "lucide-react";
+import { Check, Download, EyeOff, Moon, Plus, Search, Sun, Trash2, Upload, X } from "lucide-react";
 import { usePrefs } from "./PrefsProvider";
 import { MAX_HIDDEN } from "@/lib/prefs";
 import { LANGUAGES } from "@/lib/format";
-import { DEFAULT_READER, useFavorites, useHistory, useReaderPrefs } from "@/lib/library";
+import { DEFAULT_READER, applyBackup, buildBackup, parseBackup, useFavorites, useHistory, useReaderPrefs } from "@/lib/library";
 import type { SuggestResult } from "@/lib/types";
 
 function Card({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
@@ -20,8 +20,63 @@ function Card({ title, hint, children }: { title: string; hint?: string; childre
   );
 }
 
+/** Export the library to a file and bring one back: the way to move between browsers and devices without an account. */
+function BackupCard() {
+  const { prefs, replaceAll } = usePrefs();
+  const [mode, setMode] = useState<"merge" | "replace">("merge");
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const exportFile = () => {
+    const blob = new Blob([JSON.stringify(buildBackup({ langs: prefs.langs, hide: prefs.hide }), null, 1)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `lustmanga-library-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    setNote({ ok: true, text: "Backup saved. Keep the file somewhere safe." });
+  };
+
+  const importFile = async (file: File | undefined) => {
+    if (!file) return;
+    const b = parseBackup(await file.text());
+    if (!b) return setNote({ ok: false, text: "That file is not a LustManga backup." });
+    if (mode === "replace" && !window.confirm("Replace your saved works, history and settings with this backup?")) return;
+    applyBackup(b, mode);
+    if (mode === "replace" || b.prefs.langs.length || b.prefs.hide.length) {
+      replaceAll(mode === "replace" ? b.prefs : { langs: [...new Set([...prefs.langs, ...b.prefs.langs])], hide: [...prefs.hide, ...b.prefs.hide.filter((h) => !prefs.hide.some((x) => x.id === h.id))] });
+    }
+    setNote({ ok: true, text: `Restored ${b.fav.length} saved, ${b.history.length} in history, ${b.follow.length} followed.` });
+  };
+
+  return (
+    <Card title="Backup and restore" hint="No account needed: save your library to a file, and load it in any other browser or device.">
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={exportFile} className="btn-soft">
+          <Download className="h-4 w-4" /> Download backup
+        </button>
+        <label className="btn-soft cursor-pointer">
+          <Upload className="h-4 w-4" /> Restore from file
+          <input type="file" accept="application/json,.json" className="sr-only" onChange={(e) => { void importFile(e.target.files?.[0]); e.target.value = ""; }} />
+        </label>
+      </div>
+      <div className="grid auto-cols-fr grid-flow-col gap-1 rounded-xl bg-surface-2 p-1 sm:max-w-sm" role="radiogroup" aria-label="When restoring">
+        {([["merge", "Add to what I have"], ["replace", "Replace everything"]] as const).map(([v, l]) => (
+          <button key={v} type="button" role="radio" aria-checked={mode === v} onClick={() => setMode(v)} className={`h-10 rounded-lg px-3 text-sm font-semibold transition ${mode === v ? "bg-surface text-text shadow-sm" : "text-muted hover:text-text"}`}>
+            {l}
+          </button>
+        ))}
+      </div>
+      {note && (
+        <p role="status" className={`text-sm ${note.ok ? "text-good" : "text-red-400"}`}>
+          {note.text}
+        </p>
+      )}
+    </Card>
+  );
+}
+
 export function SettingsPanel() {
-  const { prefs, toggleLang, setLangs, hideTag, unhideTag } = usePrefs();
+  const { prefs, toggleLang, setLangs, hideTag, unhideTag, replaceAll } = usePrefs();
   const { prefs: reader, set: setReader } = useReaderPrefs();
   const fav = useFavorites();
   const hist = useHistory();
@@ -149,6 +204,8 @@ export function SettingsPanel() {
           Reset reader to defaults
         </button>
       </Card>
+
+      <BackupCard />
 
       <Card title="Your data" hint="Saved works and reading history stay on this device only.">
         <div className="flex flex-wrap gap-2">

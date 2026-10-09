@@ -17,7 +17,7 @@ const ok = (cond: boolean, name: string, extra = "") => {
   console.log(`${cond ? "PASS" : "FAIL"}  ${name}${!cond && extra ? `  [${extra}]` : ""}`);
 };
 
-async function ctxFor(browser: Browser, opts: { width?: number; height?: number; age?: boolean; mobile?: boolean; storage?: Record<string, string> } = {}): Promise<BrowserContext> {
+async function ctxFor(browser: Browser, opts: { width?: number; height?: number; age?: boolean; mobile?: boolean; storage?: Record<string, string>; /** let this browser's views and saves count (the one test that checks the counters) */ count?: boolean } = {}): Promise<BrowserContext> {
   const ctx = await browser.newContext({
     viewport: { width: opts.width ?? 1280, height: opts.height ?? 900 },
     isMobile: !!opts.mobile,
@@ -26,8 +26,10 @@ async function ctxFor(browser: Browser, opts: { width?: number; height?: number;
   // FLOWS_TIMEOUT (ms) lets the suite run against a slow database; the default suits a healthy one
   ctx.setDefaultNavigationTimeout(Number(process.env.FLOWS_TIMEOUT ?? 30_000));
   ctx.setDefaultTimeout(Number(process.env.FLOWS_TIMEOUT ?? 30_000));
+  // test visits must not change the real popularity numbers; the cookie makes /api/view and /api/favorite ignore them
+  if (!opts.count) await ctx.addCookies([{ name: "lm_nocount", value: "1", url: BASE }]);
   if (opts.age !== false) await ctx.addCookies([{ name: "lm_age", value: "1", url: BASE }]);
-  await ctx.route(`https://${CDN}/**`, (r) => r.fulfill({ status: 200, contentType: "image/png", body: png }));
+  await ctx.route(`https://${CDN}/**`, (r) => r.fulfill({ status: 200, contentType: "image/png", body: png, headers: { "access-control-allow-origin": "*" } }));
   if (opts.storage) await ctx.addInitScript((s) => Object.entries(s).forEach(([k, v]) => localStorage.setItem(k, v)), opts.storage);
   return ctx;
 }
@@ -394,6 +396,201 @@ for (const rtl of [false, true]) {
   await ctx.close();
 }
 
+/* ───────── 12. features competitors have: sorts, updates, saves, following, advanced search, backup, download, reader extras ───────── */
+{
+  // popularity windows
+  const ctx = await ctxFor(browser);
+  const p = await ctx.newPage();
+  const sortLinks = p.getByRole("group", { name: "Sort order" }).getByRole("link");
+  await p.goto(BASE + "/browse?lang=all");
+  ok((await sortLinks.allInnerTexts()).map((t) => t.trim()).join("|") === "Popular|Trending|This week|This month|Top rated|Most saved|Newest", "browse: seven sort orders (popular, trending, week, month, top rated, most saved, newest)", (await sortLinks.allInnerTexts()).join("|"));
+  for (const s of ["trending", "week", "month", "rated", "saved", "new"]) {
+    const r = await p.goto(BASE + `/browse?lang=all&sort=${s}`);
+    ok(r?.status() === 200 && (await p.locator("ul li article").count()) > 0, `browse: sort=${s} lists works`, String(r?.status()));
+    ok((await p.getByRole("group", { name: "Sort order" }).locator('[aria-current="true"]').count()) === 1, `browse: sort=${s} is marked as the active sort`);
+  }
+  await p.goto(BASE + "/browse?lang=all&sort=bogus");
+  ok((await p.getByRole("group", { name: "Sort order" }).locator('[aria-current="true"]').first().innerText()).trim() === "Popular", "browse: an unknown sort falls back to popular");
+
+  // latest updates
+  const up = await p.goto(BASE + "/updates?lang=all");
+  ok(up?.status() === 200 && (await p.locator("ul li article").count()) > 0, "updates: lists series with new chapters");
+  ok(/Chapter [\d.]+ · /.test((await p.locator("ul li article").first().innerText())), "updates: each card says which chapter and when", (await p.locator("ul li article").first().innerText()).replace(/\n/g, " "));
+
+  // page jump
+  await p.goto(BASE + "/browse?lang=all");
+  await p.locator("#page-jump").fill("5");
+  await p.getByRole("button", { name: "Go" }).click();
+  await p.waitForURL(/page=5/, { timeout: 30000 });
+  ok(/page=5/.test(p.url()), "pagination: jump to a page by number", p.url());
+  await ctx.close();
+}
+
+{
+  // public save count: +1 on save, back to what it was on un-save (the cookie remembers this browser counted)
+  const ctx = await ctxFor(browser, { count: true });
+  const before = (await prisma.work.findFirst({ where: { publicId: Number(SERIES) }, select: { favorites: true } }))!.favorites;
+  const on = await ctx.request.post(BASE + "/api/favorite", { data: { id: Number(SERIES), on: true } });
+  const again = await ctx.request.post(BASE + "/api/favorite", { data: { id: Number(SERIES), on: true } });
+  const mid = (await prisma.work.findFirst({ where: { publicId: Number(SERIES) }, select: { favorites: true } }))!.favorites;
+  ok(on.status() === 204 && again.status() === 204 && mid === before + 1, "saves: counted once per visitor, however often the request repeats", `${before} -> ${mid}`);
+  const off = await ctx.request.post(BASE + "/api/favorite", { data: { id: Number(SERIES), on: false } });
+  const after = (await prisma.work.findFirst({ where: { publicId: Number(SERIES) }, select: { favorites: true } }))!.favorites;
+  ok(off.status() === 204 && after === before, "saves: un-saving takes it back", `${mid} -> ${after}`);
+  ok((await ctx.request.post(BASE + "/api/favorite", { data: { id: "x", on: true } })).status() === 400, "saves: a bad request is refused");
+  // the work page shows the count and the button keeps its accessible name
+  await prisma.work.updateMany({ where: { publicId: Number(SERIES) }, data: {} });
+  const p = await ctx.newPage();
+  await p.goto(BASE + `/g/${SERIES}`);
+  ok((await p.getByRole("button", { name: /Save to your library/ }).count()) === 1, "saves: the save button is on the work page");
+  // daily views behind trending
+  const day = await prisma.workViewDay.count();
+  ok(day >= 0, "trending: the daily views table exists");
+  // more from this artist
+  const more = await p.locator('section[aria-label^="More from"]').count();
+  console.log(`info  work ${SERIES}: ${more} "More from ..." row(s)`);
+  await ctx.close();
+}
+
+{
+  // follow a tag, see its works on Following, unfollow
+  const ctx = await ctxFor(browser);
+  const p = await ctx.newPage();
+  await p.goto(BASE + "/following");
+  ok(await p.getByText("You are not following anything yet").waitFor({ timeout: 20000 }).then(() => true, () => false), "following: starts empty with instructions");
+  await p.goto(BASE + `/tag/${TAG}?lang=all`);
+  await p.waitForTimeout(800);
+  await p.getByRole("button", { name: "Follow", exact: true }).click();
+  ok(await p.getByRole("button", { name: "Following", exact: true }).isVisible(), "following: the button becomes Following");
+  await p.goto(BASE + "/following");
+  await p.waitForSelector("ul li article", { timeout: 60000 }).catch(() => {});
+  ok((await p.locator("ul li article").count()) > 0, "following: new works from the followed tag appear");
+  ok((await p.getByRole("list", { name: "Followed" }).getByRole("link").count()) === 1, "following: the followed tag is listed");
+  await p.getByRole("button", { name: /^Unfollow/ }).click();
+  ok(await p.getByText("You are not following anything yet").waitFor({ timeout: 10000 }).then(() => true, () => false), "following: unfollowing empties the feed");
+  await ctx.close();
+}
+
+{
+  // advanced search: pick a tag, set a page range, search
+  const ctx = await ctxFor(browser);
+  const p = await ctx.newPage();
+  await p.goto(BASE + "/search");
+  await p.getByRole("button", { name: "Advanced filters" }).click();
+  await p.getByLabel("Find a tag, artist, parody or character").fill(TAG.replace(/-/g, " "));
+  await p.getByRole("list", { name: "Matches" }).getByRole("button").first().click({ timeout: 20000 });
+  ok(await p.getByRole("list", { name: "Chosen" }).isVisible(), "advanced search: a picked tag appears as a chip");
+  await p.getByLabel("Minimum pages").fill("5");
+  await p.getByRole("button", { name: "Search with these filters" }).click();
+  await p.waitForURL(/search\?.*q=/, { timeout: 30000 });
+  const q = decodeURIComponent(new URL(p.url()).searchParams.get("q") ?? "");
+  ok(/tag:/.test(q) && /pages:>=5/.test(q), "advanced search: builds the search syntax", q);
+  await p.waitForSelector("ul li article", { timeout: 30000 }).catch(() => {});
+  ok((await p.locator("ul li article").count()) > 0, "advanced search: the results load");
+  ok(await p.getByRole("button", { name: "Hide advanced filters" }).isVisible(), "advanced search: the panel reopens showing the active filters");
+  ok((await p.getByRole("list", { name: "Chosen" }).getByRole("button").count()) === 1, "advanced search: ...and the chip is still there");
+  await ctx.close();
+}
+
+{
+  // recent searches
+  const ctx = await ctxFor(browser);
+  const p = await ctx.newPage();
+  await p.goto(BASE + "/", { waitUntil: "load" });
+  await p.waitForTimeout(1500);
+  const box = p.getByRole("combobox", { name: "Search" });
+  await box.fill("school life");
+  await box.press("Enter");
+  await p.waitForURL(/search\?q=/, { timeout: 30000 });
+  await p.goto(BASE + "/browse?lang=all");
+  await p.waitForTimeout(1200);
+  await p.getByRole("combobox", { name: "Search" }).click();
+  ok(await p.getByRole("option", { name: /school life/ }).isVisible({ timeout: 5000 }).catch(() => false), "search box: offers the recent search when empty");
+  await ctx.close();
+}
+
+{
+  // read marks on cards, backup and restore
+  const entry = { id: Number(SERIES), ch: 1, page: 10, total: 34, at: Date.now(), done: [] };
+  const ctx = await ctxFor(browser, { storage: { "lm:history": JSON.stringify([entry]), "lm:fav": JSON.stringify([Number(SERIES)]), "lm:reader-hint": "1" } });
+  const p = await ctx.newPage();
+  await p.goto(BASE + "/history");
+  await p.waitForSelector("article", { timeout: 30000 });
+  ok((await p.getByRole("img", { name: "Page 10 of 34" }).count()) === 1, "cards: a work in progress shows a progress bar");
+  await p.goto(BASE + "/settings");
+  const [dl] = await Promise.all([p.waitForEvent("download"), p.getByRole("button", { name: "Download backup" }).click()]);
+  const file = await dl.path();
+  const fs = await import("node:fs");
+  const backup = JSON.parse(fs.readFileSync(file!, "utf8"));
+  ok(backup.v === 1 && backup.fav.includes(Number(SERIES)) && backup.history[0]?.id === Number(SERIES), "backup: the file holds the saved work and history", JSON.stringify(backup).slice(0, 120));
+  // restore into a fresh browser
+  const fresh = await ctxFor(browser);
+  const fp = await fresh.newPage();
+  await fp.goto(BASE + "/settings");
+  await fp.locator('input[type="file"]').setInputFiles({ name: "b.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(backup)) });
+  await fp.getByRole("status").waitFor({ timeout: 10000 });
+  ok(/Restored 1 saved/.test(await fp.getByRole("status").innerText()), "backup: restoring reports what came back", await fp.getByRole("status").innerText());
+  const favNow = JSON.parse((await fp.evaluate(() => localStorage.getItem("lm:fav"))) ?? "[]");
+  ok(favNow.includes(Number(SERIES)), "backup: the saved work is in the new browser");
+  await fp.locator('input[type="file"]').setInputFiles({ name: "x.json", mimeType: "application/json", buffer: Buffer.from("not a backup") });
+  ok(/not a LustManga backup/.test(await fp.getByRole("status").innerText()), "backup: a wrong file is refused");
+  await fresh.close();
+  await ctx.close();
+}
+
+{
+  // download a one-shot as CBZ (the browser fetches the pages and zips them)
+  const ctx = await ctxFor(browser);
+  await ctx.unroute(`https://${CDN}/**`);
+  await ctx.route(`https://${CDN}/**`, (r) => r.fulfill({ status: 200, contentType: "image/png", body: png, headers: { "access-control-allow-origin": "*" } }));
+  const p = await ctx.newPage();
+  await p.goto(BASE + `/g/${ONESHOT}`);
+  await p.waitForTimeout(800);
+  const [dl] = await Promise.all([p.waitForEvent("download", { timeout: 120000 }), p.getByRole("button", { name: /^Download$/ }).click()]);
+  const name = dl.suggestedFilename();
+  const { unzipSync } = await import("fflate");
+  const fs = await import("node:fs");
+  const files = unzipSync(new Uint8Array(fs.readFileSync((await dl.path())!)));
+  const names = Object.keys(files);
+  ok(name.endsWith(".cbz"), "download: the file is a .cbz named after the work", name);
+  ok(names[0] === "ComicInfo.xml" && names.length > 2 && names[1] === "001.webp", "download: ComicInfo.xml, then the numbered pages", names.slice(0, 4).join(","));
+  ok(Buffer.from(files["ComicInfo.xml"]).toString().includes("Adults Only 18+"), "download: ComicInfo carries the adult rating");
+  await ctx.close();
+}
+
+{
+  // reader extras: auto-play turns pages, background, first page paired
+  const ctx = await ctxFor(browser, { storage: BOOK(false, { autoSpeed: 3 }) });
+  const p = await ctx.newPage();
+  await p.goto(BASE + `/read/${SERIES}/1`);
+  await p.waitForSelector('[aria-roledescription="slide"][aria-hidden="false"] img');
+  await p.waitForTimeout(700);
+  ok(await onPage(p, 1), "auto-play: starts on page 1");
+  await p.keyboard.press("p");
+  ok(await p.waitForFunction(() => [...document.querySelectorAll('[aria-roledescription="slide"][aria-hidden="false"] img')].some((e) => (e as HTMLImageElement).alt === "Page 2"), undefined, { timeout: 9000 }).then(() => true, () => false), "auto-play: turns the page by itself (fast = every 3 seconds)");
+  await p.keyboard.press("p");
+  const stay = await shown(p);
+  await p.waitForTimeout(4200);
+  ok(JSON.stringify(await shown(p)) === JSON.stringify(stay), "auto-play: pausing stops the turning", stay.join(","));
+  await ctx.close();
+
+  const sepia = await ctxFor(browser, { storage: BOOK(false, { bg: "sepia" }) });
+  const sp = await sepia.newPage();
+  await sp.goto(BASE + `/read/${SERIES}/1`);
+  await sp.waitForSelector('[aria-roledescription="carousel"]');
+  const bg = await sp.locator('[aria-roledescription="carousel"]').evaluate((el) => getComputedStyle(el).backgroundColor);
+  ok(bg === "rgb(239, 227, 200)", "reader background: sepia", bg);
+  await sepia.close();
+
+  const wide = await ctxFor(browser, { width: 1440, height: 800, storage: BOOK(false, { spread: "auto", coverAlone: false }) });
+  const wp = await wide.newPage();
+  await wp.goto(BASE + `/read/${SERIES}/1`);
+  await wp.waitForSelector('[aria-roledescription="slide"][aria-hidden="false"] img');
+  await wp.waitForFunction(() => document.querySelectorAll('[aria-roledescription="slide"][aria-hidden="false"] img').length === 2, undefined, { timeout: 8000 }).catch(() => {});
+  ok((await shown(wp)).length === 2 && (await shown(wp)).includes("Page 1") && (await shown(wp)).includes("Page 2"), "spread: with the cover not on its own, pages 1 and 2 are paired", (await shown(wp)).join(","));
+  await wide.close();
+}
+
 /* ───────── 10. hostile input never becomes a server error ───────── */
 {
   const ctx = await ctxFor(browser);
@@ -462,9 +659,7 @@ for (const rtl of [false, true]) {
   ok(focused === "Back to details", "reader: Tab reveals the bars and focuses the first control", String(focused));
 
   // Space on a focused button is that button's action, not "next page"
-  await p.keyboard.press("Tab");
-  await p.keyboard.press("Tab");
-  await p.keyboard.press("Tab"); // zoom, mode, then fullscreen or settings
+  await p.keyboard.press("Tab"); // the next control after "Back": auto-play
   await p.keyboard.press(" ");
   await p.waitForTimeout(300);
   ok(await onPage(p, 1), "reader: Space on a focused button does not also turn the page");

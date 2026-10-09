@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, BookOpen, Search, Tag, User, X } from "lucide-react";
+import { ArrowUpRight, BookOpen, Clock, Search, Tag, User, X } from "lucide-react";
+import { useRecentSearches } from "@/lib/library";
 import type { SuggestResult } from "@/lib/types";
 import { cdn } from "@/lib/cdn";
 import { langLabel, tagHref, workHref } from "@/lib/format";
@@ -12,7 +13,7 @@ interface Row {
   href: string;
   label: string;
   sub?: string;
-  kind: "search" | "tag" | "artist" | "work";
+  kind: "search" | "tag" | "artist" | "work" | "recent";
   cover?: string | null;
 }
 
@@ -28,8 +29,11 @@ export function SearchBox() {
   const [data, setData] = useState<SuggestResult | null>(null);
   const [active, setActive] = useState(-1);
 
+  const recent = useRecentSearches();
   const term = q.trim();
   const rows: Row[] = [];
+  // an empty box offers the last few searches
+  if (term.length === 0) for (const r of recent.items) rows.push({ key: `r${r}`, href: `/search?q=${encodeURIComponent(r)}`, label: r, sub: "Recent search", kind: "recent" });
   if (term.length >= 1) rows.push({ key: "q", href: `/search?q=${encodeURIComponent(term)}`, label: `Search for "${term}"`, kind: "search" });
   for (const t of data?.tags ?? [])
     rows.push({
@@ -96,9 +100,11 @@ export function SearchBox() {
       setOpen(false);
       setMobile(false);
       input.current?.blur();
+      const m = /^\/search\?q=(.*)$/.exec(href);
+      if (m) recent.add(decodeURIComponent(m[1]));
       router.push(href);
     },
-    [router],
+    [router, recent],
   );
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -191,7 +197,7 @@ export function SearchBox() {
             className="absolute left-0 right-0 top-full z-50 mt-2 max-h-[min(70vh,34rem)] overflow-y-auto rounded-2xl border border-line bg-surface p-1.5 shadow-card animate-pop"
           >
             {rows.map((r, i) => (
-              <li key={r.key} role="option" aria-selected={i === active} id={`${listId}-${i}`}>
+              <li key={r.key} role="option" aria-selected={i === active} id={`${listId}-${i}`} className="relative">
                 <a
                   href={r.href}
                   onClick={(e) => {
@@ -199,7 +205,7 @@ export function SearchBox() {
                     go(r.href);
                   }}
                   onMouseEnter={() => setActive(i)}
-                  className={`flex items-center gap-3 rounded-xl px-2.5 py-2 text-sm ${i === active ? "bg-surface-2" : ""}`}
+                  className={`flex items-center gap-3 rounded-xl px-2.5 py-2 text-sm ${r.kind === "recent" ? "pr-11" : ""} ${i === active ? "bg-surface-2" : ""}`}
                 >
                   {r.kind === "work" ? (
                     <span className="h-12 w-8 shrink-0 overflow-hidden rounded-md bg-surface-3">
@@ -207,15 +213,20 @@ export function SearchBox() {
                     </span>
                   ) : (
                     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-surface-2 text-muted">
-                      {r.kind === "search" ? <Search className="h-4 w-4" /> : r.kind === "artist" ? <User className="h-4 w-4" /> : <Tag className="h-4 w-4" />}
+                      {r.kind === "search" ? <Search className="h-4 w-4" /> : r.kind === "recent" ? <Clock className="h-4 w-4" /> : r.kind === "artist" ? <User className="h-4 w-4" /> : <Tag className="h-4 w-4" />}
                     </span>
                   )}
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{r.label}</span>
                     {r.sub && <span className="block truncate text-xs capitalize text-muted">{r.sub}</span>}
                   </span>
-                  {r.kind === "work" ? <BookOpen className="h-4 w-4 shrink-0 text-muted" /> : <ArrowUpRight className="h-4 w-4 shrink-0 text-muted" />}
+                  {r.kind === "work" ? <BookOpen className="h-4 w-4 shrink-0 text-muted" /> : r.kind === "recent" ? null : <ArrowUpRight className="h-4 w-4 shrink-0 text-muted" />}
                 </a>
+                {r.kind === "recent" && (
+                  <button type="button" aria-label={`Remove "${r.label}" from recent searches`} onClick={() => recent.remove(r.label)} className="absolute right-1.5 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-lg text-muted hover:bg-surface-3 hover:text-text">
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
               </li>
             ))}
           </ul>

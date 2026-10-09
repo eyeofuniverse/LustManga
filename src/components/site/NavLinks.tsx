@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const ITEMS = [
   { href: "/browse", label: "Browse", match: ["/browse", "/tag", "/language", "/category"] },
+  { href: "/updates", label: "Updates", match: ["/updates"] },
   { href: "/tags", label: "Tags", match: ["/tags"] },
   { href: "/artists", label: "Artists", match: ["/artists", "/artist", "/group", "/groups"] },
   { href: "/parodies", label: "Parodies", match: ["/parodies", "/parody", "/characters", "/character"] },

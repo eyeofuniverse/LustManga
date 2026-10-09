@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Clock, Heart, Play, Trash2, X } from "lucide-react";
+import { Bell, Clock, Heart, Play, Trash2, X } from "lucide-react";
 import { isFinished, useFavorites, useHistory } from "@/lib/library";
 import { readHref, workHref } from "@/lib/format";
 import type { WorkCard as Work } from "@/lib/types";
@@ -42,6 +42,9 @@ export function SavedGrid({ kind }: { kind: "favorites" | "history" }) {
         <div className="flex gap-2">
           <Link href={isFav ? "/history" : "/favorites"} className="btn-soft">
             {isFav ? <Clock className="h-4 w-4" /> : <Heart className="h-4 w-4" />} {isFav ? "History" : "Saved"}
+          </Link>
+          <Link href="/following" className="btn-soft">
+            <Bell className="h-4 w-4" /> Following
           </Link>
           {ids.length > 0 && (
             <button onClick={() => window.confirm(`Clear all ${ids.length} items?`) && clear()} className="btn-ghost">

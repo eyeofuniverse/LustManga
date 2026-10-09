@@ -1,17 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
-import { CalendarDays, FileText, Languages, Layers } from "lucide-react";
+import { CalendarDays, FileText, Languages, Layers, Star } from "lucide-react";
 import { currentPrefs } from "@/lib/prefs-server";
-import { getRelated, getVariants, getWork } from "@/lib/queries";
+import { getMoreBy, getRelated, getVariants, getWork } from "@/lib/queries";
 import { categoryLabel, compact, langLabel, tagHref, timeAgo, workHref } from "@/lib/format";
 import { cdn } from "@/lib/cdn";
 import { cleanDescription } from "@/lib/text";
 import { idParam } from "@/lib/url";
 import { findRedirect } from "@/lib/redirects";
-import { breadcrumbLd, hreflangFor, ldJson, socialMeta, workDescription, workLd, workTitle, type WorkForSeo } from "@/lib/seo";
+import { breadcrumbLd, hreflangFor, ldJson, socialMeta, titleCase, workDescription, workLd, workTitle, type WorkForSeo } from "@/lib/seo";
 import { CoverImage } from "@/components/work/CoverImage";
 import { ChapterList } from "@/components/work/ChapterList";
+import { DownloadChapter } from "@/components/work/DownloadChapter";
 import { FavoriteButton, ReadButton, ReportLink, ShareButton, ViewPing } from "@/components/work/Actions";
 import { ScrollRow } from "@/components/work/ScrollRow";
 import { WorkCard } from "@/components/work/WorkCard";
@@ -77,7 +78,7 @@ export default async function WorkPage({ params }: { params: Params }) {
   if (decodeURIComponent(ref) !== `${w.publicId}-${w.slug || "work"}`) permanentRedirect(workHref(w));
 
   const prefs = await currentPrefs();
-  const [variants, related] = await Promise.all([getVariants(w.translationGroupId, w.id), getRelated(w, prefs)]);
+  const [variants, related, moreBy] = await Promise.all([getVariants(w.translationGroupId, w.id), getRelated(w, prefs), getMoreBy(w, prefs)]);
   const chapterNumbers = w.chapters.map((c) => c.number);
   const cover = cdn(w.coverKey);
   const artists = (w.byType.ARTIST ?? []).map((t) => t.name);
@@ -117,13 +118,19 @@ export default async function WorkPage({ params }: { params: Params }) {
               <li className="inline-flex items-center gap-1.5"><Layers className="h-4 w-4" /> {categoryLabel(w.category)}</li>
               <li className="inline-flex items-center gap-1.5"><FileText className="h-4 w-4" /> {w.pageCount} pages</li>
               <li className="inline-flex items-center gap-1.5"><CalendarDays className="h-4 w-4" /> Added {timeAgo(w.createdAt)}</li>
+              {w.srcRating != null && w.srcVotes > 0 && (
+                <li className="inline-flex items-center gap-1.5" title="Rating from readers on the source site">
+                  <Star className="h-4 w-4 text-warn" /> {w.srcRating.toFixed(1)}/10 <span className="text-xs">({compact(w.srcVotes)} votes)</span>
+                </li>
+              )}
             </ul>
           </header>
 
           <div className="flex flex-wrap items-stretch justify-center gap-2.5 lg:justify-start">
             <ReadButton publicId={w.publicId} chapters={chapterNumbers} />
-            <FavoriteButton publicId={w.publicId} />
+            <FavoriteButton publicId={w.publicId} count={w.favorites} />
             <ShareButton title={w.title} />
+            {w.chapters.length === 1 && <DownloadChapter publicId={w.publicId} slug={w.slug} chapter={w.chapters[0].number} />}
             <ReportLink publicId={w.publicId} />
           </div>
 
@@ -168,9 +175,22 @@ export default async function WorkPage({ params }: { params: Params }) {
             </section>
           )}
 
-          {w.chapters.length > 1 && <ChapterList publicId={w.publicId} chapters={w.chapters} />}
+          {w.chapters.length > 1 && <ChapterList publicId={w.publicId} slug={w.slug} chapters={w.chapters} />}
         </div>
       </div>
+
+      {moreBy.map(({ tag, items }) => (
+        <section key={tag.id} className="pt-14" aria-label={`More from ${tag.name}`}>
+          <SectionHeader title={`More from ${titleCase(tag.name)}`} href={tagHref(tag.type.toLowerCase(), tag.slug)} label={`All by ${titleCase(tag.name)}`} />
+          <ScrollRow label={`More from ${tag.name}`}>
+            {items.map((r, i) => (
+              <li key={r.publicId}>
+                <WorkCard work={r} index={i} />
+              </li>
+            ))}
+          </ScrollRow>
+        </section>
+      ))}
 
       {related.length > 0 && (
         <section className="pt-14" aria-label="Related">

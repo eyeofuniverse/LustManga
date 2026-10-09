@@ -130,6 +130,7 @@ const mustNot: [string, string, string?][] = [
   ["a page far down a list", "/browse?page=40"],
   ["reader", `/read/${SERIES}/1`],
   ["favorites", "/favorites"],
+  ["following", "/following"],
   ["history", "/history"],
   ["settings", "/settings"],
   ["report form", "/report-content"],

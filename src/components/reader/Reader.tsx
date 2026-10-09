@@ -4,13 +4,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft, BookOpen, ChevronLeft, ChevronRight, Hand, Maximize2, Minimize2, MousePointerClick, RotateCcw, RotateCw, ScrollText, Settings2, Sparkles, X, ZoomIn, ZoomOut,
+  ArrowLeft, BookOpen, ChevronLeft, ChevronRight, Hand, Maximize2, Minimize2, MousePointerClick, Pause, Play, RotateCcw, RotateCw, ScrollText, Settings2, Sparkles, X, ZoomIn, ZoomOut,
 } from "lucide-react";
 import { DEFAULT_READER, recordProgress, useReaderPrefs } from "@/lib/library";
 import { readHref, workHref } from "@/lib/format";
 import { buildSlides, isLongStrip, pageOfSlide, slideOfPage, wantsSpread } from "@/lib/spreads";
 import { BookStage, type BookHandle } from "./BookStage";
 import type { ReaderPage } from "./types";
+import { DownloadChapter } from "@/components/work/DownloadChapter";
 
 export type { ReaderPage };
 interface Props {
@@ -28,6 +29,17 @@ const BEFORE = 6;
 const AFTER = 18;
 const HINT_KEY = "lm:reader-hint";
 
+/** what sits behind the pages, by the "Background" setting */
+const BACKGROUNDS: Record<string, string> = {
+  black: "radial-gradient(120% 90% at 50% 40%, #1b1b24 0%, #0a0a0e 70%, #050507 100%)",
+  gray: "#2b2b33",
+  sepia: "#efe3c8",
+  white: "#f4f4f6",
+};
+/** auto-play: how long each page stays in book mode (ms), and how fast the page scrolls in scroll mode (px/s) */
+const AUTO_TURN_MS = { 1: 12_000, 2: 6_000, 3: 3_000 } as const;
+const AUTO_SCROLL_PX = { 1: 40, 2: 90, 3: 170 } as const;
+
 export function Reader({ work, chapter, pages, prev, next, chapters, startPage }: Props) {
   const router = useRouter();
   const total = pages.length;
@@ -37,7 +49,8 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
   const scrollMode = prefs.mode === "scroll" || (prefs.mode === "auto" && strip);
   const [vp, setVp] = useState({ w: 0, h: 0 });
   const spread = !scrollMode && prefs.spread === "auto" && wantsSpread(vp.w, vp.h);
-  const slides = useMemo(() => buildSlides(pages, spread), [pages, spread]);
+  const slides = useMemo(() => buildSlides(pages, spread, prefs.coverAlone), [pages, spread, prefs.coverAlone]);
+  const [playing, setPlaying] = useState(false);
 
   const [page, setPage] = useState(Math.min(Math.max(startPage, 1), total + 1));
   const [ui, setUi] = useState(true);
@@ -236,6 +249,44 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
     return () => window.removeEventListener("scroll", onScroll);
   }, [scrollMode]);
 
+  /* ───────── auto-play: turns the page every few seconds, or scrolls on its own ───────── */
+  useEffect(() => setPlaying(false), [scrollMode]);
+  useEffect(() => {
+    if (!playing || scrollMode || sheet || hint || zoomed) return;
+    if (slideIdx >= slides.length - 1) return setPlaying(false); // reached the end card
+    // each turn restarts this timer (slideIdx changes), so turning by hand simply postpones the next automatic one
+    const t = setTimeout(() => book.current?.go(1, false), AUTO_TURN_MS[prefs.autoSpeed]);
+    return () => clearTimeout(t);
+  }, [playing, scrollMode, sheet, hint, zoomed, slideIdx, slides.length, prefs.autoSpeed]);
+  useEffect(() => {
+    if (!playing || !scrollMode || sheet) return;
+    const pxPerSecond = AUTO_SCROLL_PX[prefs.autoSpeed];
+    let raf = 0;
+    let last = performance.now();
+    let carry = 0;
+    const tick = (now: number) => {
+      carry += (pxPerSecond * (now - last)) / 1000;
+      last = now;
+      const step = Math.floor(carry);
+      if (step >= 1) {
+        carry -= step;
+        window.scrollBy(0, step);
+      }
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) return setPlaying(false);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    // taking over with the wheel or a finger hands control back
+    const stop = () => setPlaying(false);
+    window.addEventListener("wheel", stop, { passive: true });
+    window.addEventListener("touchstart", stop, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("wheel", stop);
+      window.removeEventListener("touchstart", stop);
+    };
+  }, [playing, scrollMode, sheet, prefs.autoSpeed]);
+
   /* ───────── keyboard ───────── */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -268,6 +319,7 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
       else if (e.key === "f") toggleFull();
       else if (e.key === "m") set({ mode: scrollMode ? "book" : "scroll" });
       else if (e.key === "z" && !scrollMode) book.current?.toggleZoom();
+      else if (e.key === "p") setPlaying((p) => !p);
       else if (e.key === "s") setSheet((s) => !s);
       else if (e.key === "Escape") setSheet(false);
       else if (e.key === "[") goChapter(prev);
@@ -293,7 +345,7 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
   const endCard = <EndCard work={work} chapter={chapter.number} next={next} prev={prev} onNext={() => goChapter(next)} />;
 
   return (
-    <div data-theme="dark" className="min-h-dvh bg-black text-white" style={{ ["--reader-dim" as string]: String(1 - prefs.dim / 100) }}>
+    <div data-theme="dark" className="min-h-dvh text-white" style={{ ["--reader-dim" as string]: String(1 - prefs.dim / 100), background: scrollMode ? (prefs.bg === "black" ? "#000" : BACKGROUNDS[prefs.bg]) : "#000" }}>
       <h1 className="sr-only">
         {work.title}
         {chapters.length > 1 ? `, chapter ${chapter.number}` : ""}
@@ -314,6 +366,9 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
               {chapters.length > 1 ? `Chapter ${chapter.number}${chapter.title ? ` · ${chapter.title}` : ""}` : "One-shot"} · page {label}/{total}
             </p>
           </div>
+          <button type="button" onClick={() => setPlaying((p) => !p)} className="btn-icon !text-white/80 hover:!bg-white/10" aria-pressed={playing} aria-label={playing ? "Pause auto-play" : scrollMode ? "Start auto-scroll" : "Start auto-play"} title="Auto-play (P)">
+            {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+          </button>
           {!scrollMode && (
             <button type="button" onClick={() => book.current?.toggleZoom()} className="btn-icon !text-white/80 hover:!bg-white/10" aria-label={zoomed ? "Reset zoom" : "Zoom in"} title="Zoom (Z)">
               {zoomed ? <ZoomOut className="h-5 w-5" /> : <ZoomIn className="h-5 w-5" />}
@@ -378,6 +433,7 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
           index={slideIdx}
           rtl={prefs.rtl}
           brightness={1 - prefs.dim / 100}
+          background={BACKGROUNDS[prefs.bg]}
           endCard={endCard}
           onIndex={(i) => {
             setPage(pageOfSlide(slides, i, total));
@@ -473,6 +529,11 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
                 <Group label="Two-page spreads">
                   <Seg value={prefs.spread} onChange={(v) => set({ spread: v })} options={[{ v: "auto", l: "On wide screens" }, { v: "off", l: "Off" }]} />
                 </Group>
+                {prefs.spread === "auto" && (
+                  <Group label="First page">
+                    <Seg value={prefs.coverAlone ? "alone" : "paired"} onChange={(v) => set({ coverAlone: v === "alone" })} options={[{ v: "alone", l: "On its own (cover)" }, { v: "paired", l: "Paired with page 2" }]} />
+                  </Group>
+                )}
               </>
             )}
             {scrollMode && (
@@ -480,6 +541,13 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
                 <input type="range" min={480} max={1400} step={20} value={prefs.width} onChange={(e) => set({ width: Number(e.target.value) })} className="h-11 w-full accent-[rgb(var(--accent))]" aria-label="Page width" />
               </Group>
             )}
+            <Group label="Background">
+              <Seg value={prefs.bg} onChange={(v) => set({ bg: v })} options={[{ v: "black", l: "Black" }, { v: "gray", l: "Gray" }, { v: "sepia", l: "Sepia" }, { v: "white", l: "White" }]} />
+            </Group>
+            <Group label="Auto-play speed">
+              <Seg value={String(prefs.autoSpeed)} onChange={(v) => set({ autoSpeed: Number(v) as 1 | 2 | 3 })} options={[{ v: "1", l: "Slow" }, { v: "2", l: "Medium" }, { v: "3", l: "Fast" }]} />
+              <p className="text-xs text-white/50">{scrollMode ? "Scrolls by itself. Touch or scroll to take over." : "Turns the page for you. Press P to start or pause."}</p>
+            </Group>
             <Group label={`Dim: ${prefs.dim}%`}>
               <input type="range" min={0} max={70} step={5} value={prefs.dim} onChange={(e) => set({ dim: Number(e.target.value) })} className="h-11 w-full accent-[rgb(var(--accent))]" aria-label="Dim" />
             </Group>
@@ -494,11 +562,14 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
                 </select>
               </Group>
             )}
+            <Group label="Offline">
+              <DownloadChapter publicId={work.publicId} slug={work.slug} chapter={chapter.number} pages={pages} title={work.title} label="Download this chapter (CBZ)" />
+            </Group>
             <button className="btn-ghost w-full !text-white/60" onClick={() => { set(DEFAULT_READER); try { localStorage.removeItem(HINT_KEY); } catch { /* ignore */ } }}>
               <RotateCcw className="h-4 w-4" /> Reset to defaults
             </button>
             <p className="hidden text-xs leading-relaxed text-white/45 sm:block">
-              Keys: arrows turn pages, <kbd>Space</kbd> next, <kbd>Z</kbd> zoom, <kbd>M</kbd> mode, <kbd>F</kbd> fullscreen, <kbd>[</kbd> <kbd>]</kbd> chapters, <kbd>S</kbd> settings. The mouse wheel turns pages too.
+              Keys: arrows turn pages, <kbd>Space</kbd> next, <kbd>Z</kbd> zoom, <kbd>P</kbd> auto-play, <kbd>M</kbd> mode, <kbd>F</kbd> fullscreen, <kbd>[</kbd> <kbd>]</kbd> chapters, <kbd>S</kbd> settings. The mouse wheel turns pages too.
             </p>
           </div>
         </div>
@@ -521,8 +592,8 @@ function Tip({ icon, title, body }: { icon: React.ReactNode; title: string; body
 
 function EndCard({ work, chapter, next, prev, onNext }: { work: Props["work"]; chapter: number; next: number | null; prev: number | null; onNext: () => void }) {
   return (
-    <div className="mx-auto max-w-sm px-6 py-24 text-center">
-      <div className="space-y-5">
+    <div className="mx-auto my-16 max-w-sm px-6 text-center">
+      <div className="space-y-5 rounded-3xl bg-neutral-900/90 px-6 py-10 text-white shadow-2xl ring-1 ring-white/10 backdrop-blur">
         <p className="font-display text-sm font-bold uppercase tracking-[0.18em] text-accent">{next != null ? `End of chapter ${chapter}` : "The end"}</p>
         <h2 className="font-display text-2xl font-extrabold leading-tight">{next != null ? "Keep going?" : "You reached the last page"}</h2>
         <div className="flex flex-col gap-2.5">

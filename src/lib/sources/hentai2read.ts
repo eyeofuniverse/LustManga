@@ -1,4 +1,5 @@
 import { Http, UA } from "@/lib/http";
+import { parseH2rStats, type SourceStats } from "@/lib/sources/stats";
 
 export const SITE = "hentai2read";
 const BASE = "https://hentai2read.com";
@@ -41,6 +42,8 @@ export async function listSlugs(mode: "popular" | "recent", page: number): Promi
 
 export interface H2RWork {
   slug: string;
+  /** views, bookmarks and the rating shown on the page */
+  stats: SourceStats;
   title: string;
   pages: number;
   views: number;
@@ -83,6 +86,7 @@ export async function getWork(slug: string): Promise<H2RWork | null> {
 
   return {
     slug,
+    stats: parseH2rStats(page),
     title,
     pages: num(rows["Page"]?.[0]),
     views: num(rows["View"]?.[0]),
@@ -125,4 +129,10 @@ export async function downloadImage(url: string, referer = BASE + "/"): Promise<
     await sleep(600 * (i + 1));
   }
   throw lastErr instanceof Error ? lastErr : new Error("download failed");
+}
+
+/** Just the counters on a work's page, for the signals refresh. null if the work is gone. */
+export async function getPageStats(slug: string): Promise<SourceStats | null> {
+  const page = await html(`/${slug}/`);
+  return page ? parseH2rStats(page) : null;
 }

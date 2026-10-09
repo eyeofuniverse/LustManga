@@ -13,6 +13,7 @@ import { FilterBar } from "@/components/work/FilterBar";
 import { EmptyState, WorkGrid } from "@/components/work/WorkCard";
 import { Pagination } from "@/components/work/Pagination";
 import { PageHeading } from "@/components/work/Section";
+import { AdvancedSearch } from "@/components/site/AdvancedSearch";
 
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }): Promise<Metadata> {
   const q = flatParams(await searchParams).q?.trim();
@@ -42,6 +43,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       <div className="container-x max-w-3xl py-6 sm:py-10">
         <PageHeading title="Search" sub="Titles, tags, artists, parodies and more" />
         {form}
+        <AdvancedSearch initialQ={q} params={sp} />
         <Link href="/search/help" className="mb-8 inline-flex items-center gap-2 text-sm font-semibold text-accent hover:underline">
           <HelpCircle className="h-4 w-4" /> How to write advanced searches
         </Link>
@@ -82,6 +84,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
     <div className="container-x py-6 sm:py-10">
       <PageHeading title={`Results for "${q}"`} sub={noMatch ? undefined : `${total.n.toLocaleString()}${total.capped ? "+" : ""} works`} eyebrow="Search" />
       {form}
+        <AdvancedSearch initialQ={q} params={sp} />
       <FilterBar base="/search" params={sp} sort={f.sort} langs={f.langs} cats={f.cats} />
       <div className="mt-6 sm:mt-8">
         {items.length ? (

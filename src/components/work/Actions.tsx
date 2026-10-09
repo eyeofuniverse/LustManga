@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { BookOpen, Check, EyeOff, Flag, Heart, Link2, Play, Share2 } from "lucide-react";
-import { resumePoint, useFavorites, useHistory } from "@/lib/library";
-import { readHref } from "@/lib/format";
+import { useEffect, useRef, useState } from "react";
+import { BookOpen, Bell, BellRing, Check, EyeOff, Flag, Heart, Link2, Play, Share2 } from "lucide-react";
+import { MAX_FOLLOWS, resumePoint, useFavorites, useFollows, useHistory } from "@/lib/library";
+import { compact, readHref } from "@/lib/format";
 import { usePrefs } from "@/components/site/PrefsProvider";
 
 /** Start reading, or pick up where the visitor left off (the next chapter if they finished one, the beginning if they finished it all). */
@@ -20,22 +20,36 @@ export function ReadButton({ publicId, chapters, className = "" }: { publicId: n
   );
 }
 
-export function FavoriteButton({ publicId, compact = false }: { publicId: number; compact?: boolean }) {
+/** Save / un-save. `count` is how many visitors have saved the work (from the server); this browser's own change is added on top. */
+export function FavoriteButton({ publicId, compact: small = false, count }: { publicId: number; compact?: boolean; count?: number }) {
   const { has, toggle } = useFavorites();
   // the server cannot know the saved state, so render "not saved" until mounted to avoid a hydration mismatch
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const wasOn = useRef(false);
+  useEffect(() => {
+    wasOn.current = has(publicId);
+    setMounted(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const on = mounted && has(publicId);
+  const shown = count == null ? null : Math.max(0, count + (on ? 1 : 0) - (wasOn.current ? 1 : 0));
+  const click = () => {
+    const next = !on;
+    toggle(publicId);
+    // the public counter; the visitor's own library never leaves the browser
+    fetch("/api/favorite", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: publicId, on: next }), keepalive: true }).catch(() => {});
+  };
   return (
     <button
       type="button"
-      onClick={() => toggle(publicId)}
+      onClick={click}
       aria-pressed={on}
-      aria-label={on ? "Remove from saved" : "Save to your library"}
-      className={`${compact ? "btn-icon bg-surface-2" : "btn-soft h-12"} ${on ? "!text-accent" : ""}`}
+      aria-label={`${on ? "Remove from saved" : "Save to your library"}${shown ? ` (${shown} saved)` : ""}`}
+      className={`${small ? "btn-icon bg-surface-2" : "btn-soft h-12"} ${on ? "!text-accent" : ""}`}
     >
       <Heart className={`h-5 w-5 transition ${on ? "scale-110 fill-current" : ""}`} />
-      {!compact && (on ? "Saved" : "Save")}
+      {!small && (on ? "Saved" : "Save")}
+      {!small && shown ? <span className="text-xs font-normal text-muted">{compact(shown)}</span> : null}
     </button>
   );
 }
@@ -72,6 +86,21 @@ export function ReportLink({ publicId }: { publicId: number }) {
       <Flag className="h-5 w-5" />
       <span className="hidden sm:inline">Report</span>
     </Link>
+  );
+}
+
+/** Follow a tag, artist, circle, parody or character: its new works appear on the Following page. */
+export function FollowButton({ id, type, slug, name }: { id: number; type: string; slug: string; name: string }) {
+  const { has, toggle, items } = useFollows();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const on = mounted && has(id);
+  const full = !on && items.length >= MAX_FOLLOWS;
+  return (
+    <button type="button" onClick={() => toggle({ id, type, slug, name })} disabled={full} aria-pressed={on} className={`btn-soft h-11 ${on ? "!text-accent" : "text-muted"}`} title={full ? `You can follow up to ${MAX_FOLLOWS}` : undefined}>
+      {on ? <BellRing className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
+      {on ? "Following" : "Follow"}
+    </button>
   );
 }
 

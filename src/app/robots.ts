@@ -17,7 +17,7 @@ export default function robots(): MetadataRoute.Robots {
         userAgent: "*",
         allow: "/",
         // "/search?" and "/search$" block the result pages and the empty search, but not /search/help
-        disallow: ["/api/", "/search?", "/search$", "/random", "/favorites", "/history", "/settings", "/report-content"],
+        disallow: ["/api/", "/search?", "/search$", "/random", "/favorites", "/history", "/following", "/settings", "/report-content"],
       },
     ],
     sitemap: `${SITE}/sitemap.xml`,

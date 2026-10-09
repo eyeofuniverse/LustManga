@@ -58,3 +58,9 @@ test("fitPage letterboxes inside the box and caps enlargement", () => {
   assert.equal(tiny.w, 250);
   assert.deepEqual(fitPage({ w: 0, h: 0 }, { w: 400, h: 900 }), { w: 400, h: 600 }); // unknown shape falls back to 2:3
 });
+
+test("spreads can pair from the first page when the cover is not on its own", () => {
+  assert.deepEqual(pagesOf(buildSlides(Array(6).fill(portrait), true, false)), ["1+2", "3+4", "5+6", "end"]);
+  assert.deepEqual(pagesOf(buildSlides(Array(5).fill(portrait), true, false)), ["1+2", "3+4", "5", "end"]);
+  assert.deepEqual(pagesOf(buildSlides(Array(4).fill(portrait), false, false)), ["1", "2", "3", "4", "end"]); // single-page mode ignores it
+});

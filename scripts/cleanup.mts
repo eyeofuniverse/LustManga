@@ -10,9 +10,11 @@ import { MAX_ATTEMPTS } from "../src/lib/ingest/shared";
 const days = (n: number) => new Date(Date.now() - n * 86_400_000);
 
 const runs = await prisma.ingestRun.deleteMany({ where: { startedAt: { lt: days(90) } } });
+const viewDays = await prisma.$executeRaw`DELETE FROM "WorkViewDay" WHERE day < (now() AT TIME ZONE 'utc')::date - 45`;
+const snapshots = await prisma.$executeRaw`DELETE FROM "SignalSnapshot" WHERE day < (now() AT TIME ZONE 'utc')::date - 45`;
 const logins = await prisma.adminLoginAttempt.deleteMany({ where: { createdAt: { lt: days(30) } } });
 const dups = await prisma.duplicateCandidate.deleteMany({ where: { status: { in: ["MERGED", "DISMISSED"] }, createdAt: { lt: days(30) } } });
-console.log(`retention: ${runs.count} old run(s), ${logins.count} login attempt(s), ${dups.count} resolved duplicate(s) removed`);
+console.log(`retention: ${runs.count} old run(s), ${viewDays} old daily view row(s), ${snapshots} old source snapshot(s), ${logins.count} login attempt(s), ${dups.count} resolved duplicate(s) removed`);
 
 // parked chapters (never got page data) may have partial objects; clear them once, then mark them cleaned
 const parked = await prisma.chapter.findMany({

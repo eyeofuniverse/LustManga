@@ -16,7 +16,7 @@ import { planSitemaps, TAGS_PER_SITEMAP, WORKS_PER_SITEMAP, type SitemapEntry } 
  * Every URL here is one a crawler is allowed to index: nothing noindex, nothing blocked, nothing redirected.
  */
 const HOURS = 3600;
-const STATIC_PAGES = ["/", "/browse", "/tags", "/artists", "/groups", "/parodies", "/characters", "/search/help", "/dmca", "/2257", "/privacy", "/terms"];
+const STATIC_PAGES = ["/", "/browse", "/updates", "/tags", "/artists", "/groups", "/parodies", "/characters", "/search/help", "/dmca", "/2257", "/privacy", "/terms"];
 const LIST_TYPES = ["TAG", "ARTIST", "GROUP", "PARODY", "CHARACTER"] as const;
 
 const VISIBLE_WORK = Prisma.sql`publish = 'PUBLISHED' AND "coverKey" IS NOT NULL AND "pageCount" > 0`;

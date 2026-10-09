@@ -114,3 +114,56 @@ export const normText = (s: string) =>
 /** Nothing to match on. A query of only punctuation ("!!!") normalises to nothing and counts as empty. */
 export const isEmptyQuery = (p: ParsedQuery) =>
   !p.text.some((t) => normText(t)) && !p.excludeText.some((t) => normText(t)) && !p.terms.length && !p.pages.length && !p.uploaded.length;
+
+/* ───────────────────────── the advanced-search form <-> the query string ───────────────────────── */
+
+/** What the advanced-search form edits. Each field maps to a piece of the search syntax above. */
+export interface SearchForm {
+  words: string;
+  include: { field: Field; value: string }[];
+  exclude: { field: Field; value: string }[];
+  pagesMin?: number;
+  pagesMax?: number;
+  /** "uploaded within": days, e.g. 7 for the last week */
+  withinDays?: number;
+}
+
+export const emptyForm = (): SearchForm => ({ words: "", include: [], exclude: [] });
+
+const quote = (v: string) => (/[\s"]/.test(v) ? `"${v.replace(/"/g, "")}"` : v);
+
+/** The query string for a form, in the syntax the search page parses. */
+export function buildQuery(f: SearchForm): string {
+  const parts: string[] = [];
+  const words = f.words.trim().replace(/\s+/g, " ");
+  if (words) parts.push(words);
+  for (const t of f.include) parts.push(`${t.field}:${quote(t.value)}`);
+  for (const t of f.exclude) parts.push(`-${t.field}:${quote(t.value)}`);
+  const lo = f.pagesMin && f.pagesMin > 0 ? Math.floor(f.pagesMin) : undefined;
+  const hi = f.pagesMax && f.pagesMax > 0 ? Math.floor(f.pagesMax) : undefined;
+  if (lo !== undefined && hi !== undefined && lo === hi) parts.push(`pages:${lo}`);
+  else {
+    if (lo !== undefined) parts.push(`pages:>=${lo}`);
+    if (hi !== undefined) parts.push(`pages:<=${hi}`);
+  }
+  if (f.withinDays && f.withinDays > 0) parts.push(`uploaded:<${Math.floor(f.withinDays)}d`);
+  return parts.join(" ");
+}
+
+/** The form for an existing query, so the panel opens showing what is already being searched. */
+export function formFromQuery(q: string): SearchForm {
+  const p = parseQuery(q);
+  const form = emptyForm();
+  form.words = p.text.join(" ");
+  for (const t of p.terms) (t.neg ? form.exclude : form.include).push({ field: t.field, value: t.value });
+  for (const c of p.pages) {
+    if (c.op === ">=") form.pagesMin = c.n;
+    else if (c.op === ">") form.pagesMin = c.n + 1;
+    else if (c.op === "<=") form.pagesMax = c.n;
+    else if (c.op === "<") form.pagesMax = Math.max(1, c.n - 1);
+    else form.pagesMin = form.pagesMax = c.n;
+  }
+  const within = p.uploaded.find((c) => c.op === "<" || c.op === "<=");
+  if (within) form.withinDays = within.n;
+  return form;
+}

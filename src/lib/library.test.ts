@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isFinished, resumePoint, type HistoryEntry } from "./library";
+import { isFinished, parseBackup, resumePoint, type HistoryEntry } from "./library";
 
 const h = (ch: number, page: number, total: number): HistoryEntry => ({ id: 1, ch, page, total, at: 0, done: [ch] });
 const chapters = [1, 2, 3];
@@ -31,4 +31,28 @@ test("finishing the last chapter offers to read again from the beginning", () =>
 
 test("history for a chapter that no longer exists falls back to the start", () => {
   assert.deepEqual(resumePoint(h(9, 5, 30), chapters), { ch: 1, kind: "start" });
+});
+
+test("a backup is validated field by field and never trusted", () => {
+  const good = JSON.stringify({
+    v: 1, at: 5, fav: [1, 2, -3, "x", 99999999999, 4], follow: [{ id: 7, type: "artist", slug: "a", name: "A" }, { id: 8, type: "", slug: "b", name: "B" }, { nope: 1 }],
+    history: [{ id: 1, ch: 2, page: 5, total: 30, at: 10, done: [1, 2, "x"] }, { id: "bad" }, { id: 2 }],
+    reader: { mode: "scroll", rtl: true, spread: "off", width: 99999, dim: -5, hax: 1 }, prefs: { langs: ["en", "../x", "ja"], hide: [{ id: 3, name: "n" }, { id: 0, name: "z" }] },
+  });
+  const b = parseBackup(good)!;
+  assert.deepEqual(b.fav, [1, 2, 4]);
+  assert.deepEqual(b.follow, [{ id: 7, type: "artist", slug: "a", name: "A" }]);
+  assert.equal(b.history.length, 2);
+  assert.deepEqual(b.history[0].done, [1, 2]);
+  assert.deepEqual(b.history[1], { id: 2, ch: 1, page: 1, total: 1, at: 0, done: [] });
+  assert.deepEqual(b.reader, { mode: "scroll", rtl: true, spread: "off", width: 1400, dim: 0 });
+  assert.deepEqual(b.prefs, { langs: ["en", "ja"], hide: [{ id: 3, name: "n" }] });
+});
+
+test("a file that is not a backup is refused", () => {
+  assert.equal(parseBackup("not json"), null);
+  assert.equal(parseBackup("[]"), null);
+  assert.equal(parseBackup(JSON.stringify({ v: 2 })), null);
+  assert.equal(parseBackup("x".repeat(2_000_001)), null);
+  assert.deepEqual(parseBackup(JSON.stringify({ v: 1 }))?.fav, []);
 });

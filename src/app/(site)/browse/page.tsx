@@ -11,6 +11,7 @@ import { EmptyState, WorkGrid } from "@/components/work/WorkCard";
 import { Pagination } from "@/components/work/Pagination";
 import { breadcrumbLd, itemListLd, ldJson, listingMetadata } from "@/lib/seo";
 import { PageHeading } from "@/components/work/Section";
+import { SORT_OPTIONS } from "@/lib/sorts";
 
 export const generateMetadata = ({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }): Promise<Metadata> =>
   listingMetadata({
@@ -40,7 +41,7 @@ export default async function Browse({ searchParams }: { searchParams: Promise<R
   return (
     <div className="container-x py-6 sm:py-10">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: ldJson(ld) }} />
-      <PageHeading title="Browse" sub={total.n ? `${total.n.toLocaleString()}${total.capped ? "+" : ""} works` : undefined} eyebrow={f.sort === "new" ? "Newest first" : "Most popular first"} />
+      <PageHeading title="Browse" sub={total.n ? `${total.n.toLocaleString()}${total.capped ? "+" : ""} works` : undefined} eyebrow={SORT_OPTIONS.find((o) => o.value === f.sort)?.hint} />
       <FilterBar base="/browse" params={sp} sort={f.sort} langs={f.langs} cats={f.cats} />
       <div className="mt-6 sm:mt-8">
         {items.length ? (

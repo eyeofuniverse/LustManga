@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { ArrowDownUp, Check, Play } from "lucide-react";
 import { isFinished, useHistory } from "@/lib/library";
 import { readHref } from "@/lib/format";
+import { DownloadChapter } from "./DownloadChapter";
 
 interface Ch {
   number: number;
@@ -14,7 +15,7 @@ interface Ch {
 }
 
 /** Chapter list with read marks, "continue here" highlight, newest/oldest toggle and a jump box for long series. */
-export function ChapterList({ publicId, chapters }: { publicId: number; chapters: Ch[] }) {
+export function ChapterList({ publicId, slug, chapters }: { publicId: number; slug: string; chapters: Ch[] }) {
   const { byId } = useHistory();
   const h = byId(publicId);
   const [desc, setDesc] = useState(chapters.length > 12);
@@ -56,10 +57,10 @@ export function ChapterList({ publicId, chapters }: { publicId: number; chapters
           const isCurrent = h?.ch === c.number;
           const read = !!h?.done.includes(c.number) && !isCurrent;
           return (
-            <li key={c.number}>
+            <li key={c.number} className="relative">
               <Link
                 href={readHref(publicId, c.number, isCurrent && h && !isFinished(h) ? h.page : undefined)}
-                className={`flex min-h-[56px] items-center gap-3 px-4 py-3 transition hover:bg-surface-2 ${isCurrent ? "bg-accent/10" : ""}`}
+                className={`flex min-h-[56px] items-center gap-3 py-3 pl-4 pr-16 transition hover:bg-surface-2 ${isCurrent ? "bg-accent/10" : ""}`}
               >
                 <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg text-xs font-bold ${isCurrent ? "bg-accent-fill text-white" : read ? "bg-good/15 text-good" : "bg-surface-2 text-muted"}`}>
                   {isCurrent ? <Play className="h-4 w-4 fill-current" /> : read ? <Check className="h-4 w-4" /> : c.number}
@@ -76,6 +77,9 @@ export function ChapterList({ publicId, chapters }: { publicId: number; chapters
                   </span>
                 </span>
               </Link>
+              <span className="absolute right-2 top-1/2 -translate-y-1/2">
+                <DownloadChapter publicId={publicId} slug={slug} chapter={c.number} title={`Chapter ${c.number}`} variant="icon" label={`Download chapter ${c.number}`} />
+              </span>
             </li>
           );
         })}

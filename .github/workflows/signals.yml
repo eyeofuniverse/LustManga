@@ -1,0 +1,52 @@
+name: Refresh source signals
+# What the SOURCE sites say about our works (MangaDex followers and ratings, Hitomi's popular-today / this-week /
+# this-month charts, and the favourites / ratings / upload times on each work's own page at Hentai2Read, HentaiFox,
+# HentaiEra, AsmHentai and nhentai.xxx) decides Popular, Trending and Top rated, so a site with few readers of its
+# own still ranks sensibly. Safe to re-run: it only overwrites with fresh figures.
+on:
+  workflow_dispatch:
+    inputs:
+      sources:
+        description: "comma list of: mangadex, hitomi, stats (blank = all)"
+        default: ""
+      stats_minutes:
+        description: "time budget for the per-work page reads (stats only)"
+        default: "40"
+      stats_limit:
+        description: "works per site to read per run, stalest first (stats only)"
+        default: "3000"
+  schedule:
+    - cron: "17 */6 * * *" # MangaDex and Hitomi: a handful of requests, so every six hours
+    - cron: "47 3 * * *" # everything, including each work's own page on the five clone sites (stalest first, time-boxed)
+concurrency:
+  group: signals
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Write .env
+        run: |
+          {
+            echo "DATABASE_URL=${{ secrets.DATABASE_URL }}"
+            echo "DB_RETRY_ATTEMPTS=12"
+            echo "DIRECT_URL=${{ secrets.DIRECT_URL }}"
+          } > .env
+      - run: npx prisma generate
+      - name: Refresh
+        run: |
+          SOURCES="${{ github.event.inputs.sources }}"
+          if [ -z "$SOURCES" ]; then
+            case "${{ github.event.schedule }}" in
+              "17 */6 * * *") SOURCES=mangadex,hitomi ;;
+              *) SOURCES=mangadex,hitomi,stats ;;
+            esac
+          fi
+          npm run signals -- --sources=$SOURCES --stats-minutes=${{ github.event.inputs.stats_minutes || '40' }} --stats-limit=${{ github.event.inputs.stats_limit || '3000' }}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { withQuery } from "@/lib/url";
+import { PageJump } from "./PageJump";
 
 /**
  * Prev / next with page numbers when the total is known. Server-rendered links, so it works without JavaScript and
@@ -35,7 +36,7 @@ export function Pagination({
 
   const arrow = "btn-soft h-11 w-11 !min-h-0 !p-0";
   return (
-    <nav aria-label="Pagination" className="mt-10 flex flex-wrap items-center justify-center gap-2">
+    <nav aria-label="Pagination" className="mt-10 flex flex-wrap items-center justify-center gap-x-2 gap-y-4">
       {page > 1 ? (
         <Link href={href(page - 1)} rel="prev" className={arrow} aria-label="Previous page">
           <ChevronLeft className="h-5 w-5" />
@@ -83,6 +84,11 @@ export function Pagination({
         <span className={`${arrow} opacity-40`} aria-hidden="true">
           <ChevronRight className="h-5 w-5" />
         </span>
+      )}
+      {totalPages && totalPages > 7 && (
+        <div className="ml-2">
+          <PageJump base={base} params={params} totalPages={totalPages} page={page} />
+        </div>
       )}
     </nav>
   );

@@ -151,3 +151,7 @@ export const categoryFor = (type: string) =>
     gamecg: "GAME_CG",
     imageset: "IMAGE_SET",
   }) as Record<string, string>)[type] ?? "OTHER";
+
+/** Hitomi's own charts: the most popular galleries today, this week, this month and this year, per language. */
+export type HitomiWindow = "today" | "week" | "month" | "year";
+export const windowPath = (window: HitomiWindow, lang: string) => `popular/${window}-${LANGUAGES[lang]}.nozomi`;

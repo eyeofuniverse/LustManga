@@ -1,4 +1,5 @@
 import { Http, UA } from "@/lib/http";
+import { parseImStats, type SourceStats } from "@/lib/sources/stats";
 
 /**
  * One adapter for the family of nhentai-style sites that share an engine: hentaifox, hentaiera and
@@ -74,6 +75,11 @@ const decode = (s: string) =>
 export async function listIds(cfg: SiteCfg, mode: "popular" | "recent", lang: string | null, page: number): Promise<string[] | null> {
   const url = cfg.listUrl(mode, lang, page);
   if (!url) return null; // this site has no such listing
+  return listIdsAt(cfg, url);
+}
+
+/** Gallery ids on whatever listing page lives at `url` (a path on the site), in the order shown. */
+export async function listIdsAt(cfg: SiteCfg, url: string): Promise<string[]> {
   const body = await html(cfg, url);
   if (!body) return [];
   const re = new RegExp(`href="${cfg.galleryPath.replace(/\//g, "\\/")}(\\d+)\\/"`, "g");
@@ -93,6 +99,8 @@ export interface IMGallery {
   categories: string[];
   /** full-size image URL per page, in order */
   images: string[];
+  /** what the page says about the work's popularity: saves, likes, upload time */
+  stats: SourceStats;
 }
 
 const EXT: Record<string, string> = { j: "jpg", p: "png", g: "gif", w: "webp", b: "bmp" };
@@ -160,7 +168,14 @@ export function parseGallery(cfg: SiteCfg, id: string, page: string): IMGallery 
     id, title, pages, images,
     tags: list("tag"), artists: list("artist"), groups: list("group"), parodies: list("parody").filter((p) => p.toLowerCase() !== "original"),
     characters: list("character"), languages: list("language"), categories: list("category"),
+    stats: parseImStats(page),
   };
+}
+
+/** Just the counters on a gallery's page (no images, no tags): what the signals refresh reads. null if the gallery is gone. */
+export async function getPageStats(cfg: SiteCfg, id: string): Promise<SourceStats | null> {
+  const page = await html(cfg, `${cfg.galleryPath}${id}/`);
+  return page ? parseImStats(page) : null;
 }
 
 export async function downloadImage(cfg: SiteCfg, url: string): Promise<Buffer> {
@@ -206,4 +221,14 @@ export const categoryFor = (cats: string[]) => {
   if (c.includes("imageset")) return "IMAGE_SET";
   if (c.includes("western")) return "WESTERN";
   return "OTHER";
+};
+
+/**
+ * The site's "Popular" list for one language (a language slug such as "english"), page by page. All four sites have
+ * one, though only nhentai.xxx's was used by the ingest: the others are walked newest-first there. It is a single
+ * all-time ranking per language, with no today / week / month charts, so growth is read from how entries move.
+ */
+export const popularListUrl = (cfg: SiteCfg, lang: string, page: number): string => {
+  const base = `/language/${lang}/popular/`;
+  return cfg.name === "hentaifox" ? withPage(base, "path", page) : withPage(base, "query", page);
 };

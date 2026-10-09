@@ -151,3 +151,34 @@ export function titleFor(m: MdManga, lang: string): string {
   return (lang === "en" ? a.title.en : alt) ?? a.title.en ?? alt ?? first(a.title) ?? "Untitled";
 }
 export const descriptionFor = (m: MdManga, lang: string) => m.attributes.description[lang] ?? m.attributes.description.en ?? first(m.attributes.description) ?? null;
+
+export interface MdStats {
+  follows: number;
+  /** average rating, 0-10 (null when nobody has rated it) */
+  rating: number | null;
+  votes: number;
+}
+
+/** Followers and ratings for up to 100 titles in one request. */
+export async function stats(ids: string[]): Promise<Record<string, MdStats>> {
+  if (!ids.length) return {};
+  const q = ids.map((i) => `manga[]=${i}`).join("&");
+  type Raw = { follows?: number; rating?: { average?: number | null; distribution?: Record<string, number> } };
+  const r = await api.json<{ statistics: Record<string, Raw> }>(`${API}/statistics/manga?${q}`);
+  return Object.fromEntries(
+    Object.entries(r.statistics).map(([id, s]) => {
+      const votes = Object.values(s.rating?.distribution ?? {}).reduce((n, v) => n + (Number(v) || 0), 0);
+      return [id, { follows: s.follows ?? 0, rating: s.rating?.average ?? null, votes }];
+    }),
+  );
+}
+
+/**
+ * Adult titles added to MangaDex since `since` ("YYYY-MM-DDTHH:MM:SS", UTC), most followed first: its own idea of
+ * "popular new titles", which is the nearest thing it has to a trending chart.
+ */
+export async function listNewPopular(since: string, offset: number, limit = 100): Promise<{ data: { id: string }[]; total: number }> {
+  return api.json(
+    `${API}/manga?limit=${limit}&offset=${offset}&contentRating[]=pornographic&hasAvailableChapters=true&order[followedCount]=desc&createdAtSince=${since}`,
+  );
+}

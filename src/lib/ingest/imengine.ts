@@ -6,6 +6,7 @@ import { slug as slugify, upsertTags } from "@/lib/tags";
 import { attachSource, findDuplicate, findSimilar, normTitle, recordCandidate } from "@/lib/dedupe";
 import * as im from "@/lib/sources/imengine";
 import { LANGUAGES, langCode } from "@/lib/sources/hitomi";
+import { statsToFields } from "@/lib/signals";
 import {
   Budget,
   MAX_ATTEMPTS,
@@ -87,6 +88,7 @@ async function processGallery(id: string, seed: number, listLang: string | null,
       stats.duplicates++;
       return void o.log(`  duplicate of #${dup.publicId}, source attached (nothing downloaded)`);
     }
+    const stat = statsToFields(cfg.name, g.stats);
     const created = await db(() =>
       prisma.work.create({
         data: {
@@ -101,7 +103,10 @@ async function processGallery(id: string, seed: number, listLang: string | null,
           deferFetch: verdict.deferFetch,
           safetyVerdict: held ? "REVIEW" : "CLEAN",
           safetyReasons: verdict.reasons,
-          seedPopularity: seed,
+          // the page's own counters (saves, likes, upload time) from day one; a rank-based seed from the list still counts
+          ...stat,
+          seedPopularity: Math.max(seed, stat.seedPopularity ?? 0),
+          statsAt: new Date(),
           sources: { create: { site: cfg.name, externalId: id, url } },
         },
       }),

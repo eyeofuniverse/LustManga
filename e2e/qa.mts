@@ -50,6 +50,9 @@ const PAGES: [string, string][] = [
   ["work-oneshot", `/g/${ONESHOT}`],
   ["reader-book", `/read/${SERIES}/1`],
   ["reader-scroll", `/read/${SERIES}/1`],
+  ["updates", "/updates?lang=all"],
+  ["following", "/following"],
+  ["search-advanced", "/search?q=tag%3Aschool"],
   ["favorites", "/favorites"],
   ["history", "/history"],
   ["settings", "/settings"],
@@ -67,6 +70,7 @@ async function newContext(browser: import("playwright").Browser, vp: (typeof VIE
     deviceScaleFactor: 1,
     colorScheme: THEME === "light" ? "light" : "dark",
   });
+  await ctx.addCookies([{ name: "lm_nocount", value: "1", url: BASE }]); // never count QA visits as readers
   if (opts.age !== false) await ctx.addCookies([{ name: "lm_age", value: "1", url: BASE }]);
   await ctx.addInitScript((t) => { localStorage.setItem("lm:theme", t); localStorage.setItem("lm:reader-hint", "1"); }, THEME);
   if (!process.env.QA_NOROUTE) await ctx.route(`https://${CDN}/**`, (r) => r.fulfill({ status: 200, contentType: "image/png", body: placeholder, headers: { "cache-control": "public, max-age=3600" } }));

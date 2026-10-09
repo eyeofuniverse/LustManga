@@ -7,11 +7,16 @@ import { PAGE_SIZE } from "@/lib/site";
 import { normText, type NumCond, type Term } from "@/lib/search";
 import { slug as makeSlug } from "@/lib/tags";
 import type { Prefs } from "@/lib/prefs";
+import type { Sort } from "@/lib/sorts";
 import type { SuggestResult, TagLite, WorkCard } from "@/lib/types";
 
 /* ───────────────────────────── helpers ───────────────────────────── */
 
 /** The "Popular" ordering. This exact expression is indexed (see scripts/db-setup.mts). */
+/** a rating counts for the Top rated list once this many people have voted */
+const MIN_VOTES = 10;
+/** the rating pulled toward the typical 7/10 until many people have voted (the same formula as bayesianRating in lib/signals.ts) */
+const BAYES = Prisma.sql`((w."srcVotes"::float8 * w."srcRating" + 25 * 7) / (w."srcVotes" + 25))`;
 const POP = Prisma.sql`(w."seedPopularity" + w.views * 20 + w.favorites * 50)`;
 const CARD = Prisma.sql`w."publicId", w.slug, w.title, w.language, w.category::text AS category, w.kind::text AS kind, w."pageCount", w."coverKey", w."createdAt"`;
 
@@ -31,10 +36,18 @@ function cached<A extends unknown[], R>(name: string, seconds: number, fn: (...a
 
 /* ───────────────────────────── listing ───────────────────────────── */
 
+/** how many daily view buckets of OUR OWN readers each windowed sort adds on top of the source momentum (today's bucket counts) */
+const WINDOW_DAYS: Partial<Record<Sort, number>> = { trending: 2, week: 7, month: 30 };
+/** the momentum column each windowed sort reads: the source's chart position or growth (see lib/signals.ts) */
+const TREND_COLUMN: Partial<Record<Sort, Prisma.Sql>> = { trending: Prisma.sql`w."trendDay"`, week: Prisma.sql`w."trendWeek"`, month: Prisma.sql`w."trendMonth"` };
+
 export interface ListOpts {
-  sort?: "popular" | "new";
+  sort?: Sort;
   langs?: string[];
+  /** works that carry ALL of these tags */
   include?: number[];
+  /** works that carry ANY of these tags (a "following" feed) */
+  anyTags?: number[];
   exclude?: number[];
   categories?: string[];
   text?: string[];
@@ -49,8 +62,10 @@ export interface ListOpts {
 
 function where(o: ListOpts): Prisma.Sql {
   const c: Prisma.Sql[] = [Prisma.sql`w.publish = 'PUBLISHED'`, Prisma.sql`w."coverKey" IS NOT NULL`, Prisma.sql`w."pageCount" > 0`];
+  if (o.sort === "rated") c.push(Prisma.sql`w."srcRating" IS NOT NULL AND w."srcVotes" >= ${MIN_VOTES}`);
   if (o.langs?.length) c.push(Prisma.sql`w.language = ANY(${o.langs}::text[])`);
   if (o.include?.length) c.push(Prisma.sql`w."tagIds" @> ${o.include}::int[]`);
+  if (o.anyTags?.length) c.push(Prisma.sql`w."tagIds" && ${o.anyTags}::int[]`);
   if (o.exclude?.length) c.push(Prisma.sql`NOT (w."tagIds" && ${o.exclude}::int[])`);
   if (o.categories?.length) c.push(Prisma.sql`w.category::text = ANY(${o.categories}::text[])`);
   for (const t of o.text ?? []) {
@@ -74,13 +89,73 @@ function where(o: ListOpts): Prisma.Sql {
 export async function listWorks(o: ListOpts): Promise<{ items: WorkCard[]; hasNext: boolean }> {
   const size = o.pageSize ?? PAGE_SIZE;
   const page = Math.max(1, o.page ?? 1);
-  const order = o.sort === "new" ? Prisma.sql`w."createdAt" DESC, w.id DESC` : Prisma.sql`${POP} DESC, w.id DESC`;
+  const days = o.sort ? WINDOW_DAYS[o.sort] : undefined;
+  // windowed sorts rank by views in the last N days, with the all-time order breaking ties (and ordering a quiet window)
+  const join = days
+    ? Prisma.sql`LEFT JOIN (SELECT "workId", sum(views)::int AS v FROM "WorkViewDay" WHERE day > (now() AT TIME ZONE 'utc')::date - ${days}::int GROUP BY 1) wv ON wv."workId" = w.id`
+    : Prisma.empty;
+  const trend = o.sort ? TREND_COLUMN[o.sort] : undefined;
+  // a work the source charts do not mention at all takes a quarter of its all-time popularity (TREND_FALLBACK_DIVISOR in
+  // lib/signals.ts), so a work that is climbing a chart beats it, and among themselves they keep the all-time order.
+  // Our own readers' views in the window are added on top, so real traffic matters more as it arrives.
+  const order =
+    o.sort === "new"
+      ? Prisma.sql`w."createdAt" DESC, w.id DESC`
+      : o.sort === "saved"
+        ? Prisma.sql`w.favorites DESC, ${POP} DESC, w.id DESC`
+        : o.sort === "rated"
+          ? Prisma.sql`${BAYES} DESC, ${POP} DESC, w.id DESC`
+          : trend
+            ? Prisma.sql`(CASE WHEN ${trend} > 0 THEN ${trend} ELSE w."seedPopularity" / 4 END + coalesce(wv.v, 0) * 20) DESC, ${POP} DESC, w.id DESC`
+            : Prisma.sql`${POP} DESC, w.id DESC`;
   const rows = await db(() =>
     prisma.$queryRaw<WorkCard[]>(Prisma.sql`
-      SELECT ${CARD} FROM "Work" w WHERE ${where(o)}
+      SELECT ${CARD} FROM "Work" w ${join} WHERE ${where(o)}
       ORDER BY ${order} LIMIT ${size + 1} OFFSET ${(page - 1) * size}`),
   );
   return { items: rows.slice(0, size), hasNext: rows.length > size };
+}
+
+export interface UpdateCard extends WorkCard {
+  chapterNumber: number;
+  chapterAt: Date | string;
+}
+
+/**
+ * Series ordered by their newest chapter, one row per series: the "Latest updates" page. A chapter's date is when it
+ * was published upstream (so a backlog fetch does not make 25 old chapters look brand new), else when we stored it.
+ */
+export async function listUpdates(o: Pick<ListOpts, "langs" | "exclude" | "page" | "pageSize">): Promise<{ items: UpdateCard[]; hasNext: boolean }> {
+  const size = o.pageSize ?? PAGE_SIZE;
+  const page = Math.max(1, o.page ?? 1);
+  const rows = await db(() =>
+    prisma.$queryRaw<UpdateCard[]>(Prisma.sql`
+      SELECT ${CARD}, u.number AS "chapterNumber", u.at AS "chapterAt"
+      FROM (
+        SELECT DISTINCT ON (c."workId") c."workId", c.number, coalesce(c."publishedAt", c."createdAt") AS at
+        FROM "Chapter" c WHERE c.status = 'READY'
+        ORDER BY c."workId", coalesce(c."publishedAt", c."createdAt") DESC, c.number DESC
+      ) u
+      JOIN "Work" w ON w.id = u."workId"
+      WHERE ${where({ langs: o.langs, exclude: o.exclude })} AND w.kind = 'SERIES'
+      ORDER BY u.at DESC, w.id DESC LIMIT ${size + 1} OFFSET ${(page - 1) * size}`),
+  );
+  return { items: rows.slice(0, size), hasNext: rows.length > size };
+}
+
+/**
+ * "More by this artist / circle": other works that share the work's first artist and first circle, most popular
+ * first. Skips a tag that only this work carries.
+ */
+export async function getMoreBy(
+  work: { publicId: number; byType: Record<string, { id: number; name: string; slug: string; type: string; count: number }[]> },
+  prefs: Prefs,
+  take = 12,
+): Promise<{ tag: { id: number; name: string; slug: string; type: string }; items: WorkCard[] }[]> {
+  const f = prefFilters(prefs);
+  const picks = [work.byType.ARTIST?.[0], work.byType.GROUP?.[0]].filter((t): t is NonNullable<typeof t> => !!t && t.count > 1);
+  const rows = await Promise.all(picks.map((tag) => listWorks({ ...f, include: [tag.id], excludeId: work.publicId, sort: "popular", pageSize: take })));
+  return picks.map((tag, i) => ({ tag, items: rows[i].items })).filter((r) => r.items.length > 0);
 }
 
 /** Count, capped so a huge unfiltered list never becomes a full-table count. */

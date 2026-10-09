@@ -11,6 +11,8 @@ const COLS = [
       ["Manga", "/category/manga"],
       ["English", "/language/english"],
       ["Newest", "/browse?sort=new"],
+      ["Trending", "/browse?sort=week"],
+      ["Latest updates", "/updates"],
       ["Tags", "/tags"],
       ["Artists", "/artists"],
       ["Random", "/random"],

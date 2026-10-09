@@ -10,6 +10,8 @@ interface PrefsApi {
   toggleLang: (code: string) => void;
   hideTag: (tag: HiddenTag) => void;
   unhideTag: (id: number) => void;
+  /** replace both choices at once (restoring a backup) */
+  replaceAll: (prefs: Prefs) => void;
 }
 
 const Ctx = createContext<PrefsApi | null>(null);
@@ -36,6 +38,7 @@ export function PrefsProvider({ initial, children }: { initial: Prefs; children:
         save({ ...prefs, langs: prefs.langs.includes(code) ? prefs.langs.filter((l) => l !== code) : [...prefs.langs, code] }),
       hideTag: (tag) => (prefs.hide.some((h) => h.id === tag.id) || prefs.hide.length >= MAX_HIDDEN ? undefined : save({ ...prefs, hide: [...prefs.hide, tag] })),
       unhideTag: (id) => save({ ...prefs, hide: prefs.hide.filter((h) => h.id !== id) }),
+      replaceAll: (next) => save({ langs: next.langs, hide: next.hide.slice(0, MAX_HIDDEN) }),
     }),
     [prefs, save],
   );

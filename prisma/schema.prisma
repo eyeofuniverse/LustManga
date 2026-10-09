@@ -108,8 +108,31 @@ model Work {
   /// popularity imported from the source (follows etc.), seeds "Popular"
   seedPopularity Int @default(0)
 
+  /// What the SOURCE sites say about the work, refreshed by `npm run signals`. These (not our own traffic) drive
+  /// Popular, Trending and Top rated, so a brand-new site with no readers still ranks sensibly.
+  /// followers / favourites on the source
+  srcFavorites Int      @default(0)
+  /// views on the source
+  srcViews     Int      @default(0)
+  /// average rating on the source, 0-10 (null = the source has no ratings)
+  srcRating    Float?
+  /// how many votes that rating rests on
+  srcVotes     Int      @default(0)
+  /// momentum scores, 0-50000: rank in the source's own "popular today / this week / this month" list, or growth in
+  /// followers or views since the last snapshot. 0 = not in any such list
+  trendDay     Int      @default(0)
+  trendWeek    Int      @default(0)
+  trendMonth   Int      @default(0)
+  signalsAt    DateTime?
+  /// when the source says it published the work (nhentai.xxx and HentaiFox show it on the page); lets a new, fast-rising work count as trending
+  sourceAt     DateTime?
+  /// last time this work's own source page was read for its counters (the stalest are refreshed first)
+  statsAt      DateTime?
+
   chapters Chapter[]
   sources  WorkSource[]
+  viewDays WorkViewDay[]
+  snapshots SignalSnapshot[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
@@ -373,4 +396,31 @@ model RedirectMap {
   fromPath  String   @id
   toPath    String
   createdAt DateTime @default(now())
+}
+
+/// Views per work per day: the "Trending / This week / This month" sorts add up the last few days. Old rows are
+/// deleted by the cleanup job, so this stays small however many views there are.
+model WorkViewDay {
+  workId String
+  work   Work   @relation(fields: [workId], references: [id], onDelete: Cascade)
+  day    DateTime @db.Date
+  views  Int    @default(0)
+
+  @@id([workId, day])
+  @@index([day])
+}
+
+/// A daily photograph of a work's source numbers. Growth between two photographs is what "trending" means for sources
+/// that only publish totals. Rows older than about six weeks are deleted by the cleanup job.
+model SignalSnapshot {
+  workId    String
+  work      Work     @relation(fields: [workId], references: [id], onDelete: Cascade)
+  day       DateTime @db.Date
+  favorites Int      @default(0)
+  views     Int      @default(0)
+  /// the work's popularity score (0-50000) from a source's ranked list, for sources that publish ranks instead of counts
+  score     Int      @default(0)
+
+  @@id([workId, day])
+  @@index([day])
 }

@@ -3,8 +3,9 @@ import { FileText } from "lucide-react";
 import type { WorkCard as Work } from "@/lib/types";
 import { categoryLabel, isNew, workHref } from "@/lib/format";
 import { CoverImage } from "./CoverImage";
+import { ReadMark } from "./ReadMark";
 
-export function WorkCard({ work, priority = false, index = 0 }: { work: Work; priority?: boolean; index?: number }) {
+export function WorkCard({ work, priority = false, index = 0, note }: { work: Work; priority?: boolean; index?: number; /** a line under the title, e.g. the newest chapter */ note?: string }) {
   const href = workHref(work);
   return (
     <article className="group relative animate-rise" style={{ animationDelay: `${Math.min(index, 11) * 35}ms` }}>
@@ -18,6 +19,7 @@ export function WorkCard({ work, priority = false, index = 0 }: { work: Work; pr
           {isNew(work.createdAt) && (
             <span className="absolute right-2 top-2 rounded-md bg-accent-fill px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white shadow">New</span>
           )}
+          <ReadMark publicId={work.publicId} />
           <span className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[11px] font-semibold text-white/95">
             <span className="rounded-md bg-black/70 px-1.5 py-0.5 backdrop-blur-md">{categoryLabel(work.category)}</span>
             <span className="inline-flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 backdrop-blur-md">
@@ -27,6 +29,7 @@ export function WorkCard({ work, priority = false, index = 0 }: { work: Work; pr
           </span>
         </div>
         <h3 className="mt-2.5 line-clamp-2 text-[13px] font-semibold leading-snug text-text/95 transition group-hover:text-accent sm:text-sm">{work.title}</h3>
+        {note && <p className="mt-0.5 text-xs font-medium text-muted">{note}</p>}
       </Link>
     </article>
   );

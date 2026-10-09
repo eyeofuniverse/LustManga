@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { Check, Clock, Flame } from "lucide-react";
+import { Check, Clock, Flame, Heart, Star, TrendingUp } from "lucide-react";
 import { CATEGORIES, LANGUAGES } from "@/lib/format";
 import { withQuery } from "@/lib/url";
+import { SORT_OPTIONS, sortParam, type Sort } from "@/lib/sorts";
 
 /**
  * Sort, language and category filters as plain links: they work without JavaScript, are shareable URLs, and
@@ -17,7 +18,7 @@ export function FilterBar({
 }: {
   base: string;
   params: Record<string, string | undefined>;
-  sort: "popular" | "new";
+  sort: Sort;
   /** languages currently applied (from the URL or the visitor's saved choice) */
   langs: string[];
   cats: string[];
@@ -30,14 +31,14 @@ export function FilterBar({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-        <div className="inline-flex rounded-xl bg-surface-2 p-1" role="group" aria-label="Sort order">
-          <Link href={h({ sort: undefined })} className={seg(sort === "popular")} aria-current={sort === "popular" ? "true" : undefined}>
-            <Flame className="h-4 w-4" /> Popular
-          </Link>
-          <Link href={h({ sort: "new" })} className={seg(sort === "new")} aria-current={sort === "new" ? "true" : undefined}>
-            <Clock className="h-4 w-4" /> Newest
-          </Link>
+      <div className="-mx-4 overflow-x-auto px-4 no-scrollbar sm:mx-0 sm:px-0" role="group" aria-label="Sort order">
+        <div className="inline-flex w-max rounded-xl bg-surface-2 p-1">
+          {SORT_OPTIONS.map((o) => (
+            <Link key={o.value} href={h({ sort: sortParam(o.value) })} title={o.hint} className={seg(sort === o.value)} aria-current={sort === o.value ? "true" : undefined}>
+              {o.value === "popular" ? <Flame className="h-4 w-4" /> : o.value === "new" ? <Clock className="h-4 w-4" /> : o.value === "saved" ? <Heart className="h-4 w-4" /> : o.value === "rated" ? <Star className="h-4 w-4" /> : <TrendingUp className="h-4 w-4" />}
+              {o.label}
+            </Link>
+          ))}
         </div>
       </div>
 
