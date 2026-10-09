@@ -15,8 +15,8 @@ import { SORT_OPTIONS } from "@/lib/sorts";
 
 export const generateMetadata = ({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }): Promise<Metadata> =>
   listingMetadata({
-    title: "Browse All Manga & Doujinshi",
-    description: "Browse every manga and doujinshi on LustManga by popularity or newest. Filter by language and category, and read online free.",
+    title: "Browse All Hentai Manga & Doujinshi",
+    description: "Browse every hentai manga and doujinshi on LustPages by popularity or newest. Filter by language and category, and read online free.",
     base: "/browse",
     searchParams,
   });

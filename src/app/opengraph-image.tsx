@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 import { SITE_NAME } from "@/lib/site";
 
-export const alt = `${SITE_NAME} - Read manga and doujinshi online free`;
+export const alt = `${SITE_NAME} - Read hentai manga and doujinshi online free`;
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -41,10 +41,10 @@ export default function OpenGraphImage() {
           </div>
           <div style={{ display: "flex", marginLeft: 24, fontSize: 56, fontWeight: 800 }}>
             <span>Lust</span>
-            <span style={{ color: "#ff4785" }}>Manga</span>
+            <span style={{ color: "#ff4785" }}>Pages</span>
           </div>
         </div>
-        <div style={{ display: "flex", marginTop: 52, fontSize: 76, fontWeight: 800, lineHeight: 1.08, maxWidth: 940 }}>Read manga & doujinshi online, free</div>
+        <div style={{ display: "flex", marginTop: 52, fontSize: 76, fontWeight: 800, lineHeight: 1.08, maxWidth: 940 }}>Read hentai manga & doujinshi online, free</div>
         <div style={{ display: "flex", marginTop: 26, fontSize: 32, color: "#a3a3b8" }}>Every language · a fast book-style reader · new uploads daily</div>
         <div style={{ display: "flex", marginTop: 44 }}>
           <div style={{ display: "flex", padding: "10px 22px", borderRadius: 999, fontSize: 24, fontWeight: 700, backgroundColor: "rgba(255,255,255,0.1)" }}>Adults only · 18+</div>

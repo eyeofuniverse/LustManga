@@ -34,8 +34,8 @@ export async function GET() {
       .join("\n");
     const xml =
       `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel>\n` +
-      `<title>${esc(`${SITE_NAME}: new manga & doujinshi`)}</title><link>${esc(SITE)}</link>` +
-      `<description>${esc(`The newest manga and doujinshi added to ${SITE_NAME}.`)}</description><language>en</language>` +
+      `<title>${esc(`${SITE_NAME}: new hentai manga & doujinshi`)}</title><link>${esc(SITE)}</link>` +
+      `<description>${esc(`The newest hentai manga and doujinshi added to ${SITE_NAME}.`)}</description><language>en</language>` +
       `<atom:link href="${esc(`${SITE}/feed.xml`)}" rel="self" type="application/rss+xml"/>\n${items}\n</channel></rss>\n`;
     return new Response(xml, { headers: { "Content-Type": "application/rss+xml; charset=utf-8", "Cache-Control": "public, s-maxage=900, stale-while-revalidate=3600" } });
   } catch {

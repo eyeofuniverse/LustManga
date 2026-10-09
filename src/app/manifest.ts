@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: `${SITE_NAME} - ${SITE_TAGLINE}`,
     short_name: SITE_NAME,
-    description: "Read manga and doujinshi online free, in every language. Adults only (18+).",
+    description: "Read hentai manga and doujinshi online free, in every language. Adults only (18+).",
     start_url: "/",
     scope: "/",
     display: "standalone",

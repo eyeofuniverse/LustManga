@@ -533,7 +533,7 @@ for (const rtl of [false, true]) {
   const favNow = JSON.parse((await fp.evaluate(() => localStorage.getItem("lm:fav"))) ?? "[]");
   ok(favNow.includes(Number(SERIES)), "backup: the saved work is in the new browser");
   await fp.locator('input[type="file"]').setInputFiles({ name: "x.json", mimeType: "application/json", buffer: Buffer.from("not a backup") });
-  ok(/not a LustManga backup/.test(await fp.getByRole("status").innerText()), "backup: a wrong file is refused");
+  ok(/not a LustPages backup/.test(await fp.getByRole("status").innerText()), "backup: a wrong file is refused");
   await fresh.close();
   await ctx.close();
 }

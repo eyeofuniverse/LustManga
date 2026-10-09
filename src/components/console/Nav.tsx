@@ -10,7 +10,7 @@ export function Nav({ items, email }: { items: NavItem[]; email: string }) {
   const router = useRouter();
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-line bg-surface p-3">
-      <div className="mb-4 px-2 text-sm font-bold tracking-wide text-accent">LustManga Console</div>
+      <div className="mb-4 px-2 text-sm font-bold tracking-wide text-accent">LustPages Console</div>
       <nav className="flex flex-1 flex-col gap-1">
         {items.map((i) => {
           const active = i.href === "/console" ? path === "/console" : path.startsWith(i.href);

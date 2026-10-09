@@ -9,7 +9,7 @@ export function newTotpSecret(): string {
 }
 
 export function totpUri(email: string, secret: string): string {
-  return authenticator.keyuri(email, "LustManga Console", secret);
+  return authenticator.keyuri(email, "LustPages Console", secret);
 }
 
 export function verifyTotp(secret: string, token: string): boolean {

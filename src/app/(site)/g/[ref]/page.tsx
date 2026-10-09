@@ -4,7 +4,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 import { CalendarDays, FileText, Languages, Layers, Star } from "lucide-react";
 import { currentPrefs } from "@/lib/prefs-server";
 import { getMoreBy, getRelated, getVariants, getWork } from "@/lib/queries";
-import { categoryLabel, compact, langLabel, tagHref, timeAgo, workHref } from "@/lib/format";
+import { categoryHref, categoryLabel, compact, langLabel, tagHref, timeAgo, workHref } from "@/lib/format";
 import { cdn } from "@/lib/cdn";
 import { cleanDescription } from "@/lib/text";
 import { idParam } from "@/lib/url";
@@ -97,7 +97,7 @@ export default async function WorkPage({ params }: { params: Params }) {
       <nav aria-label="Breadcrumb" className="mb-5 flex flex-wrap items-center gap-x-2 text-sm text-muted">
         <Link href="/" className="hover:text-accent">Home</Link>
         <span aria-hidden="true">/</span>
-        <Link href={`/browse?cat=${w.category}`} className="hover:text-accent">{categoryLabel(w.category)}</Link>
+        <Link href={categoryHref(w.category)} className="hover:text-accent">{categoryLabel(w.category)}</Link>
         <span aria-hidden="true">/</span>
         <span className="line-clamp-1 text-text">{w.title}</span>
       </nav>

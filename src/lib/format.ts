@@ -29,6 +29,8 @@ export const CATEGORIES: { value: string; label: string }[] = [
   { value: "WESTERN", label: "Western" },
   { value: "IMAGE_SET", label: "Image set" },
 ];
+/** The clean page for a category (the same URL the footer and the sitemap use), not a /browse?cat= filter. */
+export const categoryHref = (c: string) => (c === "OTHER" ? "/category/misc" : tagHref("category", c.toLowerCase().replace(/_/g, "-")));
 export const categoryLabel = (c: string) => CATEGORIES.find((x) => x.value === c)?.label ?? "Other";
 
 /** 1234 -> 1.2K, 1500000 -> 1.5M */

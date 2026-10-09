@@ -7,6 +7,7 @@ import { attachSource, findDuplicate, findSimilar, normTitle, recordCandidate } 
 import * as im from "@/lib/sources/imengine";
 import { LANGUAGES, langCode } from "@/lib/sources/hitomi";
 import { statsToFields } from "@/lib/signals";
+import { cleanTitle } from "@/lib/titles";
 import {
   Budget,
   MAX_ATTEMPTS,
@@ -89,13 +90,16 @@ async function processGallery(id: string, seed: number, listLang: string | null,
       return void o.log(`  duplicate of #${dup.publicId}, source attached (nothing downloaded)`);
     }
     const stat = statsToFields(cfg.name, g.stats);
+    // the stored title is the readable one; duplicate detection and the safety check keep using the source's own wording
+    const clean = cleanTitle(g.title);
     const created = await db(() =>
       prisma.work.create({
         data: {
-          slug: slugify(g.title) || "work",
+          slug: slugify(clean.title) || "work",
           kind: "ONESHOT",
           category: im.categoryFor(g.categories) as never,
-          title: g.title,
+          title: clean.title,
+          titleOriginal: clean.original,
           titleNorm: probe.titleNorm,
           language: lang,
           translationGroupId: `${cfg.name}:${id}`,

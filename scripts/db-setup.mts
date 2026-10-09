@@ -17,6 +17,8 @@ const stmts = [
   `CREATE INDEX IF NOT EXISTS work_popular_cap_lang_idx ON "Work" (publish, language, (("seedPopularity" + LEAST(views * 20 + favorites * 50, 12500))) DESC)`,
   `CREATE INDEX IF NOT EXISTS work_new_lang_idx ON "Work" (publish, language, "createdAt" DESC)`,
   `CREATE INDEX IF NOT EXISTS tag_type_count_idx ON "Tag" (type, count DESC)`,
+  // upsertTags looks a new tag name up by its hyphen-less spelling, so "Blow job" finds "blowjob"
+  `CREATE INDEX IF NOT EXISTS tag_squash_idx ON "Tag" ((replace(slug, '-', '')))`,
   `CREATE INDEX IF NOT EXISTS tag_name_trgm ON "Tag" USING GIN (name gin_trgm_ops)`,
 ];
 for (const sql of stmts) {

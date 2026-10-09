@@ -16,6 +16,31 @@ export const slug = (s: string): string => {
   return slugify(name, { lower: true, strict: true }).slice(0, 80);
 };
 
+/** "blow-job" and "blowjob" are one tag: names that differ only by hyphens (spaces become hyphens) share this key. */
+export const squash = (s: string): string => s.replace(/-/g, "");
+
+/**
+ * Move every work from tag `fromId` onto `toId` and delete `fromId`. Its old address keeps working: the slug becomes an
+ * alias of the target, so /tag/blow-job lands on /tag/blowjob with a permanent redirect. The target's count is updated.
+ */
+export async function mergeTagRecords(fromId: number, toId: number): Promise<void> {
+  const from = await prisma.tag.findUnique({ where: { id: fromId } });
+  if (!from || fromId === toId) return;
+  await prisma.$transaction([
+    prisma.$executeRaw`UPDATE "Work" SET "tagIds" = (SELECT array_agg(DISTINCT x) FROM unnest(array_replace("tagIds", ${fromId}, ${toId})) AS x) WHERE "tagIds" @> ARRAY[${fromId}]::int[]`,
+    prisma.$executeRaw`INSERT INTO "_WorkTags" ("A","B") SELECT ${toId}, "B" FROM "_WorkTags" WHERE "A" = ${fromId} ON CONFLICT DO NOTHING`,
+    prisma.$executeRaw`DELETE FROM "_WorkTags" WHERE "A" = ${fromId}`,
+    prisma.tagAlias.updateMany({ where: { targetTagId: fromId }, data: { targetTagId: toId } }),
+    prisma.tagAlias.upsert({
+      where: { type_slug: { type: from.type, slug: from.slug } },
+      create: { type: from.type, slug: from.slug, name: from.name, targetTagId: toId },
+      update: { targetTagId: toId },
+    }),
+    prisma.tag.delete({ where: { id: fromId } }),
+    prisma.$executeRaw`UPDATE "Tag" SET count = (SELECT count(*)::int FROM "Work" WHERE publish = 'PUBLISHED' AND "tagIds" @> ARRAY[${toId}]::int[]) WHERE id = ${toId}`,
+  ]);
+}
+
 const LANG_NAMES: Record<string, string> = {
   en: "english", ja: "japanese", zh: "chinese", "zh-hk": "chinese", "zh-ro": "chinese", es: "spanish",
   "es-la": "spanish", fr: "french", pt: "portuguese", "pt-br": "portuguese", ko: "korean", ru: "russian",
@@ -38,7 +63,8 @@ export async function upsertTags(items: { type: TagType; name: string }[]): Prom
     const name = it.name.trim();
     const s = slug(name);
     if (!name || !s) continue;
-    wanted.set(`${it.type}:${s}`, { type: it.type, name, slug: s });
+    const key = `${it.type}:${squash(s)}`; // "blow job" and "blowjob" arriving together are one tag
+    if (!wanted.has(key)) wanted.set(key, { type: it.type, name, slug: s });
   }
   if (!wanted.size) return [];
   const list = [...wanted.values()];
@@ -49,7 +75,24 @@ export async function upsertTags(items: { type: TagType; name: string }[]): Prom
   const aliased = new Set(aliases.map((a) => `${a.type}:${a.slug}`));
   for (const a of aliases) ids.add(a.targetTagId);
 
-  const rest = list.filter((t) => !aliased.has(`${t.type}:${t.slug}`));
+  let rest = list.filter((t) => !aliased.has(`${t.type}:${t.slug}`));
+  if (rest.length) {
+    // a name that differs from an existing tag only by hyphens or spaces ("Blow job", "blowjob") joins that tag
+    const near = await db(() =>
+      prisma.$queryRaw<{ id: number; type: string; slug: string }[]>`
+        SELECT id, type::text AS type, slug FROM "Tag" WHERE replace(slug, '-', '') = ANY(${rest.map((t) => squash(t.slug))}::text[]) ORDER BY count DESC`,
+    );
+    const joined = new Set<string>();
+    for (const t of rest) {
+      if (near.some((n) => n.type === t.type && n.slug === t.slug)) continue; // the exact tag exists: the normal path finds it
+      const hit = near.find((n) => n.type === t.type && squash(n.slug) === squash(t.slug));
+      if (hit) {
+        ids.add(hit.id);
+        joined.add(`${t.type}:${t.slug}`);
+      }
+    }
+    rest = rest.filter((t) => !joined.has(`${t.type}:${t.slug}`));
+  }
   if (rest.length) {
     const restWhere = { OR: rest.map((t) => ({ type: t.type, slug: t.slug })) };
     let existing = await db(() => prisma.tag.findMany({ where: restWhere, select: { id: true, type: true, slug: true } }));
@@ -62,4 +105,14 @@ export async function upsertTags(items: { type: TagType; name: string }[]): Prom
     for (const t of existing) ids.add(t.id);
   }
   return [...ids];
+}
+
+/**
+ * Which of several spellings of one tag survives a merge: the one with the most works. A category keeps its spelled-out,
+ * hyphenated form ("artist-cg", not "artistcg") because that is the label readers see.
+ */
+export function tagSurvivor<T extends { id: number; type: string; slug: string; count: number }>(group: T[]): T {
+  const spelled = group.filter((t) => t.slug.includes("-"));
+  const pool = group[0]?.type === "CATEGORY" && spelled.length ? spelled : group;
+  return [...pool].sort((a, b) => b.count - a.count || a.id - b.id)[0];
 }

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { esc } from "./sitemap-xml";
 import { normalizeSiteUrl } from "./site";
 import {
-  abs, breadcrumbLd, clip, excerpt, faqLd, hreflangFor, isFiltered, itemListLd, ldJson, listingMeta, socialMeta, tagSeo, titleCase,
+  abs, breadcrumbLd, clip, clipTitle, excerpt, faqLd, hreflangFor, isFiltered, itemListLd, ldJson, listingMeta, socialMeta, tagSeo, titleCase,
   withPage, workDescription, workLd, workTitle, type WorkForSeo,
 } from "./seo";
 
@@ -60,29 +60,50 @@ test("a control character in a title cannot break a feed or a sitemap", () => {
 });
 
 test("a work title leads with the name, says what it is, and marks a translation", () => {
-  assert.equal(workTitle(work()), "In a World Full of Zombies - Read Manga Online");
-  assert.equal(workTitle(work({ language: "es", category: "DOUJINSHI" })), "In a World Full of Zombies (Spanish) - Read Doujinshi Online");
+  assert.equal(workTitle(work()), "In a World Full of Zombies - Read Hentai Manga Online");
+  assert.equal(workTitle(work({ language: "es", category: "DOUJINSHI" })), "In a World Full of Zombies (Spanish) - Read Hentai Doujinshi Online");
   const long = workTitle(work({ title: "A".repeat(40) + " " + "word ".repeat(30) }));
-  assert.ok(long.length + " | LustManga".length <= 80, `${long.length}: ${long}`);
-  assert.ok(long.endsWith("- Read Manga Online"));
+  assert.ok(long.length + " | LustPages".length <= 90, `${long.length}: ${long}`);
+  assert.ok(long.endsWith("- Read Hentai Manga Online"));
+  assert.ok(!/\w…/.test(long), `cut mid-word: ${long}`);
+});
+
+test("a very short title borrows its artist, so it is not the same as every other short one", () => {
+  assert.equal(workTitle(work({ title: "Fanbox" })), "Fanbox by Masuda Chihiro - Read Hentai Manga Online");
+  assert.equal(workTitle(work({ title: "Fanbox", tags: [] })), "Fanbox - Read Hentai Manga Online");
+});
+
+test("a long title is cut at a natural break, never in the middle of a word, and never leaves a bracket open", () => {
+  assert.equal(clipTitle("short title", 40), "short title");
+  assert.equal(clipTitle("Zenbu Misemasu! Houkago Hamedori Doukoukai - At afterschool, You're making your debut", 50), "Zenbu Misemasu! Houkago Hamedori Doukoukai");
+  assert.equal(clipTitle("Wakamo 1 (Blue Archive Special Edition Extra Long Name)", 30), "Wakamo 1");
+  assert.equal(clipTitle("先生、みんながシコすぎて授業に集中できません。誰かにコキ捨てていいですか", 26), "先生、みんながシコすぎて授業に集中できません。");
+  // an unbroken run with no break anywhere is the only time the ellipsis appears
+  assert.equal(clipTitle("あ".repeat(40), 10), "あ".repeat(9) + "…");
 });
 
 test("a work description is factual, complete and within 160 characters", () => {
-  const d = workDescription(work({ description: "Takemura wakes up after falling ill for 3 days and realises the world has been overrun by zombies." }));
+  const d = workDescription(work({ description: "Takemura wakes up after falling ill for 3 days and realises the world has been overrun by zombies.", tags: [...work().tags!, { type: "CHARACTER", name: "takemura" }] }));
   assert.ok(d.length <= 160, `${d.length}: ${d}`);
-  assert.ok(d.startsWith("Read In a World Full of Zombies online free: an English manga"), d);
-  assert.ok(d.includes("Masuda Chihiro"));
+  assert.ok(d.startsWith("Read In a World Full of Zombies online: an English hentai manga by Masuda Chihiro"), d);
   assert.ok(d.includes("933 pages"));
-  assert.ok(d.includes("Big Breasts"));
-  assert.ok(d.endsWith("Free on LustManga."));
+  assert.ok(d.includes("Takemura wakes up"), "the synopsis leads when there is one");
+  assert.ok(!/Free on /.test(d), "no boilerplate sentence shared by every page");
+});
+
+test("without a synopsis the description lists who is in it and the tags instead", () => {
+  const d = workDescription(work({ description: null, tags: [...work().tags!, { type: "CHARACTER", name: "takemura" }] }));
+  assert.ok(d.length <= 160, d);
+  assert.ok(d.includes("Featuring Takemura."), d);
+  assert.ok(d.includes("Tags: Big Breasts, Zombies."), d);
+  assert.ok(!d.includes("(Original)"), "an 'original' parody says nothing");
 });
 
 test("a very long title or no extra data still gives a clean description", () => {
   const d = workDescription(work({ title: "Z".repeat(300), tags: [], description: null }));
   assert.ok(d.length <= 160);
-  assert.ok(d.endsWith("Free on LustManga."));
   const bare = workDescription(work({ tags: [], description: null }));
-  assert.ok(bare.startsWith("Read In a World Full of Zombies online free"));
+  assert.ok(bare.startsWith("Read In a World Full of Zombies online: an English hentai manga"));
 });
 
 test("list pages: plain page 1 and 2 index with their own canonical", () => {
@@ -114,12 +135,12 @@ test("what counts as a filtered variant", () => {
 
 test("tag, artist and category titles say what the page is", () => {
   const t = tagSeo("tag", "big breasts", 471);
-  assert.equal(t.title, "Big Breasts Manga & Doujinshi - Read Online");
+  assert.equal(t.title, "Big Breasts Hentai Manga & Doujinshi - Read Online");
   assert.equal(t.h1, "Big Breasts");
   assert.ok(t.description.includes("471 works") && t.description.length <= 160);
-  assert.equal(tagSeo("artist", "masuda chihiro", 1).title, "Masuda Chihiro - Manga & Doujinshi by Masuda Chihiro");
+  assert.equal(tagSeo("artist", "masuda chihiro", 1).title, "Masuda Chihiro Hentai Manga & Doujinshi by Masuda Chihiro");
   assert.ok(tagSeo("artist", "x", 1).description.includes("1 work "));
-  assert.equal(tagSeo("category", "doujinshi", 776).title, "Doujinshi - Read Online Free");
+  assert.equal(tagSeo("category", "doujinshi", 776).title, "Doujinshi Hentai - Read Online Free");
   assert.ok(tagSeo("parody", "touhou project", 12).title.includes("Parody"));
   for (const type of ["tag", "artist", "group", "parody", "character", "language", "category"]) assert.ok(tagSeo(type, "name", 5).description.length <= 160, type);
 });

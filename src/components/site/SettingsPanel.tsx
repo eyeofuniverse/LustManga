@@ -30,7 +30,7 @@ function BackupCard() {
     const blob = new Blob([JSON.stringify(buildBackup({ langs: prefs.langs, hide: prefs.hide }), null, 1)], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `lustmanga-library-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `lustpages-library-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
     setNote({ ok: true, text: "Backup saved. Keep the file somewhere safe." });
@@ -38,9 +38,9 @@ function BackupCard() {
 
   const importFile = async (file: File | undefined) => {
     if (!file) return;
-    if (file.size > 2_000_000) return setNote({ ok: false, text: "That file is too large to be a LustManga backup." });
+    if (file.size > 2_000_000) return setNote({ ok: false, text: "That file is too large to be a LustPages backup." });
     const b = parseBackup(await file.text());
-    if (!b) return setNote({ ok: false, text: "That file is not a LustManga backup." });
+    if (!b) return setNote({ ok: false, text: "That file is not a LustPages backup." });
     if (mode === "replace" && !window.confirm("Replace your saved works, history and settings with this backup?")) return;
     applyBackup(b, mode);
     if (mode === "replace" || b.prefs.langs.length || b.prefs.hide.length) {

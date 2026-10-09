@@ -3,7 +3,7 @@ import { TagDirectory } from "@/components/work/TagDirectory";
 import { listingMetadata } from "@/lib/seo";
 
 export const generateMetadata = ({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }): Promise<Metadata> =>
-  listingMetadata({ title: "Manga & Doujinshi Artists A-Z", description: "Every artist on LustManga, by popularity or A to Z. Follow your favourite creators and read all their manga and doujinshi online free.", base: "/artists", searchParams });
+  listingMetadata({ title: "Hentai Manga & Doujinshi Artists A-Z", description: "Every artist on LustPages, by popularity or A to Z. Follow your favourite creators and read all their hentai manga and doujinshi online free.", base: "/artists", searchParams });
 
 export default async function Page({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   return (

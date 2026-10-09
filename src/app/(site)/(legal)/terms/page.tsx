@@ -3,7 +3,7 @@ import { staticMeta } from "@/lib/seo";
 import Link from "next/link";
 import { SITE_NAME } from "@/lib/site";
 
-export const metadata: Metadata = staticMeta({ title: "Terms of Use", description: "The terms for using LustManga: adults only, acceptable use, copyright, and how takedown requests are handled.", path: "/terms" });
+export const metadata: Metadata = staticMeta({ title: "Terms of Use", description: "The terms for using LustPages: adults only, acceptable use, copyright, and how takedown requests are handled.", path: "/terms" });
 
 export default function Page() {
   return (

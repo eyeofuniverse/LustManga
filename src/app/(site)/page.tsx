@@ -3,7 +3,7 @@ import Link from "next/link";
 import { BookOpen, Flame, Images, Library, Palette, Gamepad2, Globe2, Sparkles, type LucideIcon } from "lucide-react";
 import { currentPrefs } from "@/lib/prefs-server";
 import { categoryCounts, getWork, homeLists, popularTags } from "@/lib/queries";
-import { categoryLabel, compact, langLabel, tagHref, workHref } from "@/lib/format";
+import { categoryHref, categoryLabel, compact, langLabel, tagHref, workHref } from "@/lib/format";
 import { CoverImage } from "@/components/work/CoverImage";
 import { WorkCard, WorkGrid } from "@/components/work/WorkCard";
 import { ScrollRow } from "@/components/work/ScrollRow";
@@ -22,9 +22,9 @@ export const metadata: Metadata = {
 
 const FAQ: QA[] = [
   {
-    q: "Is LustManga free to read?",
-    text: "Yes. Every manga and doujinshi can be read online for free, with no account and no sign-up.",
-    a: "Yes. Every manga and doujinshi can be read online for free, with no account and no sign-up.",
+    q: "Is LustPages free to read?",
+    text: "Yes. Every hentai manga and doujinshi can be read online for free, with no account and no sign-up.",
+    a: "Yes. Every hentai manga and doujinshi can be read online for free, with no account and no sign-up.",
   },
   {
     q: "Which languages can I read in?",
@@ -105,15 +105,16 @@ export default async function Home() {
         )}
         <div className="container-x pt-6 sm:pt-8">
           <h1 className="font-display text-base font-extrabold tracking-tight text-muted sm:text-lg">
-            Read manga &amp; doujinshi online, <span className="text-text">free in every language</span>
+            Read hentai manga &amp; doujinshi online, <span className="text-text">free in every language</span>
           </h1>
         </div>
         <div className="container-x grid items-center gap-6 pb-8 pt-4 sm:gap-8 sm:pb-12 sm:pt-6 md:grid-cols-[auto_1fr] lg:gap-14 lg:pb-16">
           {spot ? (
             <>
-              <Link href={workHref(spot)} aria-label={spot.title} className="relative mx-auto block w-40 shrink-0 sm:w-52 md:mx-0 md:w-64 lg:w-72">
+              <Link href={workHref(spot)} className="relative mx-auto block w-40 shrink-0 sm:w-52 md:mx-0 md:w-64 lg:w-72">
                 <div className="relative aspect-[2/3] overflow-hidden rounded-2xl bg-surface-2 shadow-[0_30px_80px_-20px_rgb(0_0_0/0.8)] ring-1 ring-line transition duration-500 hover:-translate-y-1 hover:shadow-glow">
-                  <CoverImage coverKey={spot.coverKey} priority small={false} />
+                  {/* the alt text is this link's anchor text: without it a crawler reads the (long) address instead */}
+                  <CoverImage coverKey={spot.coverKey} priority small={false} alt={`Read ${spot.title}`} />
                 </div>
               </Link>
               <div className="min-w-0 text-center md:text-left">
@@ -200,7 +201,7 @@ export default async function Home() {
                 const { Icon, tone } = CAT[c.category];
                 return (
                   <li key={c.category}>
-                    <Link href={`/browse?cat=${c.category}`} className={`group relative flex h-28 flex-col justify-between overflow-hidden rounded-2xl border border-line bg-gradient-to-br p-4 transition hover:-translate-y-0.5 hover:border-accent/40 sm:h-32 ${tone}`}>
+                    <Link href={categoryHref(c.category)} className={`group relative flex h-28 flex-col justify-between overflow-hidden rounded-2xl border border-line bg-gradient-to-br p-4 transition hover:-translate-y-0.5 hover:border-accent/40 sm:h-32 ${tone}`}>
                       <Icon className="h-6 w-6 text-text/80 transition group-hover:scale-110 group-hover:text-accent" />
                       <span>
                         <span className="block font-display text-[15px] font-bold leading-tight">{categoryLabel(c.category)}</span>

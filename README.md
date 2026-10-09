@@ -1,6 +1,8 @@
-# LustManga
+# LustPages
 
-An automated manga and doujinshi catalogue. Sources are scraped on a schedule by GitHub Actions, pages are
+(The repository and package keep the working name LustManga; the public brand is LustPages, set once in `src/lib/site.ts`.)
+
+An automated hentai manga and doujinshi catalogue. Sources are scraped on a schedule by GitHub Actions, pages are
 re-encoded to WebP and stored in Cloudflare R2, metadata lives in Supabase Postgres, and an admin console
 (hidden, password + 2FA) handles review and tag control. The public reader site is not built yet.
 
@@ -52,6 +54,9 @@ enrol an authenticator app, then delete the bootstrap secret.
 | `npm run seo` | crawler-style SEO audit of a running site (head tags, indexing rules, structured data, sitemaps, robots, icons, share cards); build with `NEXT_PUBLIC_SITE_URL` equal to `BASE_URL` first |
 | `npx tsx --env-file=.env scripts/r2-cors.mts` | allow the site to read page images cross-origin (needed for CBZ download); idempotent |
 | `npm run signals` / `-- --sources=mangadex,hitomi` / `-- --sources=stats --stats-minutes=25` / `-- --dry-run` | refresh the source numbers behind Popular, Trending and Top rated (see Frontend) |
+| `npx tsx scripts/clean-titles.mts [--apply]` | rewrite raw release names (`(C101) [Circle (Artist)] Title | Translation [English] [Group]`) into readable titles and slugs; old URLs 301 to the new ones. Ingest does the same for new works (`src/lib/titles.ts`) |
+| `npx tsx scripts/merge-tags.mts [--apply]` | merge tags that differ only by spaces or hyphens ("Blow job" / "blowjob"); the old address becomes an alias that redirects. `upsertTags` joins such names at ingest from now on |
+| `npx tsx scripts/write-synopses.mts --top=250 [--apply]` | give the most popular works with no description a short summary built only from facts we hold (never a plot), recorded in Settings as `synopsis-generated` |
 | `npm run backfill-thumbs` | create the 280px card thumbnail for covers stored before thumbnails existed (new ingests do it automatically) |
 | `npm test` / `npm run typecheck` | 74 unit tests / type-check of `src` and `scripts` |
 | `npm run qa` / `npm run flows` | Playwright sweeps against a running server (`QA_BASE=http://localhost:3000`): layout, overflow, console and axe accessibility over every page and viewport / 81 behaviour checks (age gate, search, filters, library, reader) |

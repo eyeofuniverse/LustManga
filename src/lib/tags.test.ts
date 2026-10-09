@@ -27,3 +27,26 @@ test("language helpers", () => {
   assert.equal(normLang("ZH-HK"), "zh");
   assert.equal(langName("es-la"), "spanish");
 });
+
+import { squash, tagSurvivor } from "./tags";
+
+test("spellings that differ only by hyphens share a key", () => {
+  assert.equal(squash("blow-job"), squash("blowjob"));
+  assert.notEqual(squash("blowjob-face"), squash("blowjob"));
+});
+
+test("the spelling with the most works survives, but a category keeps its spelled-out form", () => {
+  const tags = [
+    { id: 285, type: "TAG", slug: "blow-job", count: 335 },
+    { id: 92, type: "TAG", slug: "blowjob", count: 704 },
+  ];
+  assert.equal(tagSurvivor(tags).slug, "blowjob");
+  const cats = [
+    { id: 440, type: "CATEGORY", slug: "artistcg", count: 50 },
+    { id: 519, type: "CATEGORY", slug: "artist-cg", count: 140 },
+    { id: 177, type: "CATEGORY", slug: "gamecg", count: 6 },
+    { id: 3030, type: "CATEGORY", slug: "game-cg", count: 7 },
+  ];
+  assert.equal(tagSurvivor(cats.slice(0, 2)).slug, "artist-cg");
+  assert.equal(tagSurvivor([cats[2], { ...cats[3], count: 1 }]).slug, "game-cg"); // the hyphenated form wins even with fewer works
+});

@@ -16,12 +16,12 @@ export function LogoMark({ className = "h-9 w-9" }: { className?: string }) {
 
 export function Logo() {
   return (
-    <Link href="/" aria-label="LustManga, home" className="group flex shrink-0 items-center gap-2.5">
+    <Link href="/" aria-label="LustPages, home" className="group flex shrink-0 items-center gap-2.5">
       <span className="transition duration-300 group-hover:-rotate-6 group-hover:scale-105">
         <LogoMark />
       </span>
       <span className="font-display text-[19px] font-extrabold tracking-tight">
-        Lust<span className="bg-gradient-to-r from-accent to-accent-2 bg-clip-text text-transparent">Manga</span>
+        Lust<span className="bg-gradient-to-r from-accent to-accent-2 bg-clip-text text-transparent">Pages</span>
       </span>
     </Link>
   );

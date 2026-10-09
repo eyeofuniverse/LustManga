@@ -1,4 +1,5 @@
 import { statsToFields } from "@/lib/signals";
+import { cleanTitle } from "@/lib/titles";
 import { prisma, db } from "@/lib/db";
 import { pool } from "@/lib/http";
 import { classify } from "@/lib/safety/classify";
@@ -89,14 +90,16 @@ async function processWork(slug: string, seedFallback: number, c: Ctx): Promise<
       stats.duplicates++;
       return void o.log(`  duplicate of #${dup.publicId}, source attached (nothing downloaded)`);
     }
+    const clean = cleanTitle(w.title);
     const stat = statsToFields(h2r.SITE, { ...w.stats, views: w.stats.views ?? (w.views || undefined) });
     const created = await db(() =>
       prisma.work.create({
         data: {
-          slug: slugify(w.title) || "work",
+          slug: slugify(clean.title) || "work",
           kind,
           category: w.parodies.length || w.genres.some((g) => /doujin/i.test(g)) ? "DOUJINSHI" : "MANGA",
-          title: w.title,
+          title: clean.title,
+          titleOriginal: clean.original,
           titleNorm: probe.titleNorm,
           language: lang,
           translationGroupId: `hentai2read:${slug}`,

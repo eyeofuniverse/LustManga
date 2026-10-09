@@ -3,7 +3,7 @@ import { staticMeta } from "@/lib/seo";
 import Link from "next/link";
 import { CONTACT_EMAIL, SITE_NAME } from "@/lib/site";
 
-export const metadata: Metadata = staticMeta({ title: "Privacy Policy", description: "LustManga has no accounts and keeps very little: what is stored in your browser, what we log, and how to clear it.", path: "/privacy" });
+export const metadata: Metadata = staticMeta({ title: "Privacy Policy", description: "LustPages has no accounts and keeps very little: what is stored in your browser, what we log, and how to clear it.", path: "/privacy" });
 
 export default function Page() {
   return (

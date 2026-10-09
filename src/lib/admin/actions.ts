@@ -9,7 +9,7 @@ import { purgeImages } from "@/lib/purge";
 import { mergeWorks, pickSurvivor } from "@/lib/dedupe";
 import { isCoreTerm } from "@/lib/safety/core";
 import { loadTerms } from "@/lib/safety/load-terms";
-import { slug } from "@/lib/tags";
+import { mergeTagRecords, slug } from "@/lib/tags";
 import { pingIndexNow } from "@/lib/indexnow";
 import { workHref } from "@/lib/format";
 
@@ -169,18 +169,7 @@ export async function mergeTags(fromId: number, toName: string): Promise<ActionR
   if (!to) return fail(`No ${from.type.toLowerCase()} tag named "${toName}" (merge needs an existing tag of the same type)`);
   if (to.id === from.id) return fail("Cannot merge a tag into itself");
 
-  await prisma.$transaction([
-    prisma.$executeRaw`UPDATE "Work" SET "tagIds" = (SELECT array_agg(DISTINCT x) FROM unnest(array_replace("tagIds", ${from.id}, ${to.id})) AS x) WHERE "tagIds" @> ARRAY[${from.id}]::int[]`,
-    prisma.$executeRaw`INSERT INTO "_WorkTags" ("A","B") SELECT ${to.id}, "B" FROM "_WorkTags" WHERE "A" = ${from.id} ON CONFLICT DO NOTHING`,
-    prisma.$executeRaw`DELETE FROM "_WorkTags" WHERE "A" = ${from.id}`,
-    prisma.tagAlias.updateMany({ where: { targetTagId: from.id }, data: { targetTagId: to.id } }),
-    prisma.tagAlias.upsert({
-      where: { type_slug: { type: from.type, slug: from.slug } },
-      create: { type: from.type, slug: from.slug, name: from.name, targetTagId: to.id },
-      update: { targetTagId: to.id },
-    }),
-    prisma.tag.delete({ where: { id: from.id } }),
-  ]);
+  await mergeTagRecords(from.id, to.id);
   await audit(me, "tag.merge", "tag", String(fromId), { from: from.name, into: to.name });
   revalidatePath("/console/tags");
   return ok(`Merged "${from.name}" into "${to.name}"`);

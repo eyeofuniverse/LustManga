@@ -46,7 +46,7 @@ export function Footer() {
         <div className="space-y-4">
           <Logo />
           <p className="max-w-xs text-sm leading-relaxed text-muted">
-            Manga and doujinshi in every language, collected from across the web. Fast to browse, comfortable to read.
+            Hentai manga and doujinshi in every language, collected from across the web. Fast to browse, comfortable to read.
           </p>
           <p className="inline-flex items-center gap-2 rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-muted">
             <span className="grid h-5 w-5 place-items-center rounded-full bg-accent-fill text-[10px] font-extrabold text-white">18</span>

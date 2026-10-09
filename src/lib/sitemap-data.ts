@@ -65,7 +65,7 @@ const tagChunk = unstable_cache(
     );
     return rows.map((t) => ({ url: abs(tagHref(t.type, t.slug)) }));
   },
-  ["sitemap-tags-v1"],
+  ["sitemap-tags-v2"],
   { revalidate: 6 * HOURS },
 );
 
@@ -82,7 +82,7 @@ const workChunk = unstable_cache(
     );
     return rows.map((w) => ({ url: abs(workHref(w)), lastmod: w.updatedAt.toISOString(), image: cdn(w.coverKey) ?? undefined }));
   },
-  ["sitemap-works-v1"],
+  ["sitemap-works-v2"],
   { revalidate: 6 * HOURS },
 );
 

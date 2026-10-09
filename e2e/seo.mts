@@ -70,7 +70,7 @@ async function indexable(label: string, path: string, opts: { ld?: string[]; sel
   const p = info(pg.html);
   ok(pg.status === 200, `${label}: 200`, String(pg.status));
   if (pg.status !== 200) return p;
-  ok(p.title.length >= 15 && p.title.length <= 85, `${label}: title length ${p.title.length}`, p.title);
+  ok(p.title.length >= 15 && p.title.length <= 92, `${label}: title length ${p.title.length}`, p.title);
   ok(!!p.description && p.description.length >= 70 && p.description.length <= 170, `${label}: description length ${p.description?.length}`, p.description ?? "missing");
   ok(p.canonicals.length === 1 && p.canonicals[0].startsWith(BASE), `${label}: exactly one canonical on this site`, p.canonicals.join(" | "));
   if (opts.selfCanonical) ok(p.canonicals[0] === BASE + opts.selfCanonical, `${label}: canonical is ${opts.selfCanonical}`, p.canonicals[0]);
@@ -111,7 +111,7 @@ const w = await indexable("work", workPath, { ld: ["BreadcrumbList"] });
 const wld = w.ld.find((x) => x["@type"] === "Book" || x["@type"] === "ComicSeries") as Record<string, unknown> | undefined;
 ok(!!wld, "work: Book or ComicSeries structured data", types(w).join(","));
 ok(!!wld && !!wld.name && !!wld.url && !!wld.inLanguage && wld.isFamilyFriendly === false && wld.contentRating === "adult", "work: structured data has name, url, language and the adult rating");
-ok(w.title.length <= 85 && /Read .* Online/.test(w.title), "work: title says what it is", w.title);
+ok(w.title.length <= 92 && /Read .* Online/.test(w.title), "work: title says what it is", w.title);
 ok(w.ogType === "book", "work: og:type is book", w.ogType ?? "");
 ok(w.canonicals[0] === BASE + workPath, "work: canonical is its own address", w.canonicals[0]);
 const uw = await indexable("work (non-ASCII title)", workUnicodePath);
@@ -303,7 +303,7 @@ const sitemapUrls: string[] = [];
     ok(p.h1.length === 1, `crawler, ${label}: still exactly one h1 (the age gate does not add one)`, p.h1.join(" | "));
     ok(p.title === withCookie.title && p.canonicals[0] === withCookie.canonicals[0] && p.description === withCookie.description, `crawler, ${label}: same title, description and canonical as a visitor`);
     ok(!noindex(p) && JSON.stringify(types(p)) === JSON.stringify(types(withCookie)), `crawler, ${label}: indexable, same structured data`);
-    ok(html.includes(">" + (path === "/" ? "Read manga" : p.h1[0].slice(0, 12))), `crawler, ${label}: the real content is in the HTML`, p.h1[0] ?? "");
+    ok(html.includes(">" + (path === "/" ? "Read hentai manga" : p.h1[0].slice(0, 12))), `crawler, ${label}: the real content is in the HTML`, p.h1[0] ?? "");
   }
 }
 
@@ -364,6 +364,53 @@ const sitemapUrls: string[] = [];
   const h = (await get("/")).html;
   ok(/rel="search"[^>]*opensearchdescription/.test(h) || /opensearchdescription[^>]*rel="search"/.test(h), "home: advertises the OpenSearch description");
   ok(/rel="alternate"[^>]*type="application\/rss\+xml"/.test(h) || /type="application\/rss\+xml"[^>]*rel="alternate"/.test(h), "home: advertises the RSS feed");
+}
+
+/* ───────────────── 12. keywords, one brand, clean links and titles ───────────────── */
+{
+  const h = await get("/");
+  const p = info(h.html);
+  ok(/hentai/i.test(p.title), "home: the title carries the term people search for", p.title);
+  ok(/hentai/i.test(p.h1.join(" ")), "home: the h1 carries it too", p.h1.join(" | "));
+  ok(/hentai/i.test(p.description ?? ""), "home: and the description", p.description ?? "");
+
+  // one name everywhere: the share-card site name is the same on every page, and the old name is gone
+  const siteNames = new Set<string>();
+  for (const path of ["/", "/browse", "/tags", "/dmca", "/privacy", `/tag/${TAG}`, "/category/doujinshi", workPath]) {
+    const pg = await get(path);
+    const name = meta(pg.html, "property", "og:site_name");
+    if (name) siteNames.add(name);
+    ok(!/LustManga/i.test(pg.html.replace(/<script[\s\S]*?<\/script>/g, "")), `${path}: the old brand name is gone`);
+  }
+  ok(siteNames.size === 1, `one brand name on every page (${[...siteNames].join(", ")})`);
+  const brand = [...siteNames][0] ?? "";
+  ok(!!brand && home.title.includes(brand) && (await get("/browse")).html.includes(`| ${brand}`), "the brand shows in the titles");
+
+  // categories link to their clean pages, never to a /browse?cat= filter, and the duplicate spellings redirect
+  ok(/href="\/category\/doujinshi"/.test(h.html) && !/href="\/browse\?cat=/.test(h.html), "home: category tiles link to /category/...");
+  ok(/href="\/category\/[a-z-]+"/.test((await get(workPath)).html), "work: the breadcrumb links to /category/...");
+  const dupCat = await get("/category/gamecg");
+  ok(dupCat.status === 308 && dupCat.location?.endsWith("/category/game-cg") === true, "the duplicate category /category/gamecg redirects to /category/game-cg", `${dupCat.status} ${dupCat.location}`);
+  const dupTag = await get("/tag/blow-job");
+  ok(dupTag.status === 308 && dupTag.location?.endsWith("/tag/blowjob") === true, "the duplicate tag /tag/blow-job redirects to /tag/blowjob", `${dupTag.status} ${dupTag.location}`);
+
+  // titles read as titles: no [Korean] / {site.com} / circle blocks, no cut-off mid-word
+  const cards = [...(await get("/browse")).html.matchAll(/<h3[^>]*>(.*?)<\/h3>/gs)].map((m) => decode(m[1].replace(/<[^>]+>/g, "")));
+  const messy = cards.filter((t) => /^\s*[\[(【{]|[\]}】]\s*$|\[(English|Korean|Chinese|Digital|Decensored)\]|\{[^}]*\}|\.(com|net)\b/i.test(t));
+  ok(cards.length >= 20 && messy.length === 0, `browse: ${cards.length} card titles, none carrying release-name clutter`, messy.slice(0, 3).join(" | "));
+  const titled = [workPath, workUnicodePath, "/", "/browse"];
+  for (const path of titled) ok(!/[\p{L}\p{N}]…/u.test(info((await get(path)).html).title), `${path}: the title is not cut off mid-word`);
+
+  // every link has a name a crawler can read, and it is not an address
+  const unnamed = (html: string) =>
+    [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)].filter((m) => {
+      const label = /aria-label="([^"]*)"/.exec(m[1])?.[1] ?? "";
+      const alt = /<img[^>]*\balt="([^"]*)"/.exec(m[2])?.[1] ?? "";
+      const text = decode(m[2].replace(/<script[\s\S]*?<\/script>/g, "").replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+      const name = label || text || alt;
+      return !name || /^(https?:\/\/|\/)|%[0-9A-F]{2}/i.test(name);
+    }).length;
+  for (const path of ["/", "/browse", workPath]) ok(unnamed((await get(path)).html) === 0, `${path}: every link has a readable name (none empty, none a raw address)`, String(unnamed((await get(path)).html)));
 }
 
 const failed = results.filter(([c]) => !c).length;

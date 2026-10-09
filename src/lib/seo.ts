@@ -19,7 +19,7 @@ export function clip(text: string | null | undefined, max: number): string {
   if (s.length <= max) return s;
   const cut = s.slice(0, max - 1);
   const word = cut.replace(/\s+\S*$/, "");
-  return `${(word.length > max * 0.6 ? word : cut).replace(/[\s,;:.\-–—]+$/, "")}…`;
+  return `${(word.length >= max * 0.35 ? word : cut).replace(/[\s,;:.\-–—]+$/, "")}…`;
 }
 
 /** First sentence or two of a blurb, capped. */
@@ -43,10 +43,52 @@ export function titleCase(name: string): string {
 /** "Foo" on page 1, "Foo - Page 3" after, so paginated pages never share a title. */
 export const withPage = (base: string, page: number) => (page > 1 ? `${base} - Page ${page}` : base);
 
+/**
+ * Cut a title to fit without leaving half a word: back to the last natural break (a space, dash, colon, comma, bracket
+ * or CJK punctuation), with any bracket that would be left open removed. Only a run with no break at all (an unbroken
+ * CJK title) is cut mid-run, and that one gets an ellipsis so the cut is honest.
+ */
+export function clipTitle(text: string, max: number): string {
+  const s = text.replace(/\s+/g, " ").trim();
+  if (s.length <= max) return s;
+  // a dash, colon, bracket or punctuation is a better place to stop than a plain space ("... Doukoukai - At")
+  const strong = (i: number) => "([（【~～:：–—|".includes(s[i]) || (s[i] === "-" && s[i - 1] === " " && s[i + 1] === " ") || "、，,。！？!?)）]】".includes(s[i - 1] ?? "");
+  const floor = Math.floor(max * 0.5);
+  let at = -1;
+  for (const accept of [strong, (i: number) => /\s/.test(s[i])]) {
+    for (let i = Math.min(max, s.length - 1); i >= floor && at < 0; i--) if (accept(i)) at = i;
+    if (at > 0) break;
+  }
+  if (at <= 0) return `${s.slice(0, max - 1).replace(/[\s,;:.\-–—]+$/, "")}…`;
+  let out = s.slice(0, at);
+  for (const [open, close] of [["(", ")"], ["（", "）"], ["[", "]"], ["【", "】"]] as const) {
+    while (out.split(open).length > out.split(close).length) out = out.slice(0, out.lastIndexOf(open));
+  }
+  return out.replace(/[\s,;:：、，\-–—|~～]+$/u, "") || s.slice(0, max - 1) + "…";
+}
+
+/** What the category holds, in the words people search for: "Hentai Doujinshi", "Hentai Manga", "Western Hentai Comic". */
+export function hentaiKind(category: string): string {
+  switch (category) {
+    case "DOUJINSHI":
+      return "Hentai Doujinshi";
+    case "ARTIST_CG":
+      return "Hentai Artist CG";
+    case "GAME_CG":
+      return "Hentai Game CG";
+    case "IMAGE_SET":
+      return "Hentai Image Set";
+    case "WESTERN":
+      return "Western Hentai Comic";
+    default:
+      return "Hentai Manga";
+  }
+}
+
 /* ───────────────────────── titles and descriptions ───────────────────────── */
 
 /** A whole title (including the site name the template adds) stays near what a results page shows. */
-const TITLE_BUDGET = 80;
+const TITLE_BUDGET = 90;
 
 export interface WorkForSeo {
   publicId: number;
@@ -66,44 +108,47 @@ const namesOf = (w: WorkForSeo, type: string, n: number) =>
   (w.tags ?? []).filter((t) => t.type === type).slice(0, n).map((t) => titleCase(t.name));
 
 /**
- * "Title - Read Doujinshi Online", plus "(Spanish)" for a translation: the work's own name comes first, English is
- * the default so it is not repeated on every page, and a translation stays distinct from the original.
+ * "Title - Read Hentai Doujinshi Online", plus "(Spanish)" for a translation: the work's own name comes first, English
+ * is the default so it is not repeated on every page, and a translation stays distinct from the original. A very short
+ * title ("Fanbox") gets its artist so it does not share a title with every other short one.
  */
 export function workTitle(w: WorkForSeo): string {
   const lang = w.language === "en" ? "" : ` (${langLabel(w.language)})`;
-  const tail = `${lang} - Read ${categoryLabel(w.category)} Online`;
-  const room = TITLE_BUDGET - " | LustManga".length - tail.length;
-  return `${clip(w.title, Math.max(30, room))}${tail}`;
+  const tail = `${lang} - Read ${hentaiKind(w.category)} Online`;
+  const room = TITLE_BUDGET - ` | ${SITE_NAME}`.length - tail.length;
+  const artist = namesOf(w, "ARTIST", 1)[0];
+  const base = w.title.length < 14 && artist && !w.title.toLowerCase().includes(artist.toLowerCase()) ? `${w.title} by ${artist}` : w.title;
+  return `${clipTitle(base, Math.max(36, room))}${tail}`;
 }
 
 /**
- * One factual sentence (what it is, who made it, how long), then as many tags as fit, then the start of the story.
- * Always ends cleanly inside 160 characters instead of being cut mid-word.
+ * What it is (language, kind, artist, parody, length), then the synopsis when there is one, then who is in it and its
+ * tags, as many as fit. Ends cleanly inside 160 characters instead of being cut mid-word, and no boilerplate sentence
+ * that every page shares.
  */
 export function workDescription(w: WorkForSeo, max = 160): string {
   const lang = langLabel(w.language);
+  const kind = hentaiKind(w.category).toLowerCase();
   const artists = namesOf(w, "ARTIST", 2);
-  const parody = namesOf(w, "PARODY", 1);
-  const close = ` Free on ${SITE_NAME}.`;
-  const head = clip(
-    `Read ${w.title} online free: ${/^[aeiou]/i.test(lang) ? "an" : "a"} ${lang} ${categoryLabel(w.category).toLowerCase()}${artists.length ? ` by ${artists.join(" & ")}` : ""}${parody.length ? ` (${parody[0]})` : ""}, ${w.pageCount} pages.`,
-    max - close.length,
+  const parody = namesOf(w, "PARODY", 1).filter((p) => p.toLowerCase() !== "original");
+  const characters = namesOf(w, "CHARACTER", 3);
+  let out = clip(
+    `Read ${w.title} online: ${/^[aeiou]/i.test(lang) ? "an" : "a"} ${lang} ${kind}${artists.length ? ` by ${artists.join(" & ")}` : ""}${parody.length ? ` (${parody[0]})` : ""}, ${w.pageCount} pages.`,
+    max,
   );
-  let out = head + close;
-  const room = (extra: string) => (head + extra + close).length <= max;
+  const fits = (extra: string) => (out + " " + extra).length <= max;
+  const room = max - out.length - 1;
+  const about = room >= 45 ? excerpt(w.description, room) : "";
+  if (about) out += " " + about;
+  if (characters.length && fits(`Featuring ${characters.join(", ")}.`)) out += ` Featuring ${characters.join(", ")}.`;
   const tags = namesOf(w, "TAG", 6);
-  let tagText = "";
   for (let n = tags.length; n > 0; n--) {
-    const t = ` Tags: ${tags.slice(0, n).join(", ")}.`;
-    if (room(t)) {
-      tagText = t;
+    const t = `Tags: ${tags.slice(0, n).join(", ")}.`;
+    if (fits(t)) {
+      out += " " + t;
       break;
     }
   }
-  out = head + tagText + close;
-  const about = excerpt(w.description, 200);
-  const left = max - out.length - 1;
-  if (about && left >= 40) out = head + tagText + ` ${clip(about, left)}` + close;
   return out;
 }
 
@@ -115,19 +160,19 @@ export function tagSeo(type: string, rawName: string, count: number): { title: s
   const end = `New uploads daily on ${SITE_NAME}.`;
   switch (type) {
     case "artist":
-      return { h1: name, title: `${name} - Manga & Doujinshi by ${name}`, description: clip(`Read ${works} by ${name}: manga and doujinshi in every language, free online. ${end}`, 160) };
+      return { h1: name, title: `${name} Hentai Manga & Doujinshi by ${name}`, description: clip(`Read ${works} by ${name}: hentai manga and doujinshi in every language, free online. ${end}`, 160) };
     case "group":
-      return { h1: name, title: `${name} (Circle) - Doujinshi & Manga`, description: clip(`Read all ${works} from the circle ${name}: doujinshi and manga in every language, free online. ${end}`, 160) };
+      return { h1: name, title: `${name} (Circle) - Hentai Doujinshi & Manga`, description: clip(`Read all ${works} from the circle ${name}: hentai doujinshi and manga in every language, free online. ${end}`, 160) };
     case "parody":
-      return { h1: name, title: `${name} Doujinshi & Manga - Parody`, description: clip(`Read ${works} parodying ${name}: doujinshi and manga in every language, free online. ${end}`, 160) };
+      return { h1: name, title: `${name} Hentai Doujinshi & Manga - Parody`, description: clip(`Read ${works} parodying ${name}: hentai doujinshi and manga in every language, free online. ${end}`, 160) };
     case "character":
-      return { h1: name, title: `${name} Doujinshi & Manga - Character`, description: clip(`Read ${works} featuring ${name}: doujinshi and manga in every language, free online. ${end}`, 160) };
+      return { h1: name, title: `${name} Hentai Doujinshi & Manga - Character`, description: clip(`Read ${works} featuring ${name}: hentai doujinshi and manga in every language, free online. ${end}`, 160) };
     case "language":
-      return { h1: name, title: `${name} Manga & Doujinshi - Read Online`, description: clip(`Read ${works} translated into ${name}: manga and doujinshi, free online. ${end}`, 160) };
+      return { h1: name, title: `${name} Hentai Manga & Doujinshi - Read Online`, description: clip(`Read ${works} translated into ${name}: hentai manga and doujinshi, free online. ${end}`, 160) };
     case "category":
-      return { h1: name, title: `${name} - Read Online Free`, description: clip(`Browse ${works} in the ${name} category, free to read online in every language. ${end}`, 160) };
+      return { h1: name, title: `${name} Hentai - Read Online Free`, description: clip(`Browse ${works} of ${name} hentai, free to read online in every language. ${end}`, 160) };
     default:
-      return { h1: name, title: `${name} Manga & Doujinshi - Read Online`, description: clip(`Read ${works} tagged ${name}: manga and doujinshi in every language, free online. ${end}`, 160) };
+      return { h1: name, title: `${name} Hentai Manga & Doujinshi - Read Online`, description: clip(`Read ${works} tagged ${name}: hentai manga and doujinshi in every language, free online. ${end}`, 160) };
   }
 }
 
@@ -339,6 +384,6 @@ export async function listingMetadata(o: {
 
 /* ───────────────────────── home page ───────────────────────── */
 
-export const HOME_TITLE = `${SITE_NAME} - Read Manga & Doujinshi Online Free`;
+export const HOME_TITLE = `${SITE_NAME} - Read Hentai Manga & Doujinshi Online Free`;
 export const HOME_DESCRIPTION =
-  "Read manga and doujinshi online free in English, Japanese, Chinese and more. A growing library with a fast book-style reader and new uploads every day. Adults only (18+).";
+  "Read hentai manga and doujinshi online free in English, Japanese, Chinese and more. A fast book-style reader and new uploads every day. Adults only (18+).";

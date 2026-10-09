@@ -13,8 +13,8 @@ import { PageHeading } from "@/components/work/Section";
 
 export const generateMetadata = ({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }): Promise<Metadata> =>
   listingMetadata({
-    title: "Latest Manga Updates: New Chapters",
-    description: "The manga series that just got a new chapter on LustManga, newest first. Read the latest chapters online free.",
+    title: "Latest Hentai Manga Updates: New Chapters",
+    description: "The hentai manga series that just got a new chapter on LustPages, newest first. Read the latest chapters online free.",
     base: "/updates",
     searchParams,
   });

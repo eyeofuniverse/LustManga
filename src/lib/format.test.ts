@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readHref, tagHref, workHref } from "./format";
+import { categoryHref, readHref, tagHref, workHref } from "./format";
 
 const asciiOnly = (s: string) => /^[\x21-\x7e]+$/.test(s);
 
@@ -17,4 +17,12 @@ test("tag and reader links encode too", () => {
   assert.ok(asciiOnly(tagHref("tag", "ゼンゼロ")));
   assert.equal(readHref(74, 3.5, 12), "/read/74/3.5?p=12");
   assert.equal(readHref(74, 1), "/read/74/1");
+});
+
+test("every category links to its clean /category/ page, never to a /browse?cat= filter", () => {
+  assert.equal(categoryHref("DOUJINSHI"), "/category/doujinshi");
+  assert.equal(categoryHref("ARTIST_CG"), "/category/artist-cg");
+  assert.equal(categoryHref("GAME_CG"), "/category/game-cg");
+  assert.equal(categoryHref("IMAGE_SET"), "/category/image-set");
+  assert.equal(categoryHref("OTHER"), "/category/misc");
 });

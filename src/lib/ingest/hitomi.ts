@@ -3,6 +3,7 @@ import { pool } from "@/lib/http";
 import { classify } from "@/lib/safety/classify";
 import { loadTerms } from "@/lib/safety/load-terms";
 import { slug, upsertTags } from "@/lib/tags";
+import { cleanTitle } from "@/lib/titles";
 import { attachSource, findDuplicate, findSimilar, normTitle, recordCandidate } from "@/lib/dedupe";
 import * as hm from "@/lib/sources/hitomi";
 import type { HGallery } from "@/lib/sources/hitomi";
@@ -102,16 +103,17 @@ async function processGallery(id: number, seed: number, c: Ctx): Promise<void> {
       stats.duplicates++;
       return void o.log(`  duplicate of #${dup.publicId}, source attached (nothing downloaded)`);
     }
+    const clean = cleanTitle(info.title);
     const siblings = (info.languages ?? []).map((l) => Number(l.galleryid)).filter(Number.isFinite);
     const created = await db(() =>
       prisma.work.create({
         data: {
-          slug: slug(info.title) || "work",
+          slug: slug(clean.title) || "work",
           kind: "ONESHOT",
           category: hm.categoryFor(info.type) as never,
-          title: info.title,
+          title: clean.title,
           titleNorm: probe.titleNorm,
-          titleOriginal: info.japanese_title,
+          titleOriginal: info.japanese_title ?? clean.original,
           altTitles: info.japanese_title ? [info.japanese_title] : [],
           language: lang,
           translationGroupId: `hitomi:${Math.min(id, ...siblings)}`,
