@@ -72,3 +72,38 @@ test("dHash is stable, and differs for different images", async () => {
   assert.equal(await dhash(a), await dhash(a));
   assert.notEqual(await dhash(a), await dhash(b));
 });
+
+const noisy = (w = 600, h = 900) =>
+  sharp({ create: { width: w, height: h, channels: 3, background: "#808080", noise: { type: "gaussian", mean: 128, sigma: 55 } } }).jpeg({ quality: 90 }).toBuffer();
+
+test("a real-sized JPEG missing only its last bytes is kept (and flagged), not allowed to sink the whole chapter", async () => {
+  const full = await noisy();
+  assert.ok(full.length > 20_000, `fixture size ${full.length}`);
+  const out = await toWebp(full.subarray(0, full.length - Math.ceil(full.length * 0.004)));
+  assert.equal(out.truncated, true);
+  assert.deepEqual([out.width, out.height], [600, 900]);
+  assert.equal((await toWebp(full)).truncated, undefined, "a complete file is not flagged");
+});
+
+test("a JPEG cut off well before its end keeps the part that arrived, flagged, as the source's own readers see it", async () => {
+  const full = await noisy();
+  const out = await toWebp(full.subarray(0, Math.floor(full.length * 0.4)));
+  assert.equal(out.truncated, true);
+  assert.deepEqual([out.width, out.height], [600, 900]);
+});
+
+test("a stub with almost none of the picture is rejected, however it fails", async () => {
+  const big = await noisy(2000, 3000);
+  await assert.rejects(() => toWebp(big.subarray(0, Math.floor(big.length * 0.01))), /premature end|truncated/i); // real size, but under 3% of the page
+  await assert.rejects(() => toWebp(big.subarray(0, 8000)), /premature end|truncated/i); // too small to be a page
+});
+
+test("an animation with more pixels than libvips will decode keeps its first frame instead of failing", async () => {
+  const w = 64, h = 64, frames = 4;
+  const raw = Buffer.concat(Array.from({ length: frames }, (_, i) => Buffer.alloc(w * h * 3, i * 60)));
+  const animated = await sharp(raw, { raw: { width: w, height: h * frames, channels: 3, pageHeight: h } }).webp({ loop: 0, delay: [100, 100, 100, 100] }).toBuffer();
+  const out = await toWebp(animated, { maxPixels: w * h * 2 }); // 4 frames of 64x64 = 16384 px, over the 8192 budget
+  assert.equal(out.animated, false);
+  assert.deepEqual([out.width, out.height], [w, h]);
+  assert.equal(((await sharp(out.data).metadata()).pages ?? 1), 1);
+});

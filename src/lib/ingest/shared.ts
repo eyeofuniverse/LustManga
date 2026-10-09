@@ -95,6 +95,7 @@ export async function storeChapterPages(
           const raw = await ref.get();
           try {
             const img = await toWebp(raw);
+            if (img.truncated) log(`  page ${ref.n}: the source file is cut off; stored what decodes`);
             await r2Put(pageKey(work.mediaId, chapterId, ref.n), img.data);
             return { tuple: [img.width, img.height, img.bytes] as PageTuple, phash: img.phash as string | null };
           } catch (e) {
