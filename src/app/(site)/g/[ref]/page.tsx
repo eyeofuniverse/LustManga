@@ -119,7 +119,7 @@ export default async function WorkPage({ params }: { params: Params }) {
               <li className="inline-flex items-center gap-1.5"><FileText className="h-4 w-4" /> {w.pageCount} pages</li>
               <li className="inline-flex items-center gap-1.5"><CalendarDays className="h-4 w-4" /> Added {timeAgo(w.createdAt)}</li>
               {w.srcRating != null && w.srcVotes > 0 && (
-                <li className="inline-flex items-center gap-1.5" title="Rating from readers on the source site">
+                <li className="inline-flex items-center gap-1.5" title="Average reader rating from the source sites, adjusted so sites that rate everything highly do not outrank the rest">
                   <Star className="h-4 w-4 text-warn" /> {w.srcRating.toFixed(1)}/10 <span className="text-xs">({compact(w.srcVotes)} votes)</span>
                 </li>
               )}

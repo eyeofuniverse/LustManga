@@ -58,7 +58,7 @@ test("a work no window mentions ranks by a quarter of its all-time popularity", 
   assert.ok(momentum(5_000, 0) > momentum(0, 8_000)); // a chart entry beats a merely old favourite
 });
 
-import { dayString, rankMoveScore, windowGain } from "./signals";
+import { dayString, rankMoveScore, windowGainSince as windowGain } from "./signals";
 
 test("snapshot days are UTC calendar days", () => {
   assert.equal(dayString(Date.UTC(2026, 9, 9, 23, 59)), "2026-10-09");
@@ -67,26 +67,26 @@ test("snapshot days are UTC calendar days", () => {
 
 test("growth over a window compares today with the snapshot at the start of that window", () => {
   const h = [{ day: "2026-10-01", value: 100 }, { day: "2026-10-03", value: 130 }, { day: "2026-10-08", value: 150 }, { day: "2026-10-09", value: 190 }];
-  assert.equal(windowGain(h, "2026-10-09", 1, "2026-10-01"), 40); // since yesterday
+  assert.equal(windowGain(h, "2026-10-09", 1), 40); // since yesterday
   // the window starts on 10-02; the latest snapshot on or before that is 10-01 (100), so the gain is 190 - 100
-  assert.equal(windowGain(h, "2026-10-09", 7, "2026-10-01"), 90);
+  assert.equal(windowGain(h, "2026-10-09", 7), 90);
 });
 
-test("a work missing from the history starts from zero, and a short history is scaled up to the window", () => {
-  // history began 4 days ago; the work first appears today
-  assert.equal(windowGain([{ day: "2026-10-09", value: 800 }], "2026-10-09", 1, "2026-10-05"), 800);
+test("a short history is scaled up to the window, at most 4x", () => {
   // only 2 days of history for a 7-day window: the 2-day gain is scaled by 3.5
   const two = [{ day: "2026-10-07", value: 100 }, { day: "2026-10-09", value: 120 }];
-  assert.equal(windowGain(two, "2026-10-09", 7, "2026-10-07"), 70);
-  // scaling is capped at 4x
+  assert.equal(windowGain(two, "2026-10-09", 7), 70);
   const one = [{ day: "2026-10-08", value: 0 }, { day: "2026-10-09", value: 10 }];
-  assert.equal(windowGain(one, "2026-10-09", 30, "2026-10-08"), 40);
+  assert.equal(windowGain(one, "2026-10-09", 30), 40);
 });
 
-test("no history to compare with, or no reading for today, gives no growth figure", () => {
-  assert.equal(windowGain([{ day: "2026-10-09", value: 5 }], "2026-10-09", 7, "2026-10-09"), null); // first day of data
-  assert.equal(windowGain([{ day: "2026-10-05", value: 5 }], "2026-10-09", 7, "2026-10-05"), null); // nothing for today
-  assert.equal(windowGain([], "2026-10-09", 7, "2026-10-01"), null);
+test("no earlier reading, or no reading for today, gives no growth figure (a first sighting is a size, not growth)", () => {
+  assert.equal(windowGain([{ day: "2026-10-09", value: 800 }], "2026-10-09", 7), null);
+  assert.equal(windowGain([{ day: "2026-10-05", value: 5 }], "2026-10-09", 7), null); // nothing for today
+  assert.equal(windowGain([], "2026-10-09", 7), null);
+  // an old work first tracked 3 days ago only counts what it gained since then, not its whole count
+  const lateStart = [{ day: "2026-10-06", value: 790 }, { day: "2026-10-09", value: 800 }];
+  assert.equal(windowGain(lateStart, "2026-10-09", 7, new Date("2023-01-01T00:00:00Z")), 10 * Math.min(4, 7 / 3));
 });
 
 test("moving up a popularity list is momentum; sliding down is not", () => {
@@ -138,14 +138,14 @@ test("a work published inside the window grew from zero; an older one only count
   const today = "2026-10-09";
   const fresh = [{ day: today, value: 40 }];
   // published 3 days ago with 40 favourites: 40 in 3 days, scaled to a week's rate like any short history (40 * 7/3)
-  const rate = windowGainSince(fresh, today, 7, "2026-10-08", new Date("2026-10-06T10:00:00Z"))!;
+  const rate = windowGainSince(fresh, today, 7, new Date("2026-10-06T10:00:00Z"))!;
   assert.ok(Math.abs(rate - (40 * 7) / 3) < 0.01, String(rate));
   // published today: compared with zero yesterday
-  assert.equal(windowGainSince(fresh, today, 1, "2026-10-08", new Date("2026-10-09T01:00:00Z")), 40);
+  assert.equal(windowGainSince(fresh, today, 1, new Date("2026-10-09T01:00:00Z")), 40);
   // published years ago with 800 favourites and no snapshots yet: no growth figure at all (it did NOT gain 800 this week)
-  assert.equal(windowGainSince([{ day: today, value: 800 }], today, 7, "2026-10-08", new Date("2023-01-01T00:00:00Z")), null);
+  assert.equal(windowGainSince([{ day: today, value: 800 }], today, 7, new Date("2023-01-01T00:00:00Z")), null);
   // ...and with a real snapshot from yesterday, only the real difference counts
-  assert.equal(windowGainSince([{ day: "2026-10-08", value: 790 }, { day: today, value: 800 }], today, 1, "2026-10-08", new Date("2023-01-01T00:00:00Z")), 10);
+  assert.equal(windowGainSince([{ day: "2026-10-08", value: 790 }, { day: today, value: 800 }], today, 1, new Date("2023-01-01T00:00:00Z")), 10);
   // no publish date: behaves like windowGain
-  assert.equal(windowGainSince([{ day: "2026-10-08", value: 5 }, { day: today, value: 9 }], today, 1, "2026-10-08", null), 4);
+  assert.equal(windowGainSince([{ day: "2026-10-08", value: 5 }, { day: today, value: 9 }], today, 1, null), 4);
 });

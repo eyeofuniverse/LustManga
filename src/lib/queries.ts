@@ -7,17 +7,23 @@ import { PAGE_SIZE } from "@/lib/site";
 import { normText, type NumCond, type Term } from "@/lib/search";
 import { slug as makeSlug } from "@/lib/tags";
 import type { Prefs } from "@/lib/prefs";
+import { OWN_TRAFFIC_CAP } from "@/lib/signals";
 import type { Sort } from "@/lib/sorts";
 import type { SuggestResult, TagLite, WorkCard } from "@/lib/types";
 
 /* ───────────────────────────── helpers ───────────────────────────── */
 
-/** The "Popular" ordering. This exact expression is indexed (see scripts/db-setup.mts). */
 /** a rating counts for the Top rated list once this many people have voted */
 const MIN_VOTES = 10;
 /** the rating pulled toward the typical 7/10 until many people have voted (the same formula as bayesianRating in lib/signals.ts) */
 const BAYES = Prisma.sql`((w."srcVotes"::float8 * w."srcRating" + 25 * 7) / (w."srcVotes" + 25))`;
-const POP = Prisma.sql`(w."seedPopularity" + w.views * 20 + w.favorites * 50)`;
+/**
+ * The "Popular" ordering: the source sites' score plus what readers here add, at most OWN_TRAFFIC_CAP. The cap keeps
+ * the anonymous counters (cookie-based, easy to script) from lifting a work above ones the source sites rate far higher.
+ * This exact expression is indexed (see scripts/db-setup.mts), so the cap is written out as a literal.
+ */
+const OWN = Prisma.raw(`LEAST(w.views * 20 + w.favorites * 50, ${OWN_TRAFFIC_CAP})`);
+const POP = Prisma.sql`(w."seedPopularity" + ${OWN})`;
 const CARD = Prisma.sql`w."publicId", w.slug, w.title, w.language, w.category::text AS category, w.kind::text AS kind, w."pageCount", w."coverKey", w."createdAt"`;
 
 const TYPE_BY_SLUG: Record<string, TagType> = {
@@ -106,7 +112,7 @@ export async function listWorks(o: ListOpts): Promise<{ items: WorkCard[]; hasNe
         : o.sort === "rated"
           ? Prisma.sql`${BAYES} DESC, ${POP} DESC, w.id DESC`
           : trend
-            ? Prisma.sql`(CASE WHEN ${trend} > 0 THEN ${trend} ELSE w."seedPopularity" / 4 END + coalesce(wv.v, 0) * 20) DESC, ${POP} DESC, w.id DESC`
+            ? Prisma.sql`(CASE WHEN ${trend} > 0 THEN ${trend} ELSE w."seedPopularity" / 4 END + LEAST(coalesce(wv.v, 0) * 20, ${OWN_TRAFFIC_CAP}::int)) DESC, ${POP} DESC, w.id DESC`
             : Prisma.sql`${POP} DESC, w.id DESC`;
   const rows = await db(() =>
     prisma.$queryRaw<WorkCard[]>(Prisma.sql`

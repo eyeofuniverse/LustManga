@@ -17,6 +17,7 @@ export function FollowingFeed() {
   const [page, setPage] = useState(1);
   const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (!key) {
@@ -26,23 +27,33 @@ export function FollowingFeed() {
     }
     const ctrl = new AbortController();
     setPage(1);
+    setFailed(false);
     fetch(`/api/following?ids=${key}&page=1`, { signal: ctrl.signal })
-      .then((r) => r.json() as Promise<{ items: Work[]; hasNext: boolean }>)
+      .then((r) => (r.ok ? (r.json() as Promise<{ items: Work[]; hasNext: boolean }>) : Promise.reject(new Error("failed"))))
       .then((d) => {
         setWorks(d.items);
         setMore(d.hasNext);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!ctrl.signal.aborted) {
+          setFailed(true);
+          setWorks((w) => w ?? []);
+        }
+      });
     return () => ctrl.abort();
   }, [key]);
 
   const loadMore = async () => {
     setBusy(true);
     try {
-      const d = (await (await fetch(`/api/following?ids=${key}&page=${page + 1}`)).json()) as { items: Work[]; hasNext: boolean };
+      const r = await fetch(`/api/following?ids=${key}&page=${page + 1}`);
+      if (!r.ok) throw new Error("failed");
+      const d = (await r.json()) as { items: Work[]; hasNext: boolean };
       setWorks((w) => [...(w ?? []), ...d.items.filter((x) => !(w ?? []).some((y) => y.publicId === x.publicId))]);
       setMore(d.hasNext);
       setPage((p) => p + 1);
+    } catch {
+      setFailed(true);
     } finally {
       setBusy(false);
     }
@@ -84,6 +95,12 @@ export function FollowingFeed() {
             <BellPlus className="h-4 w-4" /> Find artists to follow
           </Link>
         </EmptyState>
+      ) : failed && works.length === 0 ? (
+        <EmptyState title="Could not load your feed" hint="Check your connection and reload the page.">
+          <button type="button" onClick={() => location.reload()} className="btn-primary mt-2">
+            Reload
+          </button>
+        </EmptyState>
       ) : works.length === 0 ? (
         <EmptyState title="Nothing new yet" hint="Nothing matches what you follow and your language settings right now." />
       ) : (
@@ -95,6 +112,11 @@ export function FollowingFeed() {
               </li>
             ))}
           </ul>
+          {failed && (
+            <p role="alert" className="mt-6 text-center text-sm text-red-400">
+              Could not load more. Try again.
+            </p>
+          )}
           {more && (
             <div className="mt-10 flex justify-center">
               <button type="button" onClick={loadMore} disabled={busy} className="btn-soft h-12 px-8">

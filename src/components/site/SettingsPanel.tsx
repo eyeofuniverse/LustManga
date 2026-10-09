@@ -38,6 +38,7 @@ function BackupCard() {
 
   const importFile = async (file: File | undefined) => {
     if (!file) return;
+    if (file.size > 2_000_000) return setNote({ ok: false, text: "That file is too large to be a LustManga backup." });
     const b = parseBackup(await file.text());
     if (!b) return setNote({ ok: false, text: "That file is not a LustManga backup." });
     if (mode === "replace" && !window.confirm("Replace your saved works, history and settings with this backup?")) return;

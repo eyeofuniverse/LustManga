@@ -163,7 +163,7 @@ function trendFrom(
   const snaps: Snap[] = (hist.byWork.get(workId) ?? []).map((s) => ({ day: s.day, value: s[field] }));
   const out = { day: 0, week: 0, month: 0 } as Record<Window, number>;
   for (const w of WINDOWS) {
-    const gain = windowGainSince(snaps, today, WINDOW_DAYS[w], hist.start, publishedAt);
+    const gain = windowGainSince(snaps, today, WINDOW_DAYS[w], publishedAt);
     out[w] = gain == null ? 0 : toScore(gain, w);
   }
   return out;

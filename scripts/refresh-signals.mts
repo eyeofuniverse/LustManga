@@ -17,8 +17,8 @@ if (!sources.length) throw new Error(`--sources must name some of: ${known.join(
 
 const results = await refreshSignals({
   sources,
-  statsMinutes: Math.max(1, Number(arg("stats-minutes", "25"))),
-  statsLimit: Math.max(1, Number(arg("stats-limit", "3000"))),
+  statsMinutes: Math.max(1, Number(arg("stats-minutes", "25")) || 25),
+  statsLimit: Math.max(1, Number(arg("stats-limit", "3000")) || 3000),
   dryRun: process.argv.includes("--dry-run"),
   log: (m) => console.log(m),
 });

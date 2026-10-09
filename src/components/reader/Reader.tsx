@@ -252,6 +252,12 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
   /* ───────── auto-play: turns the page every few seconds, or scrolls on its own ───────── */
   useEffect(() => setPlaying(false), [scrollMode]);
   useEffect(() => {
+    // pages must not keep turning while the tab is in the background
+    const onHide = () => document.hidden && setPlaying(false);
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
+  }, []);
+  useEffect(() => {
     if (!playing || scrollMode || sheet || hint || zoomed) return;
     if (slideIdx >= slides.length - 1) return setPlaying(false); // reached the end card
     // each turn restarts this timer (slideIdx changes), so turning by hand simply postpones the next automatic one

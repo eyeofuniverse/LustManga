@@ -9,9 +9,12 @@ const stmts = [
   `CREATE INDEX IF NOT EXISTS work_tagids_gin ON "Work" USING GIN ("tagIds")`,
   `CREATE INDEX IF NOT EXISTS work_title_trgm ON "Work" USING GIN (title gin_trgm_ops)`,
   `CREATE INDEX IF NOT EXISTS work_titlenorm_trgm ON "Work" USING GIN ("titleNorm" gin_trgm_ops)`,
-  // "Popular" order = seed + 20 per view + 50 per favourite; the SAME expression must appear in queries to use these
-  `CREATE INDEX IF NOT EXISTS work_popular_idx ON "Work" (publish, (("seedPopularity" + views * 20 + favorites * 50)) DESC)`,
-  `CREATE INDEX IF NOT EXISTS work_popular_lang_idx ON "Work" (publish, language, (("seedPopularity" + views * 20 + favorites * 50)) DESC)`,
+  // "Popular" order = source score + 20 per view + 50 per favourite (the readers' part capped at OWN_TRAFFIC_CAP, 12500);
+  // the SAME expression must appear in queries to use these
+  `DROP INDEX IF EXISTS work_popular_idx`,
+  `DROP INDEX IF EXISTS work_popular_lang_idx`,
+  `CREATE INDEX IF NOT EXISTS work_popular_cap_idx ON "Work" (publish, (("seedPopularity" + LEAST(views * 20 + favorites * 50, 12500))) DESC)`,
+  `CREATE INDEX IF NOT EXISTS work_popular_cap_lang_idx ON "Work" (publish, language, (("seedPopularity" + LEAST(views * 20 + favorites * 50, 12500))) DESC)`,
   `CREATE INDEX IF NOT EXISTS work_new_lang_idx ON "Work" (publish, language, "createdAt" DESC)`,
   `CREATE INDEX IF NOT EXISTS tag_type_count_idx ON "Tag" (type, count DESC)`,
   `CREATE INDEX IF NOT EXISTS tag_name_trgm ON "Tag" USING GIN (name gin_trgm_ops)`,

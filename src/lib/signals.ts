@@ -7,6 +7,9 @@
  */
 export const MAX_SCORE = 50_000;
 
+/** The most our own readers' views and saves can add to a work's score: a quarter of the scale (see POP in lib/queries.ts). */
+export const OWN_TRAFFIC_CAP = 12_500;
+
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
 /** A raw count on the 0..50000 scale, logarithmic so a few huge numbers do not flatten everything else. `ref` is "very popular". */
@@ -96,45 +99,6 @@ export interface Snap {
   value: number;
 }
 
-/**
- * How much a number grew over the last `windowDays` days, from daily snapshots (any order).
- *
- * `historyStart` is the first day we took ANY snapshot for this source. A work missing from the history after that
- * day was not on the source's list yet, so it counts as starting from 0 (a new entrant is rising fast). When the
- * history is shorter than the window, the gain is scaled up to the window (at most 4x) rather than ignored, so
- * trending works from the first day or two of data. Returns null when there is no earlier snapshot to compare with.
- */
-export function windowGain(history: Snap[], today: string, windowDays: number, historyStart: string): number | null {
-  const now = history.find((h) => h.day === today);
-  if (!now) return null;
-  const todayN = dayNumber(today);
-  const start = dayNumber(historyStart);
-  if (start >= todayN) return null; // the first day of data: nothing to compare yet
-  const target = todayN - windowDays;
-  const earlier = history.filter((h) => dayNumber(h.day) < todayN).sort((a, b) => dayNumber(b.day) - dayNumber(a.day));
-
-  let baseline: number;
-  let spanDays: number;
-  const atTarget = earlier.find((h) => dayNumber(h.day) <= target);
-  if (atTarget) {
-    baseline = atTarget.value;
-    spanDays = todayN - dayNumber(atTarget.day);
-  } else if (start <= target) {
-    baseline = 0; // the history covers the whole window and this work was not in it
-    spanDays = windowDays;
-  } else if (earlier.length) {
-    const oldest = earlier[earlier.length - 1];
-    baseline = oldest.value;
-    spanDays = todayN - dayNumber(oldest.day);
-  } else {
-    baseline = 0; // history exists, but the work appeared after it began
-    spanDays = todayN - start;
-  }
-  const gain = now.value - baseline;
-  if (spanDays >= windowDays) return gain;
-  return gain * Math.min(4, windowDays / Math.max(1, spanDays));
-}
-
 /** Climbing a source's popularity list is momentum: 10,000 points up the 0..50000 scale is a very strong week. */
 export const rankMoveScore = (pointsGained: number): number => (pointsGained > 0 ? clamp(Math.round(pointsGained * 2), 0, MAX_SCORE) : 0);
 
@@ -192,23 +156,31 @@ export function statsToFields(site: string, st: PageStats): WorkSignalFields {
 }
 
 /**
- * windowGain, plus one extra fact: when the work was published. A work published INSIDE the window started from zero
- * that day, so everything it has gathered since is growth (a brand-new work with 40 favourites is rising fast). A work
- * published before the window says nothing about the window, so only real snapshots count for it. A work published
- * today is compared with zero yesterday.
+ * How much a COUNTER (followers, favourites) grew over the last `windowDays` days, from daily snapshots of it.
+ *
+ * It is compared with the latest snapshot on or before the start of the window. With no snapshot that old, the oldest
+ * one we have is used and the gain is scaled up to the window (at most 4x), so Trending works from the second day of
+ * data. A work with NO earlier snapshot has no growth figure (null): its first reading says how big it is, not how fast
+ * it grew, so an old work first seen today must not look like it gained everything this week.
+ *
+ * The one exception is a work published INSIDE the window: it started from zero on its publish day, so what it has
+ * gathered since is growth (a brand-new work with 40 favourites is rising fast). A work published today is compared
+ * with zero yesterday.
  */
-export function windowGainSince(history: Snap[], today: string, windowDays: number, historyStart: string, publishedAt?: Date | null): number | null {
+export function windowGainSince(history: Snap[], today: string, windowDays: number, publishedAt?: Date | null): number | null {
+  const now = history.find((h) => h.day === today);
+  if (!now) return null;
   const todayN = dayNumber(today);
+  const pool = history.filter((h) => dayNumber(h.day) < todayN);
   if (publishedAt) {
     const published = dayNumber(dayString(publishedAt));
-    if (published > todayN - windowDays) {
-      const from = Math.min(published, todayN - 1);
-      const day = new Date(from * 86_400_000).toISOString().slice(0, 10);
-      const withStart = history.some((h) => h.day === day) ? history : [...history, { day, value: 0 }];
-      return windowGain(withStart, today, windowDays, day < historyStart ? day : historyStart);
-    }
+    // compared with zero on its publish day (or yesterday, for a work published today)
+    if (published > todayN - windowDays) pool.push({ day: new Date(Math.min(published, todayN - 1) * 86_400_000).toISOString().slice(0, 10), value: 0 });
   }
-  // an older work seen for the first time today did not gain its whole count this week: wait for a real earlier reading
-  if (publishedAt && !history.some((h) => h.day < today)) return null;
-  return windowGain(history, today, windowDays, historyStart);
+  if (!pool.length) return null;
+  pool.sort((x, y) => dayNumber(y.day) - dayNumber(x.day)); // newest first
+  const base = pool.find((h) => dayNumber(h.day) <= todayN - windowDays) ?? pool[pool.length - 1];
+  const span = todayN - dayNumber(base.day);
+  const gain = now.value - base.value;
+  return span >= windowDays ? gain : gain * Math.min(4, windowDays / Math.max(1, span));
 }

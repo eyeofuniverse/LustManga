@@ -41,12 +41,19 @@ jobs:
           } > .env
       - run: npx prisma generate
       - name: Refresh
+        # dispatch inputs go through env, never into the script text
+        env:
+          IN_SOURCES: ${{ github.event.inputs.sources }}
+          IN_MINUTES: ${{ github.event.inputs.stats_minutes }}
+          IN_LIMIT: ${{ github.event.inputs.stats_limit }}
+          SCHEDULE: ${{ github.event.schedule }}
         run: |
-          SOURCES="${{ github.event.inputs.sources }}"
+          SOURCES="$IN_SOURCES"
           if [ -z "$SOURCES" ]; then
-            case "${{ github.event.schedule }}" in
+            case "$SCHEDULE" in
               "17 */6 * * *") SOURCES=mangadex,hitomi ;;
               *) SOURCES=mangadex,hitomi,stats ;;
             esac
           fi
-          npm run signals -- --sources=$SOURCES --stats-minutes=${{ github.event.inputs.stats_minutes || '40' }} --stats-limit=${{ github.event.inputs.stats_limit || '3000' }}
+          # the script ignores anything that is not a known source name, a number is clamped to at least 1
+          npm run signals -- "--sources=$SOURCES" "--stats-minutes=${IN_MINUTES:-40}" "--stats-limit=${IN_LIMIT:-3000}"
