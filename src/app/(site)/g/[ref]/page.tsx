@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
 import { CalendarDays, FileText, Languages, Layers, Star } from "lucide-react";
 import { currentPrefs } from "@/lib/prefs-server";
-import { getMoreBy, getRelated, getVariants, getWork } from "@/lib/queries";
+import { getMoreBy, getRelated, getVariants, getWork, hasTitleTwin } from "@/lib/queries";
 import { categoryHref, categoryLabel, compact, langLabel, tagHref, timeAgo, workHref } from "@/lib/format";
 import { cdn } from "@/lib/cdn";
 import { cleanDescription } from "@/lib/text";
@@ -41,7 +41,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const w = id ? await getWork(id) : null;
   if (!w) return { title: "Not found", robots: { index: false, follow: false } };
   const seo = forSeo(w);
-  const title = workTitle(seo);
+  const title = workTitle(seo, await hasTitleTwin(w.id, w.title, w.language));
   const description = workDescription(seo);
   const path = workHref(w);
   // translations of the same work point at each other, so a reader is sent to the copy in their language

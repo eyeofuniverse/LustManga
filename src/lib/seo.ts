@@ -110,14 +110,17 @@ const namesOf = (w: WorkForSeo, type: string, n: number) =>
 /**
  * "Title - Read Hentai Doujinshi Online", plus "(Spanish)" for a translation: the work's own name comes first, English
  * is the default so it is not repeated on every page, and a translation stays distinct from the original. A very short
- * title ("Fanbox") gets its artist so it does not share a title with every other short one.
+ * title ("Fanbox") gets its artist so it does not share a title with every other short one, and so does a title another
+ * work in the same language also has (`twin`): the artist or circle, or the work's number when neither is known.
  */
-export function workTitle(w: WorkForSeo): string {
+export function workTitle(w: WorkForSeo, twin = false): string {
   const lang = w.language === "en" ? "" : ` (${langLabel(w.language)})`;
   const tail = `${lang} - Read ${hentaiKind(w.category)} Online`;
   const room = TITLE_BUDGET - ` | ${SITE_NAME}`.length - tail.length;
   const artist = namesOf(w, "ARTIST", 1)[0];
-  const base = w.title.length < 14 && artist && !w.title.toLowerCase().includes(artist.toLowerCase()) ? `${w.title} by ${artist}` : w.title;
+  const who = artist ?? namesOf(w, "GROUP", 1)[0];
+  const named = !!who && !w.title.toLowerCase().includes(who.toLowerCase());
+  const base = twin ? (named ? `${w.title} by ${who}` : `${w.title} #${w.publicId}`) : w.title.length < 14 && artist && named ? `${w.title} by ${artist}` : w.title;
   return `${clipTitle(base, Math.max(36, room))}${tail}`;
 }
 
@@ -132,6 +135,10 @@ export function workDescription(w: WorkForSeo, max = 160): string {
   const artists = namesOf(w, "ARTIST", 2);
   const parody = namesOf(w, "PARODY", 1).filter((p) => p.toLowerCase() !== "original");
   const characters = namesOf(w, "CHARACTER", 3);
+  // a generated summary (scripts/write-synopses.mts) opens with the same facts as the line below: the title and the page
+  // count. Say them once, not twice.
+  const about0 = (w.description ?? "").replace(/\s+/g, " ").trim();
+  if (about0.includes(w.title) && about0.includes(String(w.pageCount))) return excerpt(about0, max);
   let out = clip(
     `Read ${w.title} online: ${/^[aeiou]/i.test(lang) ? "an" : "a"} ${lang} ${kind}${artists.length ? ` by ${artists.join(" & ")}` : ""}${parody.length ? ` (${parody[0]})` : ""}, ${w.pageCount} pages.`,
     max,

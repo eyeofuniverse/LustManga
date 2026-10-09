@@ -44,3 +44,15 @@ export function writeCookie(name: string, value: string) {
   const secure = typeof location !== "undefined" && location.protocol === "https:" ? "; secure" : "";
   document.cookie = `${name}=${value}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax${secure}`;
 }
+
+/**
+ * Swap hidden-tag ids that no longer exist for the tag they were merged into. `alive` are the ids still in the database,
+ * `targetBySlug` maps the old slug of a merged tag to the surviving id, `slugOf` turns the remembered name into that slug.
+ * Anything that cannot be resolved is kept as it is, and the result never lists a tag twice.
+ */
+export function remapHidden(hide: HiddenTag[], alive: Set<number>, targetBySlug: Map<string, number>, slugOf: (name: string) => string): HiddenTag[] {
+  const seen = new Set<number>();
+  return hide
+    .map((h) => (alive.has(h.id) ? h : { ...h, id: targetBySlug.get(slugOf(h.name)) ?? h.id }))
+    .filter((h) => !seen.has(h.id) && !!seen.add(h.id));
+}

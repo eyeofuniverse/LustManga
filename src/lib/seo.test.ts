@@ -208,3 +208,22 @@ test("the site address is cleaned up whatever was typed into the setting", () =>
   assert.equal(normalizeSiteUrl(undefined), "");
   assert.equal(normalizeSiteUrl("http://"), "");
 });
+
+test("a stored summary that already states the facts is not preceded by the same facts again", () => {
+  const summary = "In a World Full of Zombies is a 933-page English hentai manga by Masuda Chihiro. Tagged Big Breasts and Zombies. Also available in Spanish.";
+  const d = workDescription(work({ description: summary }));
+  assert.equal(d, summary);
+  assert.equal(d.match(/933/g)?.length, 1, d);
+  // a source's own description is not a restatement, so the identity line still leads
+  assert.ok(workDescription(work({ description: "Takemura wakes up after falling ill for 3 days." })).startsWith("Read In a World Full of Zombies online:"));
+});
+
+test("two works with the same title and language get different page titles", () => {
+  assert.equal(workTitle(work(), true), "In a World Full of Zombies by Masuda Chihiro - Read Hentai Manga Online");
+  // no artist or circle to tell it apart: the work number does
+  assert.equal(workTitle(work({ tags: [] }), true), "In a World Full of Zombies #74 - Read Hentai Manga Online");
+  // a circle is used when there is no artist
+  assert.ok(workTitle(work({ tags: [{ type: "GROUP", name: "bad mushrooms" }] }), true).includes("by Bad Mushrooms"));
+  // and a title with no twin is left alone
+  assert.equal(workTitle(work(), false), "In a World Full of Zombies - Read Hentai Manga Online");
+});

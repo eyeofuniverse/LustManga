@@ -12,7 +12,8 @@ import { PageHeading } from "./Section";
 /** New works from the tags, artists and circles the visitor follows. The follow list lives in this browser. */
 export function FollowingFeed() {
   const { items: follows, toggle } = useFollows();
-  const key = follows.map((f) => f.id).join(",");
+  // by type and slug rather than id, so a follow keeps working after two spellings of a tag are merged
+  const key = follows.map((f) => `${f.type}:${f.slug}`).join(",");
   const [works, setWorks] = useState<Work[] | null>(null);
   const [page, setPage] = useState(1);
   const [more, setMore] = useState(false);
@@ -28,7 +29,7 @@ export function FollowingFeed() {
     const ctrl = new AbortController();
     setPage(1);
     setFailed(false);
-    fetch(`/api/following?ids=${key}&page=1`, { signal: ctrl.signal })
+    fetch(`/api/following?t=${encodeURIComponent(key)}&page=1`, { signal: ctrl.signal })
       .then((r) => (r.ok ? (r.json() as Promise<{ items: Work[]; hasNext: boolean }>) : Promise.reject(new Error("failed"))))
       .then((d) => {
         setWorks(d.items);
@@ -46,7 +47,7 @@ export function FollowingFeed() {
   const loadMore = async () => {
     setBusy(true);
     try {
-      const r = await fetch(`/api/following?ids=${key}&page=${page + 1}`);
+      const r = await fetch(`/api/following?t=${encodeURIComponent(key)}&page=${page + 1}`);
       if (!r.ok) throw new Error("failed");
       const d = (await r.json()) as { items: Work[]; hasNext: boolean };
       setWorks((w) => [...(w ?? []), ...d.items.filter((x) => !(w ?? []).some((y) => y.publicId === x.publicId))]);

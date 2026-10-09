@@ -350,7 +350,10 @@ const sitemapUrls: string[] = [];
   const dates = child ? all(child.html, /<lastmod>([^<]*)<\/lastmod>/g) : [];
   const now = Date.now();
   ok(dates.length > 0 && dates.every((d) => !Number.isNaN(Date.parse(d)) && Date.parse(d) <= now + 60_000), `sitemap lastmod: ${dates.length} dates, all valid and none in the future`);
-  ok(new Set(dates.map((d) => d.slice(0, 10))).size > 1 || dates.length < 20, "sitemap lastmod: not one identical date on every URL (that tells Google it is meaningless)", `${new Set(dates.map((d) => d.slice(0, 10))).size} distinct days`);
+  // one shared date is fine when the whole file really is brand new (a catalogue backfilled in a day); it is the same date on
+  // OLD content that tells Google the field is meaningless
+  const allFresh = dates.length > 0 && dates.every((d) => now - Date.parse(d) < 2 * 86_400_000);
+  ok(new Set(dates.map((d) => d.slice(0, 10))).size > 1 || dates.length < 20 || allFresh, "sitemap lastmod: not one identical date on every URL (that tells Google it is meaningless)", `${new Set(dates.map((d) => d.slice(0, 10))).size} distinct days`);
 }
 
 /* ───────────────── 11. feeds ───────────────── */

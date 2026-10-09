@@ -24,13 +24,16 @@ for (;;) {
     orderBy: { id: "asc" },
     take: 500,
     select: {
-      id: true, title: true, altTitles: true, description: true, publish: true, reviewedAt: true,
+      id: true, title: true, titleOriginal: true, titleNorm: true, altTitles: true, description: true, publish: true, reviewedAt: true,
       tags: { where: { type: "TAG" }, select: { name: true } },
     },
   });
   if (!batch.length) break;
   for (const w of batch) {
-    const v = classify({ title: w.title, altTitles: w.altTitles, description: w.description, tags: w.tags.map((t) => t.name) }, terms);
+    // title is the readable one (clean-titles.mts / cleanTitle); the original wording, circle names and watermarks it
+    // dropped live on in titleOriginal and titleNorm, and a safety term can sit in any of them
+    const alt = [...w.altTitles, w.titleOriginal, w.titleNorm].filter((s): s is string => !!s);
+    const v = classify({ title: w.title, altTitles: alt, description: w.description, tags: w.tags.map((t) => t.name) }, terms);
     if (v.verdict === "QUARANTINE") {
       takenDown++;
       if (!dry) await takeDownWork(w.id, v.reasons);

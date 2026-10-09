@@ -15,7 +15,7 @@ export interface Processed {
   bytes: number;
   phash: string;
   animated: boolean;
-  /** the source file was cut off before its end; what could be decoded was kept (see looksCutOff) */
+  /** the source file was cut off before its end; what could be decoded was kept (see realShare) */
   truncated?: boolean;
 }
 

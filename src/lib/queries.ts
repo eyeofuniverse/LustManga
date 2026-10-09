@@ -29,6 +29,20 @@ const CARD = Prisma.sql`w."publicId", w.slug, w.title, w.language, w.category::t
 const TYPE_BY_SLUG: Record<string, TagType> = {
   tag: "TAG", artist: "ARTIST", group: "GROUP", parody: "PARODY", character: "CHARACTER", language: "LANGUAGE", category: "CATEGORY",
 };
+/**
+ * Current tag ids for tags remembered by (type, slug), like a visitor's follow list. A tag that has since been merged
+ * into another resolves through the alias the merge left behind, so a follow never goes quiet.
+ */
+export async function resolveTagRefs(refs: { type: TagType; slug: string }[]): Promise<number[]> {
+  if (!refs.length) return [];
+  const where = { OR: refs.map((r) => ({ type: r.type, slug: r.slug })) };
+  const [tags, aliases] = await Promise.all([
+    db(() => prisma.tag.findMany({ where, select: { id: true } })),
+    db(() => prisma.tagAlias.findMany({ where, select: { targetTagId: true } })),
+  ]);
+  return [...new Set([...tags.map((t) => t.id), ...aliases.map((a) => a.targetTagId)])];
+}
+
 export const tagTypeOf = (slug: string): TagType | null => TYPE_BY_SLUG[slug] ?? null;
 
 const OPS: Record<string, Prisma.Sql> = {
@@ -261,6 +275,15 @@ export async function suggest(q: string, prefs: Prefs): Promise<SuggestResult> {
 }
 
 /* ───────────────────────────── a single work ───────────────────────────── */
+
+/**
+ * Is another published work in the same language called exactly the same? Release-name cleaning removed the circle and
+ * artist that used to tell such works apart, so their page titles need telling apart again (see workTitle).
+ */
+export const hasTitleTwin = cache(async (id: string, title: string, language: string): Promise<boolean> => {
+  const n = await db(() => prisma.work.count({ where: { title, language, publish: "PUBLISHED", id: { not: id } } }));
+  return n > 0;
+});
 
 export const getWork = cache(async (publicId: number) => {
   const w = await db(() =>
