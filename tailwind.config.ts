@@ -19,6 +19,8 @@ export default {
         "accent-fill": v("accent-fill"),
         good: v("good"),
         warn: v("warn"),
+        bad: v("bad"),
+        info: v("info"),
         line: "rgb(var(--text) / 0.09)",
       },
       fontFamily: {
@@ -34,6 +36,7 @@ export default {
         shimmer: { "100%": { transform: "translateX(100%)" } },
         rise: { from: { opacity: "0", transform: "translateY(10px)" }, to: { opacity: "1", transform: "none" } },
         fade: { from: { opacity: "0" }, to: { opacity: "1" } },
+        drawer: { from: { transform: "translateX(-100%)" }, to: { transform: "none" } },
         pop: { from: { opacity: "0", transform: "scale(.96)" }, to: { opacity: "1", transform: "none" } },
       },
       animation: {

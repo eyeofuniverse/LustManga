@@ -28,12 +28,5 @@ export default async function ConsoleSetupPage() {
   const uri = totpUri(admin.email, admin.totpSecret!);
   const qr = await QRCode.toDataURL(uri, { margin: 1, width: 220 });
 
-  return (
-    <>
-      <h2 className="mb-4 text-center font-display text-base font-bold">
-        Set up two-factor authentication
-      </h2>
-      <SetupForm secret={admin.totpSecret!} qr={qr} />
-    </>
-  );
+  return <SetupForm secret={admin.totpSecret!} qr={qr} />;
 }

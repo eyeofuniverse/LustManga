@@ -17,6 +17,8 @@
   --accent-2: 139 92 246;
   --good: 52 211 153;
   --warn: 251 191 36;
+  --bad: 248 113 113;
+  --info: 96 165 250;
 }
 [data-theme="light"] {
   color-scheme: light;
@@ -29,8 +31,15 @@
   --accent: 226 34 100;
   --accent-fill: 214 28 96;
   --accent-2: 109 62 220;
-  --good: 5 150 105;
-  --warn: 161 98 7;
+  --good: 6 95 70;
+  --warn: 146 64 14;
+  --bad: 185 28 28;
+  --info: 29 78 216;
+}
+
+/* the console's light theme needs a slightly deeper pink for text on white and on tinted badges (WCAG AA); the public site keeps its own */
+#console-root[data-theme="light"] {
+  --accent: 190 24 93;
 }
 
 @layer base {
@@ -129,6 +138,157 @@
   }
   .glass {
     @apply border border-line bg-bg/70 backdrop-blur-xl;
+  }
+}
+
+/* ───────────────────────── admin console components (c- prefix: never used on the public site) ───────────────────────── */
+@layer components {
+  /* surfaces */
+  .c-card {
+    @apply rounded-2xl border border-line bg-surface;
+  }
+  .c-card-pad {
+    @apply p-4 sm:p-5;
+  }
+  .c-divide > * + * {
+    @apply border-t border-line;
+  }
+
+  /* buttons: compact, with a visible focus ring, 36px tall (44px on touch screens) */
+  .c-btn {
+    @apply inline-flex min-h-[36px] select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-[13px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 active:scale-[.98] disabled:pointer-events-none disabled:opacity-50;
+  }
+  @media (pointer: coarse) {
+    .c-btn {
+      @apply min-h-[44px] px-4;
+    }
+  }
+  .c-btn-default {
+    @apply c-btn bg-surface-2 text-text hover:bg-surface-3;
+  }
+  .c-btn-primary {
+    @apply c-btn bg-accent-fill text-white hover:brightness-110;
+  }
+  .c-btn-good {
+    @apply c-btn bg-good/10 text-good ring-1 ring-inset ring-good/30 hover:bg-good/20;
+  }
+  .c-btn-bad {
+    @apply c-btn bg-bad/10 text-bad ring-1 ring-inset ring-bad/30 hover:bg-bad/20;
+  }
+  .c-btn-ghost {
+    @apply c-btn text-muted hover:bg-surface-2 hover:text-text;
+  }
+
+  /* anything small that is tapped: a disclosure, an id chip. 32px with a mouse, 44px on a touch screen */
+  .c-tap {
+    @apply inline-flex min-h-[32px] items-center;
+  }
+  @media (pointer: coarse) {
+    .c-tap {
+      @apply min-h-[44px];
+    }
+  }
+  /* the little x that removes a chip */
+  .c-icon-x {
+    @apply -mr-1 ml-0.5 grid h-7 w-7 place-items-center rounded-md text-muted transition hover:bg-bad/15 hover:text-bad focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:opacity-50;
+  }
+  @media (pointer: coarse) {
+    .c-icon-x {
+      @apply h-9 w-9;
+    }
+  }
+
+  /* a small text link ("All works") with a real tap target */
+  .c-link {
+    @apply -mr-2 inline-flex min-h-[32px] items-center rounded-lg px-2 text-xs font-semibold text-accent transition hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70;
+  }
+  @media (pointer: coarse) {
+    .c-link {
+      @apply min-h-[44px];
+    }
+  }
+
+  /* form controls */
+  .c-input {
+    @apply min-h-[36px] w-full rounded-lg border border-line bg-bg px-3 py-1.5 text-[13px] text-text outline-none transition placeholder:text-muted/70 focus:border-accent/60 focus:ring-2 focus:ring-accent/25;
+  }
+  @media (pointer: coarse) {
+    .c-input {
+      @apply min-h-[44px] text-base;
+    }
+  }
+  .c-label {
+    @apply mb-1 block text-[11px] font-semibold uppercase tracking-wider text-muted;
+  }
+
+  /* badges */
+  .c-badge {
+    @apply inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold leading-4 ring-1 ring-inset;
+  }
+  .c-badge-muted {
+    @apply c-badge bg-surface-2 text-muted ring-line;
+  }
+  .c-badge-good {
+    @apply c-badge bg-good/10 text-good ring-good/25;
+  }
+  .c-badge-warn {
+    @apply c-badge bg-warn/10 text-warn ring-warn/25;
+  }
+  .c-badge-bad {
+    @apply c-badge bg-bad/10 text-bad ring-bad/25;
+  }
+  .c-badge-info {
+    @apply c-badge bg-info/10 text-info ring-info/25;
+  }
+  .c-badge-accent {
+    @apply c-badge bg-accent/10 text-accent ring-accent/25;
+  }
+
+  /* navigation */
+  .c-nav-link {
+    @apply relative flex min-h-[40px] items-center gap-3 rounded-lg px-3 text-[13px] font-medium text-muted transition hover:bg-surface-2 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70;
+  }
+  .c-nav-link[aria-current="page"] {
+    @apply bg-accent/10 text-text;
+  }
+  .c-nav-link[aria-current="page"]::before {
+    content: "";
+    @apply absolute -left-3 top-2 bottom-2 w-[3px] rounded-r-full bg-accent;
+  }
+
+  /* segmented tabs */
+  .c-tab {
+    @apply inline-flex min-h-[36px] items-center gap-2 whitespace-nowrap rounded-lg px-3 text-[13px] font-semibold text-muted transition hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70;
+  }
+  .c-tab[aria-current="page"] {
+    @apply bg-surface text-text shadow-sm ring-1 ring-line;
+  }
+
+  /* a coloured left edge that says what kind of card it is */
+  .c-edge {
+    @apply relative overflow-hidden;
+  }
+  .c-edge::before {
+    content: "";
+    @apply absolute inset-y-0 left-0 w-1 bg-[var(--edge,transparent)];
+  }
+}
+
+@keyframes drawer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@layer utilities {
+  .c-fade-in {
+    animation: fade 0.25s ease both;
+  }
+  .c-rise {
+    animation: rise 0.4s cubic-bezier(0.2, 0.7, 0.3, 1) both;
   }
 }
 

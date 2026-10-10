@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { prisma, db } from "@/lib/db";
 import { getAdminSession } from "@/lib/admin/auth";
-import { Nav, type NavItem } from "@/components/console/Nav";
+import { Shell, type NavItem } from "@/components/console/Shell";
 
 export const dynamic = "force-dynamic";
 
@@ -21,20 +21,19 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   ).catch(() => [0, 0, 0, 0, 0, 0]);
 
   const items: NavItem[] = [
-    { href: "/console", label: "Dashboard" },
-    { href: "/console/review", label: "Review queue", badge: held + deferred + quarantined || undefined },
-    { href: "/console/reports", label: "Reports", badge: reports || undefined },
-    { href: "/console/duplicates", label: "Duplicates", badge: dups || undefined },
-    { href: "/console/works", label: "Works" },
-    { href: "/console/tags", label: "Tags & safety" },
-    { href: "/console/runs", label: "Ingest runs", badge: failed || undefined },
-    { href: "/console/audit", label: "Audit log" },
+    { href: "/console", label: "Dashboard", icon: "dashboard", group: "Overview" },
+    { href: "/console/review", label: "Review queue", icon: "review", group: "Moderation", badge: held + deferred + quarantined || undefined },
+    { href: "/console/reports", label: "Reports", icon: "reports", group: "Moderation", badge: reports || undefined },
+    { href: "/console/duplicates", label: "Duplicates", icon: "duplicates", group: "Moderation", badge: dups || undefined },
+    { href: "/console/works", label: "Works", icon: "works", group: "Catalogue" },
+    { href: "/console/tags", label: "Tags & safety", icon: "tags", group: "Catalogue" },
+    { href: "/console/runs", label: "Ingest runs", icon: "runs", group: "System", badge: failed || undefined },
+    { href: "/console/audit", label: "Audit log", icon: "audit", group: "System" },
   ];
 
   return (
-    <div className="flex min-h-screen">
-      <Nav items={items} email={me.email} />
-      <main className="min-w-0 flex-1 p-6">{children}</main>
-    </div>
+    <Shell items={items} email={me.email} role={me.role}>
+      {children}
+    </Shell>
   );
 }

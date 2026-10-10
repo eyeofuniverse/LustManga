@@ -208,7 +208,11 @@ const sitemapUrls: string[] = [];
   ok(sitemapUrls.some((u) => u.includes("/g/")), "sitemaps: works are listed");
   const flat = await get("/sitemap-flat.xml");
   const flatUrls = all(flat.html, /<url><loc>([^<]*)<\/loc>/g).map(decode);
-  ok(flat.status === 200 && flatUrls.length === sitemapUrls.length, "sitemap-flat.xml: one file with every URL the index lists", `${flat.status} ${flatUrls.length} vs ${sitemapUrls.length}`);
+  // the index plan is cached for an hour while the flat file is always live, so on a catalogue that is still growing the flat
+  // file may hold MORE than the index does; what must never happen is the index listing something the flat file lacks
+  const flatSet = new Set(flatUrls);
+  const missing = sitemapUrls.filter((u) => !flatSet.has(u));
+  ok(flat.status === 200 && missing.length === 0 && flatUrls.length >= sitemapUrls.length, "sitemap-flat.xml: one file with every URL the index lists", `${flat.status}, ${missing.length} missing (${flatUrls.length} vs ${sitemapUrls.length})`);
   ok((await get("/sitemap/9999.xml")).status === 404, "sitemaps: an unknown child file is a 404");
   ok((await get("/sitemap/abc.xml")).status === 404, "sitemaps: a malformed child name is a 404");
 }
@@ -414,6 +418,16 @@ const sitemapUrls: string[] = [];
       return !name || /^(https?:\/\/|\/)|%[0-9A-F]{2}/i.test(name);
     }).length;
   for (const path of ["/", "/browse", workPath]) ok(unnamed((await get(path)).html) === 0, `${path}: every link has a readable name (none empty, none a raw address)`, String(unnamed((await get(path)).html)));
+}
+
+/* ───────────────── 13. the admin console does not exist for a visitor ───────────────── */
+{
+  // no session and no secret entry link: every console address is a plain 404, so it cannot be found, indexed or probed
+  for (const path of ["/console", "/console/login", "/console/review", "/console/works", "/console/tags", "/api/console/auth/login"]) {
+    const r = await get(path);
+    ok(r.status === 404, `console: ${path} is a 404 for a visitor`, String(r.status));
+  }
+  ok((await get("/console-preview/dashboard")).status === 404, "console: the local-only design preview is not served by a production build");
 }
 
 const failed = results.filter(([c]) => !c).length;

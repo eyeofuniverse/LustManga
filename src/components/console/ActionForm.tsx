@@ -1,42 +1,55 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
+import { Loader2, X } from "lucide-react";
+import { useConsole, type ConfirmOptions } from "./Toast";
 
 type Result = { ok: boolean; message: string };
+const EXPIRED = "That did not go through (your session may have expired). Reload and try again.";
 
-/** A form that runs a server action, shows its result inline, and refreshes the page data. */
+/** A string is shorthand for the dialog text; an object can also set the title and button label. */
+type Confirm = string | ConfirmOptions;
+const asOptions = (c: Confirm, label: string, tone: "bad" | "default"): ConfirmOptions =>
+  typeof c === "string" ? { message: c, confirmLabel: label, tone } : { confirmLabel: label, tone, ...c };
+
+/** A form that runs a server action, reports the result as a toast, and refreshes the page data. */
 export function ActionForm({
   action,
   children,
   className = "",
   confirm,
+  confirmLabel = "Confirm",
+  danger = false,
 }: {
   action: (fd: FormData) => Promise<Result>;
   children: React.ReactNode;
   className?: string;
-  confirm?: string;
+  confirm?: Confirm;
+  confirmLabel?: string;
+  danger?: boolean;
 }) {
   const router = useRouter();
+  const ui = useConsole();
   const [pending, start] = useTransition();
-  const [msg, setMsg] = useState<Result | null>(null);
   return (
     <form
       className={className}
-      onSubmit={(e) => {
+      aria-busy={pending}
+      onSubmit={async (e) => {
         e.preventDefault();
-        if (confirm && !window.confirm(confirm)) return;
         const form = e.currentTarget;
+        if (confirm && !(await ui.confirm(asOptions(confirm, confirmLabel, danger ? "bad" : "default")))) return;
         start(async () => {
           try {
             const r = await action(new FormData(form));
-            setMsg(r);
+            ui.toast(r.message, r.ok ? "good" : "bad");
             if (r.ok) {
               form.reset();
               router.refresh();
             }
           } catch {
-            setMsg({ ok: false, message: "That did not go through (your session may have expired). Reload and try again." });
+            ui.toast(EXPIRED, "bad");
           }
         });
       }}
@@ -44,10 +57,11 @@ export function ActionForm({
       <fieldset disabled={pending} className="contents">
         {children}
       </fieldset>
-      {msg && <p className={`mt-1 text-xs ${msg.ok ? "text-emerald-400" : "text-red-400"}`}>{msg.message}</p>}
     </form>
   );
 }
+
+const TONE = { default: "c-btn-default", good: "c-btn-good", bad: "c-btn-bad", primary: "c-btn-primary" } as const;
 
 /** One-click action button (no inputs). */
 export function ActionButton({
@@ -55,67 +69,70 @@ export function ActionButton({
   label,
   tone = "default",
   confirm,
+  icon,
+  title,
 }: {
   action: () => Promise<Result>;
   label: string;
-  tone?: "default" | "good" | "bad";
-  confirm?: string;
+  tone?: keyof typeof TONE;
+  confirm?: Confirm;
+  /** an icon shown before the label; the label stays visible for screen readers on its own */
+  icon?: React.ReactNode;
+  title?: string;
 }) {
   const router = useRouter();
+  const ui = useConsole();
   const [pending, start] = useTransition();
-  const [msg, setMsg] = useState<Result | null>(null);
-  const color =
-    tone === "good" ? "bg-emerald-600 hover:bg-emerald-500" : tone === "bad" ? "bg-red-600 hover:bg-red-500" : "bg-surface-2 hover:bg-white/10";
   return (
-    <span className="inline-flex flex-col">
-      <button
-        type="button"
-        disabled={pending}
-        className={`rounded-md px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 ${color}`}
-        onClick={() => {
-          if (confirm && !window.confirm(confirm)) return;
-          start(async () => {
-            try {
-              const r = await action();
-              setMsg(r);
-              if (r.ok) router.refresh();
-            } catch {
-              setMsg({ ok: false, message: "That did not go through (your session may have expired). Reload and try again." });
-            }
-          });
-        }}
-      >
-        {pending ? "..." : label}
-      </button>
-      {msg && <span className={`mt-1 text-xs ${msg.ok ? "text-emerald-400" : "text-red-400"}`}>{msg.message}</span>}
-    </span>
+    <button
+      type="button"
+      disabled={pending}
+      title={title}
+      className={TONE[tone]}
+      onClick={async () => {
+        if (confirm && !(await ui.confirm(asOptions(confirm, label, tone === "bad" ? "bad" : "default")))) return;
+        start(async () => {
+          try {
+            const r = await action();
+            ui.toast(r.message, r.ok ? "good" : "bad");
+            if (r.ok) router.refresh();
+          } catch {
+            ui.toast(EXPIRED, "bad");
+          }
+        });
+      }}
+    >
+      {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : icon}
+      {label}
+    </button>
   );
 }
 
 /** Small x button used to remove a chip (term / alias). */
 export function ChipRemove({ action, label }: { action: () => Promise<Result>; label: string }) {
   const router = useRouter();
+  const ui = useConsole();
   const [pending, start] = useTransition();
-  const [err, setErr] = useState<string | null>(null);
   return (
     <button
       type="button"
-      title={err ?? `Remove ${label}`}
+      aria-label={`Remove ${label}`}
+      title={`Remove ${label}`}
       disabled={pending}
-      className={`ml-1 rounded px-1 text-xs hover:bg-white/10 ${err ? "text-red-400" : "text-white/50"}`}
+      className="c-icon-x"
       onClick={() =>
         start(async () => {
           try {
             const r = await action();
             if (r.ok) router.refresh();
-            else setErr(r.message);
+            else ui.toast(r.message, "bad");
           } catch {
-            setErr("Failed: reload and try again");
+            ui.toast(EXPIRED, "bad");
           }
         })
       }
     >
-      x
+      {pending ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : <X className="h-3 w-3" aria-hidden="true" />}
     </button>
   );
 }
