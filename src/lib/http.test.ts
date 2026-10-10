@@ -25,3 +25,31 @@ test("a quiet period does not delay the next call", async () => {
   await h.gap();
   assert.ok(Date.now() - t < 70, "a call after an idle period should not be queued behind old slots");
 });
+
+import { gate } from "./http";
+
+test("gate keeps at most N calls in flight, and runs every one", async () => {
+  const run = gate(3);
+  let active = 0;
+  let peak = 0;
+  const done: number[] = [];
+  await Promise.all(
+    Array.from({ length: 20 }, (_, i) =>
+      run(async () => {
+        active++;
+        peak = Math.max(peak, active);
+        await new Promise((r) => setTimeout(r, 5));
+        active--;
+        done.push(i);
+      }),
+    ),
+  );
+  assert.equal(peak, 3);
+  assert.equal(done.length, 20);
+});
+
+test("gate frees its slot when a call throws", async () => {
+  const run = gate(1);
+  await assert.rejects(() => run(async () => { throw new Error("boom"); }), /boom/);
+  assert.equal(await run(async () => "next"), "next");
+});

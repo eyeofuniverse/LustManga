@@ -246,7 +246,7 @@ export async function coverFromFirstPage(workId: string): Promise<string | null>
     prisma.chapter.findFirst({ where: { workId, status: "READY" }, orderBy: { number: "asc" }, select: { id: true, pageData: true } }),
   );
   if (!work || !chapter) return null;
-  for (const p of pagesOf(chapter, work.mediaId).slice(0, 5)) {
+  for (const p of pagesOf(chapter, work.mediaId).slice(0, 30)) {
     if (p.key.endsWith(".avif")) continue;
     const res = await fetch(`https://${host}/${p.key}`, { signal: AbortSignal.timeout(30_000) }).catch(() => null);
     if (!res?.ok) continue;

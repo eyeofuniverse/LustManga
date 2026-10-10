@@ -1,4 +1,4 @@
-import { Http, UA } from "@/lib/http";
+import { Http, UA, gate } from "@/lib/http";
 
 export const SITE = "hitomi";
 const LTN = "https://ltn.gold-usergeneratedcontent.net";
@@ -107,31 +107,65 @@ function imageUrl(f: HFile, g: GG): string {
   return `https://${base}${o + 1}.gold-usergeneratedcontent.net/${g.b}${s}/${h}.${ext}`;
 }
 
-/** Download one page. If the URL 404s the gg.js prefix has probably rotated: refresh it once and retry. */
+/**
+ * Every image request in this process goes through one gate. The CDN answers HTTP 503 when it is sent a burst: replaying
+ * a 400-page gallery at 24 requests at once gave 3 failures, at 6 at once none, and took the same time (the host serves
+ * about 5 pages a second either way), so the extra parallelism only cost pages. The three scheduled jobs each used to
+ * allow 3 galleries x 8 pages.
+ */
+const inFlight = gate(Number(process.env.HITOMI_MAX_IN_FLIGHT) || 8);
+
+const MAX_TRIES = 5;
+
+/**
+ * How long to wait before try number `attempt` + 1 after a 429, 5xx or network error: doubling from 1.5 s up to 30 s, plus
+ * a little jitter so parallel retries do not land together, or whatever the server asks for in Retry-After (at most 60 s).
+ */
+export function retryDelayMs(attempt: number, retryAfter?: string | null, jitter = Math.random()): number {
+  const asked = Number(retryAfter);
+  if (retryAfter && Number.isFinite(asked) && asked >= 0) return Math.min(60_000, asked * 1000);
+  return Math.min(30_000, 1500 * 2 ** attempt) + Math.floor(jitter * 500);
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Download one page. If the URL 404s the gg.js prefix has probably rotated: refresh it once and retry. A 429, a 5xx or a
+ * network error is retried with a growing wait, and the error that finally escapes says which one it was (it used to be
+ * a bare "download failed", which hid the cause).
+ */
 export async function downloadPage(f: HFile): Promise<Buffer> {
   let g = await loadGG();
-  for (let attempt = 0; attempt < 3; attempt++) {
+  let last = "no response";
+  for (let attempt = 0; attempt < MAX_TRIES; attempt++) {
     try {
-      const res = await fetch(imageUrl(f, g), {
-        headers: { "user-agent": UA, ...HEADERS },
-        signal: AbortSignal.timeout(60_000),
+      const got = await inFlight(async () => {
+        const res = await fetch(imageUrl(f, g), { headers: { "user-agent": UA, ...HEADERS }, signal: AbortSignal.timeout(60_000) });
+        const body = Buffer.from(await res.arrayBuffer());
+        return { status: res.status, ok: res.ok, retryAfter: res.headers.get("retry-after"), body };
       });
-      if (res.ok) return Buffer.from(await res.arrayBuffer());
-      if (res.status === 404 && attempt === 0) {
-        g = await loadGG(true);
+      if (got.ok) return got.body;
+      last = `HTTP ${got.status}`;
+      if (got.status === 404) {
+        if (attempt === 0) {
+          g = await loadGG(true);
+          continue;
+        }
+        throw new Error(last); // still missing after the prefix was refreshed: waiting will not bring it back
+      }
+      if (got.status === 429 || got.status >= 500) {
+        if (attempt < MAX_TRIES - 1) await sleep(retryDelayMs(attempt, got.retryAfter));
         continue;
       }
-      if (res.status === 429 || res.status >= 500) {
-        await new Promise((r) => setTimeout(r, 1500 * 2 ** attempt));
-        continue;
-      }
-      throw new Error(`HTTP ${res.status}`);
+      throw new Error(last);
     } catch (e) {
-      if (attempt === 2) throw e;
-      await new Promise((r) => setTimeout(r, 800 * 2 ** attempt));
+      const msg = (e as Error).message;
+      if (/^HTTP (4\d\d)$/.test(msg) && !/^HTTP 429$/.test(msg)) throw e; // a definite refusal, not worth retrying
+      last = msg;
+      if (attempt < MAX_TRIES - 1) await sleep(retryDelayMs(attempt));
     }
   }
-  throw new Error("download failed");
+  throw new Error(`download failed after ${MAX_TRIES} tries (${last})`);
 }
 
 export const names = (g: HGallery) => ({

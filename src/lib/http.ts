@@ -68,3 +68,25 @@ export async function pool<T, R>(items: T[], n: number, fn: (item: T, i: number)
   );
   return out;
 }
+
+/**
+ * A counting semaphore: `run(fn)` starts `fn` once fewer than `max` calls are in flight, so a whole process stays under
+ * a host's limit however many galleries and pages are being worked on at once.
+ */
+export function gate(max: number): <T>(fn: () => Promise<T>) => Promise<T> {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  const release = () => {
+    active--;
+    waiting.shift()?.();
+  };
+  return async <T>(fn: () => Promise<T>): Promise<T> => {
+    if (active >= max) await new Promise<void>((resolve) => waiting.push(resolve));
+    active++;
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  };
+}
