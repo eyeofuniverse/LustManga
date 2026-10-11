@@ -5,6 +5,7 @@ import { addTermAction, createTagAction, deleteAction, flagAction, mergeAction, 
 import type { TagRow, TagsData, TermRow } from "@/lib/admin/types";
 import { compact } from "@/lib/format";
 import { ActionForm, ChipRemove } from "../ActionForm";
+import { FilterForm } from "../FilterForm";
 import { Badge, Card, Empty, Note, PageHeader, Pager, SearchField, SelectField, Tabs, type Tone } from "../ui";
 
 const TYPES = ["tag", "artist", "group", "parody", "character", "language", "category"];
@@ -152,7 +153,7 @@ function TagList({ d }: { d: TagsData }) {
   };
   return (
     <>
-      <form action="/console/tags" className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_9rem_9rem_9rem_auto]">
+      <FilterForm action="/console/tags" className="mb-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_9rem_9rem_9rem_auto]">
         <input type="hidden" name="view" value="tags" />
         <SearchField name="q" defaultValue={d.q} placeholder="Search tags" className="sm:col-span-2 lg:col-span-1" />
         <SelectField name="type" label="Type" defaultValue={d.type.toUpperCase()}>
@@ -173,7 +174,7 @@ function TagList({ d }: { d: TagsData }) {
           <button className="c-btn-primary flex-1 lg:flex-none">Filter</button>
           {filtered && <Link href="/console/tags?view=tags" className="c-btn-default">Clear</Link>}
         </div>
-      </form>
+      </FilterForm>
 
       <details className="c-card mb-5 overflow-hidden">
         <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 text-[13px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/70 [&::-webkit-details-marker]:hidden">

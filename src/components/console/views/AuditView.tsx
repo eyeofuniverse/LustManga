@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ScrollText } from "lucide-react";
 import type { AuditData, AuditRow } from "@/lib/admin/types";
 import { ago, initials, stamp } from "@/lib/admin/format";
+import { FilterForm } from "../FilterForm";
 import { Badge, Card, Empty, PageHeader, SearchField, type Tone } from "../ui";
 
 /** The verb at the end of "work.reject" / "tag.merge" decides the colour: destructive reads red, publishing reads green. */
@@ -44,11 +45,11 @@ export function AuditView({ d }: { d: AuditData }) {
   return (
     <div>
       <PageHeader title="Audit log" description="Every change made in this console: who, what and when. The latest 200 entries; times are UTC, hover for the exact moment." />
-      <form action="/console/audit" className="mb-5 flex gap-2">
+      <FilterForm action="/console/audit" className="mb-5 flex gap-2">
         <SearchField name="q" defaultValue={d.q} placeholder="Filter by action, person or id" className="flex-1" />
         <button className="c-btn-primary">Filter</button>
         {d.q && <Link href="/console/audit" className="c-btn-default">Clear</Link>}
-      </form>
+      </FilterForm>
       {d.rows.length ? (
         <Card pad={false}>
           <ul className="c-divide">{d.rows.map((r) => <Entry key={r.id} r={r} />)}</ul>

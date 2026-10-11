@@ -1,5 +1,6 @@
 import "server-only";
-import type { Prisma, PublishStatus, TagType } from "@prisma/client";
+import { unstable_cache } from "next/cache";
+import { Prisma, type PublishStatus, type TagType } from "@prisma/client";
 import { prisma, db } from "@/lib/db";
 import { cdn } from "@/lib/cdn";
 import { guardConsole } from "@/lib/admin/guard";
@@ -46,14 +47,20 @@ export async function loadReview(sp: { tab?: string; page?: string }): Promise<R
       include: { sources: { select: { url: true }, take: 1 }, tags: { select: { name: true }, take: 14 } },
     }),
   );
-  const previews = deferredTab
-    ? works.map(() => [] as string[])
-    : await Promise.all(
-        works.map(async (w) => {
-          const ch = await prisma.chapter.findFirst({ where: { workId: w.id, status: "READY" }, orderBy: { number: "asc" }, select: { id: true, pageData: true } });
-          return ch ? pagesOf(ch, w.mediaId).slice(0, 5).map((p) => cdn(p.key)!) : [];
-        }),
+  // the first stored chapter of every work on this page in ONE query (it used to be one query per work: 12 round trips)
+  const firstChapters = deferredTab || !works.length
+    ? []
+    : await db(() =>
+        prisma.$queryRaw<{ id: string; workId: string; pageData: Prisma.JsonValue }[]>(Prisma.sql`
+          SELECT DISTINCT ON ("workId") id, "workId", "pageData" FROM "Chapter"
+          WHERE status = 'READY' AND "workId" = ANY(${works.map((w) => w.id)}::text[])
+          ORDER BY "workId", number ASC`),
       );
+  const chapterOf = new Map(firstChapters.map((c) => [c.workId, c]));
+  const previews = works.map((w) => {
+    const ch = chapterOf.get(w.id);
+    return ch ? pagesOf(ch, w.mediaId).slice(0, 5).map((p) => cdn(p.key)!) : [];
+  });
   return {
     ...base,
     quarantined: [],
@@ -77,6 +84,19 @@ export async function loadReview(sp: { tab?: string; page?: string }): Promise<R
 /* ───────────────────────── works ───────────────────────── */
 
 const WORKS_PAGE = 30;
+
+/**
+ * Every language in the catalogue with its count, for the filter dropdown. A count over the whole Work table that changes
+ * slowly, so it is kept for five minutes rather than recomputed on every search and filter click.
+ */
+const workLanguages = unstable_cache(
+  async () => {
+    const rows = await prisma.work.groupBy({ by: ["language"], _count: true, orderBy: { _count: { language: "desc" } } });
+    return rows.map((l) => ({ language: l.language, count: l._count }));
+  },
+  ["console-work-languages-v1"],
+  { revalidate: 300 },
+);
 const STATES: PublishStatus[] = ["PUBLISHED", "DRAFT", "REJECTED"];
 
 export async function loadWorks(sp: { q?: string; publish?: string; lang?: string; page?: string }): Promise<WorksData> {
@@ -93,7 +113,7 @@ export async function loadWorks(sp: { q?: string; publish?: string; lang?: strin
     Promise.all([
       prisma.work.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * WORKS_PAGE, take: WORKS_PAGE }),
       prisma.work.count({ where }),
-      prisma.work.groupBy({ by: ["language"], _count: true, orderBy: { _count: { language: "desc" } } }),
+      workLanguages(),
     ]),
   );
   return {
@@ -108,7 +128,7 @@ export async function loadWorks(sp: { q?: string; publish?: string; lang?: strin
     q,
     publish: publish ?? "",
     lang: sp.lang ?? "",
-    langs: langs.map((l) => ({ language: l.language, count: l._count })),
+    langs,
   };
 }
 

@@ -7,6 +7,7 @@ import {
   Activity, Copy, ExternalLink, Flag, LayoutDashboard, Library, LogOut, Menu, Moon, ScrollText, Search, ShieldAlert, Sun, Tags, X, type LucideIcon,
 } from "lucide-react";
 import { initials } from "@/lib/admin/format";
+import { NavProgress } from "@/components/site/NavProgress";
 import { CommandPalette } from "./CommandPalette";
 
 export type NavIcon = "dashboard" | "review" | "reports" | "duplicates" | "works" | "tags" | "runs" | "audit";
@@ -44,7 +45,7 @@ function Brand() {
   );
 }
 
-function NavList({ items, path, onNavigate }: { items: NavItem[]; path: string; onNavigate?: () => void }) {
+function NavList({ items, path, pending, onNavigate }: { items: NavItem[]; path: string; pending: string | null; onNavigate?: (href: string) => void }) {
   const groups = [...new Set(items.map((i) => i.group))];
   return (
     <nav aria-label="Console" className="flex-1 space-y-5 overflow-y-auto px-3 pb-4 pt-2">
@@ -56,10 +57,11 @@ function NavList({ items, path, onNavigate }: { items: NavItem[]; path: string; 
               .filter((i) => i.group === g)
               .map((i) => {
                 const Icon = ICONS[i.icon];
-                const current = isActive(i.href, path);
+                // the link just clicked is shown as current at once; it was a dead-looking click until the page arrived
+                const current = isActive(i.href, pending ?? path);
                 return (
                   <li key={i.href}>
-                    <Link href={i.href} onClick={onNavigate} className="c-nav-link" aria-current={current ? "page" : undefined}>
+                    <Link href={i.href} onClick={() => onNavigate?.(i.href)} className="c-nav-link" aria-current={current ? "page" : undefined}>
                       <Icon className={`h-[17px] w-[17px] shrink-0 ${current ? "text-accent" : ""}`} aria-hidden="true" />
                       <span className="flex-1 truncate">{i.label}</span>
                       {i.badge ? (
@@ -88,7 +90,9 @@ export function Shell({ items, email, role, children }: { items: NavItem[]; emai
   const closeBtn = useRef<HTMLButtonElement>(null);
   const drawerEl = useRef<HTMLDivElement>(null);
 
-  const current = items.find((i) => isActive(i.href, path));
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+  useEffect(() => setPendingHref(null), [path]); // the page arrived (or the navigation was abandoned): back to the real state
+  const current = items.find((i) => isActive(i.href, pendingHref ?? path));
 
   /* theme: the layout's inline script already applied the saved choice, so just mirror it */
   useEffect(() => {
@@ -183,12 +187,13 @@ export function Shell({ items, email, role, children }: { items: NavItem[]; emai
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[272px_minmax(0,1fr)]">
+      <NavProgress />
       <a href="#console-main" className="skip-link">Skip to content</a>
 
       {/* desktop sidebar */}
       <aside className="sticky top-0 hidden h-screen flex-col border-r border-line bg-surface lg:flex">
         <div className="px-5 pb-3 pt-5"><Brand /></div>
-        <NavList items={items} path={path} />
+        <NavList items={items} path={path} pending={pendingHref} onNavigate={(href) => href !== path && setPendingHref(href)} />
         {User}
       </aside>
 
@@ -237,7 +242,7 @@ export function Shell({ items, email, role, children }: { items: NavItem[]; emai
                 <X className="h-5 w-5" aria-hidden="true" />
               </button>
             </div>
-            <NavList items={items} path={path} onNavigate={() => setDrawer(false)} />
+            <NavList items={items} path={path} pending={pendingHref} onNavigate={(href) => (href !== path && setPendingHref(href), setDrawer(false))} />
             {User}
           </div>
         </div>

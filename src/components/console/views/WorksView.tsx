@@ -5,6 +5,7 @@ import type { WorkRow, WorksData } from "@/lib/admin/types";
 import { ago } from "@/lib/admin/format";
 import { workHref } from "@/lib/format";
 import { ActionButton } from "../ActionForm";
+import { FilterForm } from "../FilterForm";
 import { Badge, Card, Cover, Empty, PageHeader, Pager, PublishBadge, SearchField, SelectField } from "../ui";
 
 function Row({ w }: { w: WorkRow }) {
@@ -58,7 +59,7 @@ export function WorksView({ d }: { d: WorksData }) {
     <div>
       <PageHeader title="Works" count={d.total} description="Every work in the catalogue. Search by title or by number (#123), and publish, unpublish, reject or delete." />
 
-      <form action="/console/works" className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1fr)_10rem_11rem_auto]">
+      <FilterForm action="/console/works" className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-[minmax(0,1fr)_10rem_11rem_auto]">
         <SearchField name="q" defaultValue={d.q} placeholder="Search by title or #id" className="col-span-2 sm:col-span-1" />
         <SelectField name="publish" label="State" defaultValue={d.publish}>
           <option value="">Any state</option>
@@ -76,7 +77,7 @@ export function WorksView({ d }: { d: WorksData }) {
           <button className="c-btn-primary flex-1 sm:flex-none">Filter</button>
           {filtered && <Link href="/console/works" className="c-btn-default">Clear</Link>}
         </div>
-      </form>
+      </FilterForm>
 
       {d.rows.length ? (
         <Card pad={false}>

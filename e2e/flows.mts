@@ -623,10 +623,11 @@ for (const rtl of [false, true]) {
   const rep2 = await ctx.request.post(BASE + "/api/report", { data: { kind: "BROKEN", work: 99999999999, details: "QA TEST oversized work id" } });
   ok(rep2.status() === 400, "a report with an oversized work number is refused, not a crash", String(rep2.status()));
 
-  // a long ?page deep into a list lands back on page 1 instead of an empty screen
+  // a ?page past the end of a list lands back on page 1 instead of an empty screen. A SHORT list is used: /browse has grown
+  // past the 500-page cap (12,000 works), so page 500 of it is no longer past its end
   const p = await ctx.newPage();
-  await p.goto(BASE + "/browse?lang=all&page=500");
-  ok(!p.url().includes("page=500") && (await p.locator("article").count()) > 0, "a page number past the end goes back to the first page", p.url());
+  await p.goto(BASE + "/category/game-cg?page=50");
+  ok(!p.url().includes("page=50") && (await p.locator("article").count()) > 0, "a page number past the end goes back to the first page", p.url());
   await p.goto(BASE + "/search?q=%21%21%21");
   ok((await p.getByRole("link", { name: "How to write advanced searches" }).count()) === 1, "a query of only punctuation shows the search help, not every work");
   await ctx.close();
