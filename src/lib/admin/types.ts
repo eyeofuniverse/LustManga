@@ -31,6 +31,10 @@ export interface ReviewData {
   total: number;
   pageSize: number;
   counts: Record<ReviewTab, number>;
+  /** when this page was read: "approve everything" approves only what existed then, i.e. what the count showed */
+  asOf: string;
+  /** administrators only: moderators approve works one at a time, or by ticking them */
+  canApproveAll: boolean;
   works: ReviewWork[];
   quarantined: QuarantineRow[];
 }

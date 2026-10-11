@@ -29,16 +29,12 @@ function Bar() {
 
   // a click on an internal link: start creeping towards 85%
   useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      const a = (e.target as HTMLElement).closest("a");
-      if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || a.target === "_blank" || a.hasAttribute("download")) return;
-      const url = new URL(a.href, location.href);
-      if (url.origin !== location.origin || (url.pathname === location.pathname && url.search === location.search)) return;
+    const begin = () => {
       clearInterval(timer.current);
       setOn(true);
       setW(12);
       timer.current = setInterval(() => setW((x) => (x < 85 ? x + (85 - x) * 0.12 : x)), 180);
-      // a click that never navigates (blocked, offline, an error page) must not leave the bar hanging
+      // a navigation that never arrives (blocked, offline, an error page) must not leave the bar hanging
       clearTimeout(giveUp.current);
       giveUp.current = setTimeout(() => {
         clearInterval(timer.current);
@@ -46,9 +42,19 @@ function Bar() {
         setW(0);
       }, 12_000);
     };
+    const onClick = (e: MouseEvent) => {
+      const a = (e.target as HTMLElement).closest("a");
+      if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || a.target === "_blank" || a.hasAttribute("download")) return;
+      const url = new URL(a.href, location.href);
+      if (url.origin !== location.origin || (url.pathname === location.pathname && url.search === location.search)) return;
+      begin();
+    };
     document.addEventListener("click", onClick, true);
+    // a navigation that is not a link click (a search form handing its URL to the router) can start the bar too
+    window.addEventListener("lm:nav-start", begin);
     return () => {
       document.removeEventListener("click", onClick, true);
+      window.removeEventListener("lm:nav-start", begin);
       clearInterval(timer.current);
       clearTimeout(giveUp.current);
     };

@@ -18,7 +18,8 @@ const num = (v: string | undefined, d = 1) => Math.max(1, Number(v) || d);
 const REVIEW_PAGE = 12;
 
 export async function loadReview(sp: { tab?: string; page?: string }): Promise<ReviewData> {
-  await guardConsole();
+  const me = await guardConsole();
+  const asOf = new Date().toISOString(); // taken before the counts, so the count is never smaller than the set it will approve
   const tab: ReviewTab = sp.tab === "deferred" || sp.tab === "quarantined" ? sp.tab : "held";
   const page = num(sp.page);
   const [held, deferred, quarantined] = await db(() =>
@@ -30,7 +31,7 @@ export async function loadReview(sp: { tab?: string; page?: string }): Promise<R
   );
   const counts = { held, deferred, quarantined };
   const total = counts[tab];
-  const base = { tab, page, pages: Math.max(1, Math.ceil(total / REVIEW_PAGE)), total, pageSize: REVIEW_PAGE, counts };
+  const base = { tab, page, pages: Math.max(1, Math.ceil(total / REVIEW_PAGE)), total, pageSize: REVIEW_PAGE, counts, asOf, canApproveAll: me.role !== "MOD" };
 
   if (tab === "quarantined") {
     const rows = await db(() => prisma.suppressedSource.findMany({ orderBy: { createdAt: "desc" }, skip: (page - 1) * REVIEW_PAGE, take: REVIEW_PAGE }));

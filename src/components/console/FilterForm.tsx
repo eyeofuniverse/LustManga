@@ -23,7 +23,14 @@ export function FilterForm({ action, className = "", children }: { action: strin
         const p = new URLSearchParams();
         for (const [k, v] of new FormData(e.currentTarget).entries()) if (typeof v === "string" && v.trim()) p.set(k, v.trim());
         const qs = p.toString();
-        start(() => router.push(qs ? `${action}?${qs}` : action));
+        const target = qs ? `${action}?${qs}` : action;
+        if (target === location.pathname + location.search) {
+          // the same filter again: nothing to navigate to, so just re-read the list (and leave the progress bar alone)
+          start(() => router.refresh());
+          return;
+        }
+        window.dispatchEvent(new Event("lm:nav-start")); // the top progress bar, which otherwise only reacts to link clicks
+        start(() => router.push(target));
       }}
       onChange={(e) => {
         if (e.target instanceof HTMLSelectElement) e.currentTarget.requestSubmit();

@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { after } from "next/server";
 import type { Prisma, SafetyTier, TagType } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -53,13 +53,23 @@ export interface BulkResult {
 }
 const noBulk = (message: string): BulkResult => ({ ok: false, message, scanned: 0, approved: 0, live: 0, blocked: 0, cursor: null, done: true });
 
+/**
+ * After any action that changes what is published: the console's pages are re-read, and so are the dashboard's cached
+ * aggregates (languages, sources, page totals), which would otherwise lag the live counts beside them for up to a minute.
+ */
+function refreshConsole() {
+  revalidateTag("console-dashboard");
+  revalidatePath("/console", "layout");
+}
+
 /** One transaction per batch: the decisions and their audit rows commit together or not at all. */
 async function runBatch(me: AdminIdentity, where: Prisma.WorkWhereInput, take: number) {
   const terms = await loadTerms();
-  return prisma.$transaction(
-    (tx) => approveBatch(tx, me, where, take, terms, (paths) => after(() => pingIndexNow(paths).then(() => undefined))),
-    { timeout: 30_000 },
-  );
+  const wentLive: string[] = [];
+  const r = await prisma.$transaction((tx) => approveBatch(tx, me, where, take, terms, (paths) => wentLive.push(...paths)), { timeout: 30_000 });
+  // search engines are told only once the transaction has committed: a rollback must never leave them told about works that are not live
+  if (wentLive.length) after(() => pingIndexNow(wentLive).then(() => undefined));
+  return r;
 }
 
 const summary = (r: { approved: number; live: number; blocked: number }) =>
@@ -74,7 +84,7 @@ export async function approveWorks(publicIds: number[]): Promise<BulkResult> {
   if (!ids.length) return noBulk("Nothing selected");
   if (ids.length > BULK_MAX) return noBulk(`Select at most ${BULK_MAX} works at a time`);
   const r = await runBatch(me, { publicId: { in: ids } }, ids.length);
-  revalidatePath("/console", "layout");
+  refreshConsole();
   const gone = ids.length - r.scanned; // already decided by someone else, or never in the queue
   return { ok: true, message: summary(r) + (gone ? `. ${gone} were no longer waiting for review` : ""), scanned: r.scanned, approved: r.approved, live: r.live, blocked: r.blocked, cursor: r.last, done: true };
 }
@@ -85,11 +95,16 @@ export async function approveWorks(publicIds: number[]): Promise<BulkResult> {
  * stored so they could be looked at. Works carrying an explicit age marker (the "Review before download" tab) are never
  * approved by this, only by deliberately selecting them.
  */
-export async function approveHeldBatch(cursor: string | null, limit = 200): Promise<BulkResult> {
-  const me = await requireAdmin("MOD");
+export async function approveHeldBatch(cursor: string | null, limit = 200, asOf = ""): Promise<BulkResult> {
+  // approving a whole queue is a bigger act than approving one work, so it is an administrator's, like every other bulk change here
+  const me = await requireAdmin("ADMIN");
+  const cutoff = new Date(asOf);
+  if (Number.isNaN(cutoff.getTime())) return noBulk("Reload the page and try again");
   const take = Math.min(BULK_MAX, Math.max(1, Math.floor(Number(limit)) || 200));
-  const r = await runBatch(me, { deferFetch: false, ...(typeof cursor === "string" && cursor ? { id: { gt: cursor } } : {}) }, take);
-  revalidatePath("/console", "layout");
+  // only what existed when the page was loaded: the count the admin confirmed is the set that is approved, not whatever
+  // the importers added while the run was going (the queue grows by hundreds a day)
+  const r = await runBatch(me, { deferFetch: false, createdAt: { lte: cutoff }, ...(typeof cursor === "string" && cursor ? { id: { gt: cursor } } : {}) }, take);
+  refreshConsole();
   return { ok: true, message: summary(r), scanned: r.scanned, approved: r.approved, live: r.live, blocked: r.blocked, cursor: r.last, done: r.scanned < take };
 }
 
@@ -109,7 +124,7 @@ export async function approveWork(publicId: number): Promise<ActionResult> {
   });
   await audit(me, "work.approve", "work", String(publicId), { live });
   if (live) announce(publicId, w.slug);
-  revalidatePath("/console", "layout");
+  refreshConsole();
   return ok(live ? `#${publicId} approved and published` : `#${publicId} approved: images are fetched on the next ingest run, then it goes live`);
 }
 
@@ -124,7 +139,7 @@ export async function rejectWork(publicId: number): Promise<ActionResult> {
     data: { publish: "REJECTED", needsReview: false, reviewDecision: "REJECTED", reviewedAt: new Date(), reviewedBy: me.email, coverKey: null, pageCount: 0 },
   });
   await audit(me, "work.reject", "work", String(publicId), { purged });
-  revalidatePath("/console", "layout");
+  refreshConsole();
   return ok(`#${publicId} rejected, ${purged} stored image(s) deleted`);
 }
 
@@ -144,7 +159,7 @@ export async function setWorkPublish(publicId: number, to: "PUBLISHED" | "DRAFT"
   }
   await audit(me, `work.${to === "PUBLISHED" ? "publish" : "unpublish"}`, "work", String(publicId));
   if (to === "PUBLISHED") announce(publicId, w.slug);
-  revalidatePath("/console", "layout");
+  refreshConsole();
   return ok(`#${publicId} ${to === "PUBLISHED" ? "published" : "moved to draft"}`);
 }
 
@@ -159,7 +174,7 @@ export async function deleteWork(publicId: number): Promise<ActionResult> {
     data: { publish: "REJECTED", needsReview: false, reviewDecision: "REJECTED", reviewedAt: new Date(), reviewedBy: me.email, coverKey: null, pageCount: 0 },
   });
   await audit(me, "work.delete", "work", String(publicId), { purged });
-  revalidatePath("/console", "layout");
+  refreshConsole();
   return ok(`#${publicId} removed, ${purged} stored image(s) deleted`);
 }
 
@@ -318,14 +333,14 @@ export async function resolveDuplicate(candidateId: string, keepPublicId: number
       });
       await prisma.duplicateCandidate.update({ where: { id: candidateId }, data: { status: "MERGED" } });
       await audit(me, "duplicate.reject-follow", "work", String(live.publicId), { purged });
-      revalidatePath("/console", "layout");
+      refreshConsole();
       return ok(`#${live.publicId} rejected to match the earlier rejection of its duplicate`);
     }
   }
   const { purged } = await mergeWorks(keep.id, drop.id);
   await prisma.duplicateCandidate.update({ where: { id: candidateId }, data: { status: "MERGED" } }).catch(() => {});
   await audit(me, "duplicate.merge", "work", String(keep.publicId), { dropped: drop.publicId, purged });
-  revalidatePath("/console", "layout");
+  refreshConsole();
   return ok(`#${drop.publicId} merged into #${keep.publicId}; its sources and tags moved across`);
 }
 
@@ -333,7 +348,7 @@ export async function dismissDuplicate(candidateId: string): Promise<ActionResul
   const me = await requireAdmin("MOD");
   await prisma.duplicateCandidate.update({ where: { id: candidateId }, data: { status: "DISMISSED" } });
   await audit(me, "duplicate.dismiss", "duplicate", candidateId);
-  revalidatePath("/console", "layout");
+  refreshConsole();
   return ok("Marked as different works");
 }
 
@@ -343,6 +358,6 @@ export async function setReportStatus(id: string, status: "RESOLVED" | "DISMISSE
   const me = await requireAdmin("MOD");
   await prisma.report.update({ where: { id }, data: { status } });
   await audit(me, `report.${status.toLowerCase()}`, "report", id);
-  revalidatePath("/console", "layout");
+  refreshConsole();
   return ok(status === "OPEN" ? "Reopened" : status === "RESOLVED" ? "Marked resolved" : "Dismissed");
 }

@@ -104,7 +104,7 @@ export function ReviewView({ d }: { d: ReviewData }) {
             <b className="text-text">Approve</b> if it was a false flag and it should be published. <b className="text-text">Reject</b> if the flag was right: the stored images are deleted. To approve many at once, tick works (or <b className="text-text">select all</b> on the page, then everything in Held).
           </Note>
           {d.works.length ? (
-            <BulkProvider tab="held" ids={d.works.map((w) => w.publicId)} total={d.counts.held}>
+            <BulkProvider tab="held" ids={d.works.map((w) => w.publicId)} total={d.counts.held} asOf={d.asOf} canApproveAll={d.canApproveAll}>
               <SelectAllRow />
               <div className="space-y-4">{d.works.map((w) => <WorkCard key={w.id} w={w} deferred={false} />)}</div>
               <ActionBar />
@@ -121,7 +121,7 @@ export function ReviewView({ d }: { d: ReviewData }) {
             These carry an explicit age marker, so <b className="text-text">no images have been downloaded</b>. Judge from the source page. Approve fetches and publishes on the next ingest run; reject means it is never downloaded. You can tick several to approve them together, but there is no &ldquo;approve everything&rdquo; for this tab: only works you have checked.
           </Note>
           {d.works.length ? (
-            <BulkProvider tab="deferred" ids={d.works.map((w) => w.publicId)} total={d.counts.deferred}>
+            <BulkProvider tab="deferred" ids={d.works.map((w) => w.publicId)} total={d.counts.deferred} asOf={d.asOf} canApproveAll={false}>
               <SelectAllRow />
               <div className="space-y-4">{d.works.map((w) => <WorkCard key={w.id} w={w} deferred />)}</div>
               <ActionBar />

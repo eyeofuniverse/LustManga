@@ -21,6 +21,7 @@ interface Ctx {
   tab: "held" | "deferred";
   ids: number[];
   total: number;
+  canApproveAll: boolean;
   selected: Set<number>;
   allInTab: boolean;
   busy: boolean;
@@ -41,7 +42,7 @@ const useBulk = () => {
   return c;
 };
 
-export function BulkProvider({ tab, ids, total, children }: { tab: "held" | "deferred"; ids: number[]; total: number; children: React.ReactNode }) {
+export function BulkProvider({ tab, ids, total, asOf, canApproveAll, children }: { tab: "held" | "deferred"; ids: number[]; total: number; asOf: string; canApproveAll: boolean; children: React.ReactNode }) {
   const router = useRouter();
   const ui = useConsole();
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -103,10 +104,10 @@ export function BulkProvider({ tab, ids, total, children }: { tab: "held" | "def
   }, [selected, busy]);
 
   const approveAll = useCallback(async () => {
-    if (tab !== "held" || busy) return;
+    if (tab !== "held" || busy || !canApproveAll) return;
     const ok = await ui.confirm({
       title: `Approve all ${total.toLocaleString()} held works?`,
-      message: "Every work in the Held tab is approved without being looked at one by one. Those with images stored are published immediately; the rest go live after the next ingest run. You can stop part-way, but what was approved stays approved. Works that match a hard safety term are skipped.",
+      message: "Every work in the Held tab that you were shown (those that arrive while this runs are not included) is approved without being looked at one by one. Those with images stored are published immediately; the rest go live after the next ingest run. You can stop part-way, but what was approved stays approved. Works that match a hard safety term are skipped.",
       confirmLabel: `Approve all ${total.toLocaleString()}`,
       tone: "bad",
     });
@@ -121,7 +122,7 @@ export function BulkProvider({ tab, ids, total, children }: { tab: "held" | "def
     setProgress({ scanned: 0, total, approved: 0 });
     try {
       for (;;) {
-        const r: BulkResult = await approveHeldBatch(cursor, BATCH);
+        const r: BulkResult = await approveHeldBatch(cursor, BATCH, asOf);
         if (!r.ok) {
           ui.toast(r.message, "bad");
           break;
@@ -148,16 +149,16 @@ export function BulkProvider({ tab, ids, total, children }: { tab: "held" | "def
       setProgress(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, total, busy]);
+  }, [tab, total, busy, asOf, canApproveAll]);
 
   const value = useMemo<Ctx>(
     () => ({
-      tab, ids, total, selected, allInTab, busy, progress, toggle, selectPage, clear, approveSelected, approveAll,
+      tab, ids, total, canApproveAll, selected, allInTab, busy, progress, toggle, selectPage, clear, approveSelected, approveAll,
       selectAllInTab: () => (setSelected(new Set(ids)), setAllInTab(true)),
       stop: () => { stopped.current = true; },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tab, key, total, selected, allInTab, busy, progress, toggle, selectPage, clear, approveSelected, approveAll],
+    [tab, key, total, canApproveAll, selected, allInTab, busy, progress, toggle, selectPage, clear, approveSelected, approveAll],
   );
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
@@ -181,7 +182,7 @@ export function SelectBox({ id, title }: { id: number; title: string }) {
 
 /** Above the list: tick everything on this page, and (Held only) offer the whole tab. */
 export function SelectAllRow() {
-  const { ids, total, tab, selected, allInTab, busy, selectPage, selectAllInTab, clear } = useBulk();
+  const { ids, total, tab, canApproveAll, selected, allInTab, busy, selectPage, selectAllInTab, clear } = useBulk();
   const onPage = ids.filter((id) => selected.has(id)).length;
   const all = ids.length > 0 && onPage === ids.length;
   const ref = useRef<HTMLInputElement>(null);
@@ -195,7 +196,7 @@ export function SelectAllRow() {
         <input ref={ref} type="checkbox" checked={all} disabled={busy} onChange={(e) => selectPage(e.target.checked)} className="h-[18px] w-[18px] cursor-pointer rounded border-line accent-[rgb(var(--accent-fill))]" />
         Select all {ids.length} on this page
       </label>
-      {tab === "held" && all && total > ids.length && !allInTab && (
+      {tab === "held" && canApproveAll && all && total > ids.length && !allInTab && (
         <button type="button" onClick={selectAllInTab} disabled={busy} className="c-tap font-semibold text-accent hover:underline">
           Select all {total.toLocaleString()} in Held
         </button>

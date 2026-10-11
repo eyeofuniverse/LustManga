@@ -55,7 +55,7 @@ const slowNumbers = unstable_cache(
     };
   },
   ["console-dashboard-slow-v1"],
-  { revalidate: 60 },
+  { revalidate: 60, tags: ["console-dashboard"] },
 );
 
 /** Everything the dashboard shows: the live numbers and the cached slow ones, fetched side by side. */

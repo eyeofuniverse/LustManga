@@ -92,6 +92,12 @@ export function Shell({ items, email, role, children }: { items: NavItem[]; emai
 
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   useEffect(() => setPendingHref(null), [path]); // the page arrived (or the navigation was abandoned): back to the real state
+  useEffect(() => {
+    // a navigation that never completes (offline, a server error) must not leave the wrong item looking current
+    if (!pendingHref) return;
+    const t = setTimeout(() => setPendingHref(null), 10_000);
+    return () => clearTimeout(t);
+  }, [pendingHref]);
   const current = items.find((i) => isActive(i.href, pendingHref ?? path));
 
   /* theme: the layout's inline script already applied the saved choice, so just mirror it */
