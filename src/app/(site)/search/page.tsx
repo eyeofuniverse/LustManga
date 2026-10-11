@@ -15,6 +15,7 @@ import { Pagination } from "@/components/work/Pagination";
 import { PageHeading } from "@/components/work/Section";
 import { AdvancedSearch } from "@/components/site/AdvancedSearch";
 import { SearchTracker } from "@/components/analytics/Events";
+import { AdSlot } from "@/components/ads/AdSlot";
 
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }): Promise<Metadata> {
   const q = flatParams(await searchParams).q?.trim();
@@ -91,6 +92,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       <div className="mt-6 sm:mt-8">
         {items.length ? (
           <>
+            <AdSlot slot="search-top" className="mb-6 sm:mb-8" />
             <WorkGrid works={items} />
             <Pagination base="/search" params={sp} page={f.page} hasNext={hasNext} totalPages={Math.ceil(total.n / PAGE_SIZE)} />
           </>

@@ -9,6 +9,7 @@ import { AgeGate } from "@/components/site/AgeGate";
 import { NavProgress } from "@/components/site/NavProgress";
 import { Tracker } from "@/components/analytics/Tracker";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
+import { PopUnderSlot } from "@/components/ads/PopUnderSlot";
 import { analyticsEnabled } from "@/lib/analytics/config";
 
 // Everything here depends on the visitor's cookies (language, hidden tags), so it is rendered per request.
@@ -24,6 +25,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
       <NavProgress />
       <Tracker enabled={analyticsEnabled()} />
       <GoogleAnalytics enabled={analyticsEnabled()} />
+      <PopUnderSlot />
       <div id="site-content" data-gated={!ageOk} className="flex min-h-dvh flex-col" inert={!ageOk}>
         <a href="#main" className="skip-link">
           Skip to content

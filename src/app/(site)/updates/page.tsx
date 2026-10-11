@@ -10,6 +10,7 @@ import { breadcrumbLd, ldJson, listingMetadata } from "@/lib/seo";
 import { EmptyState, WorkCard } from "@/components/work/WorkCard";
 import { Pagination } from "@/components/work/Pagination";
 import { PageHeading } from "@/components/work/Section";
+import { AdSlot } from "@/components/ads/AdSlot";
 
 export const generateMetadata = ({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }): Promise<Metadata> =>
   listingMetadata({
@@ -32,6 +33,7 @@ export default async function UpdatesPage({ searchParams }: { searchParams: Prom
       <PageHeading title="Latest updates" sub="Series with a new chapter, newest first" eyebrow="Manga" />
       {items.length ? (
         <>
+          <AdSlot slot="list-top" className="mb-6 sm:mb-8" />
           <ul className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 sm:gap-x-4 sm:gap-y-8 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {items.map((w, i) => (
               <li key={w.publicId}>
@@ -40,6 +42,7 @@ export default async function UpdatesPage({ searchParams }: { searchParams: Prom
             ))}
           </ul>
           <Pagination base="/updates" params={sp} page={f.page} hasNext={hasNext} />
+          <AdSlot slot="list-footer" className="mt-10" />
         </>
       ) : (
         <EmptyState title="No updates match your languages" hint="Series with new chapters appear here. Try showing every language.">

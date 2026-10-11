@@ -423,7 +423,7 @@ const sitemapUrls: string[] = [];
 /* ───────────────── 13. the admin console does not exist for a visitor ───────────────── */
 {
   // no session and no secret entry link: every console address is a plain 404, so it cannot be found, indexed or probed
-  for (const path of ["/console", "/console/login", "/console/review", "/console/works", "/console/tags", "/console/analytics", "/api/console/auth/login"]) {
+  for (const path of ["/console", "/console/login", "/console/review", "/console/works", "/console/tags", "/console/analytics", "/console/ads", "/console/ads/home-top", "/api/console/auth/login"]) {
     const r = await get(path);
     ok(r.status === 404, `console: ${path} is a 404 for a visitor`, String(r.status));
   }
@@ -432,7 +432,7 @@ const sitemapUrls: string[] = [];
   // The panel layout checks the login, but a layout is skipped when a browser navigates inside the app: the request names
   // only the page. A junk session cookie (the edge only checks one EXISTS) plus a router header that says "the layouts are
   // already loaded" used to return a page's data. Every page's data must demand a real session on its own.
-  const pages: [string, string][] = [["/console", "Dashboard"], ["/console/analytics", "Analytics"], ["/console/review", "Review queue"], ["/console/reports", "Reports"], ["/console/duplicates", "Duplicates"], ["/console/works", "Works"], ["/console/tags", "Tags & safety"], ["/console/runs", "Ingest runs"], ["/console/audit", "Audit log"]];
+  const pages: [string, string][] = [["/console", "Dashboard"], ["/console/analytics", "Analytics"], ["/console/ads", "Ads"], ["/console/ads/home-top", "Ad place"], ["/console/review", "Review queue"], ["/console/reports", "Reports"], ["/console/duplicates", "Duplicates"], ["/console/works", "Works"], ["/console/tags", "Tags & safety"], ["/console/runs", "Ingest runs"], ["/console/audit", "Audit log"]];
   const segs = (p: string) => p.split("/").filter(Boolean);
   for (const [path, title] of pages) {
     const s2 = segs(path);

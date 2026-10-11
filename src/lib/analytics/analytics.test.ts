@@ -5,7 +5,7 @@ import { browserOf, describe, deviceOf, isBot, osOf } from "./ua";
 import { classifyReferrer, cleanTag } from "./referrer";
 import { ipKey, visitorId } from "./visitor";
 import { checkEvent, parseBody } from "./payload";
-import { optedOut } from "./collect";
+import { fromOurSite, optedOut } from "./collect";
 
 const KEY = "a-test-secret-that-is-long-enough";
 
@@ -203,4 +203,15 @@ test("opt-out: Do Not Track, Global Privacy Control, test runs and signed-in adm
   assert.equal(optedOut(h({ cookie: "__Host-lm_session=abc" })), true);
   assert.equal(optedOut(h({ cookie: "lm_session=abc" })), true);
   assert.equal(optedOut(h({ cookie: "lm_age=1; lmv5=1" })), false);
+});
+
+test("origin check: our own address or the very host the request was sent to; nothing else", () => {
+  assert.equal(fromOurSite("https://preview-abc.vercel.app", "preview-abc.vercel.app"), true, "same-origin by definition");
+  assert.equal(fromOurSite("HTTPS://Preview-ABC.vercel.app", "preview-abc.vercel.app"), true, "host names are case-insensitive");
+  assert.equal(fromOurSite("http://localhost:3201", "localhost:3201"), true);
+  assert.equal(fromOurSite("https://evil.example", "lustpages.com"), false, "another website is refused");
+  assert.equal(fromOurSite("https://evil.example", null), false);
+  assert.equal(fromOurSite("https://lustpages.com.evil.example", "lustpages.com"), false, "a look-alike host is not ours");
+  assert.equal(fromOurSite("not a url", "lustpages.com"), false);
+  assert.equal(fromOurSite("", "lustpages.com"), false);
 });

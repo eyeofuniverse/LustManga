@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { prisma, db } from "@/lib/db";
-import { getAdminSession } from "@/lib/admin/auth";
+import { getAdminSession, hasRole } from "@/lib/admin/auth";
 import { Shell, type NavItem } from "@/components/console/Shell";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +22,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   const items: NavItem[] = [
     { href: "/console", label: "Dashboard", icon: "dashboard", group: "Overview" },
     { href: "/console/analytics", label: "Analytics", icon: "analytics", group: "Overview" },
+    ...(hasRole(me, "ADMIN") ? [{ href: "/console/ads", label: "Ads", icon: "ads" as const, group: "Overview" }] : []), // revenue: not for moderators
     { href: "/console/review", label: "Review queue", icon: "review", group: "Moderation", badge: held + deferred || undefined },
     { href: "/console/reports", label: "Reports", icon: "reports", group: "Moderation", badge: reports || undefined },
     { href: "/console/duplicates", label: "Duplicates", icon: "duplicates", group: "Moderation", badge: dups || undefined },

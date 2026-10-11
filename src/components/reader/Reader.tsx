@@ -23,6 +23,8 @@ interface Props {
   next: number | null;
   chapters: { number: number }[];
   startPage: number;
+  /** the ad for the end-of-chapter card, already chosen by the server (nothing when there is none) */
+  endAd?: React.ReactNode;
 }
 
 // scroll mode renders real <img>s only near the reader, so a 2,000-page set never holds 2,000 decoded images
@@ -41,7 +43,7 @@ const BACKGROUNDS: Record<string, string> = {
 const AUTO_TURN_MS = { 1: 12_000, 2: 6_000, 3: 3_000 } as const;
 const AUTO_SCROLL_PX = { 1: 40, 2: 90, 3: 170 } as const;
 
-export function Reader({ work, chapter, pages, prev, next, chapters, startPage }: Props) {
+export function Reader({ work, chapter, pages, prev, next, chapters, startPage, endAd }: Props) {
   const router = useRouter();
   const total = pages.length;
   const { prefs, set } = useReaderPrefs();
@@ -350,7 +352,7 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
 
   // hidden bars leave the tab order and the accessibility tree too (visibility), not just the eye
   const barCls = `fixed inset-x-0 z-30 transition-[opacity,transform,visibility] duration-300 ${ui ? "visible opacity-100" : "invisible pointer-events-none opacity-0"}`;
-  const endCard = <EndCard work={work} chapter={chapter.number} next={next} prev={prev} onNext={() => goChapter(next)} />;
+  const endCard = <EndCard work={work} chapter={chapter.number} next={next} prev={prev} onNext={() => goChapter(next)} ad={endAd} />;
 
   return (
     <div data-theme="dark" className="min-h-dvh text-white" style={{ ["--reader-dim" as string]: String(1 - prefs.dim / 100), background: scrollMode ? (prefs.bg === "black" ? "#000" : BACKGROUNDS[prefs.bg]) : "#000" }}>
@@ -598,7 +600,7 @@ function Tip({ icon, title, body }: { icon: React.ReactNode; title: string; body
   );
 }
 
-function EndCard({ work, chapter, next, prev, onNext }: { work: Props["work"]; chapter: number; next: number | null; prev: number | null; onNext: () => void }) {
+function EndCard({ work, chapter, next, prev, onNext, ad }: { work: Props["work"]; chapter: number; next: number | null; prev: number | null; onNext: () => void; ad?: React.ReactNode }) {
   return (
     <div className="mx-auto my-16 max-w-sm px-6 text-center">
       <div className="space-y-5 rounded-3xl bg-neutral-900/90 px-6 py-10 text-white shadow-2xl ring-1 ring-white/10 backdrop-blur">
@@ -620,6 +622,7 @@ function EndCard({ work, chapter, next, prev, onNext }: { work: Props["work"]; c
           )}
         </div>
       </div>
+      {ad}
     </div>
   );
 }

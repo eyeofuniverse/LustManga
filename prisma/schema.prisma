@@ -505,3 +505,54 @@ model WebVital {
   @@index([at])
   @@index([metric, at])
 }
+
+// ───────────────────────────── advertising ─────────────────────────────
+// Where ads may appear is fixed in code (src/lib/ads/registry.ts); WHICH ads appear is managed in the console. Nothing is
+// shown until an admin adds an ad to a slot.
+
+/// One creative bound to a named slot. A slot can hold several; the server picks among those that match the visitor's
+/// device and the schedule: the highest `priority` wins, and ads of equal priority share the slot by `weight`.
+model Ad {
+  id        String    @id @default(cuid())
+  /// a key of the slot registry
+  slot      String
+  name      String
+  /// code (an ad network's embed code) | banner (an image that links out)
+  type      String    @default("code")
+  /// all | desktop | mobile. An ad for the visitor's own device beats an "all" ad.
+  device    String    @default("all")
+  code      String?
+  imageUrl  String?
+  linkUrl   String?
+  alt       String?
+  width     Int?
+  height    Int?
+  /// code ads only: inline (runs in the page, as most networks expect) | frame (a sandboxed frame; nothing it runs can touch the site)
+  isolation String    @default("inline")
+  priority  Int       @default(0)
+  weight    Int       @default(1)
+  startsAt  DateTime?
+  endsAt    DateTime?
+  active    Boolean   @default(true)
+  note      String?
+  createdBy String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @default(now()) @updatedAt
+  stats     AdStat[]
+
+  @@index([slot, active])
+}
+
+/// Ad boxes shown and banner clicks, per ad per UTC day. Impressions are counted when the box has been at least half in view
+/// for a second (never before the age gate is passed); clicks only exist for banners, which go through /go/ad/<id>. An ad
+/// network reports its own clicks and billed impressions.
+model AdStat {
+  adId        String
+  ad          Ad       @relation(fields: [adId], references: [id], onDelete: Cascade)
+  day         DateTime @db.Date
+  impressions Int      @default(0)
+  clicks      Int      @default(0)
+
+  @@id([adId, day])
+  @@index([day])
+}

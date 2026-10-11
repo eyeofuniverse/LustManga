@@ -9,6 +9,8 @@ import { PAGE_SIZE } from "@/lib/site";
 import { TAG_TYPE_LABEL, tagHref, type TagTypeSlug } from "@/lib/format";
 import { FilterBar } from "@/components/work/FilterBar";
 import { EmptyState, WorkGrid } from "@/components/work/WorkCard";
+import { AdSlot, AdView } from "@/components/ads/AdSlot";
+import { serveAd } from "@/lib/ads/serve";
 import { Pagination } from "@/components/work/Pagination";
 import { PageHeading } from "@/components/work/Section";
 import { FollowButton, HideTagButton } from "@/components/work/Actions";
@@ -63,7 +65,7 @@ export default async function TagPage({ params, searchParams }: { params: Params
     page: f.page,
   };
   const base = tagHref(type, tag.slug);
-  const [{ items, hasNext }, total] = await Promise.all([listWorks(opts), countWorks(opts)]);
+  const [{ items, hasNext }, total, gridAd] = await Promise.all([listWorks(opts), countWorks(opts), serveAd("list-in-grid")]);
   if (!items.length && f.page > 1) redirect(withQuery(base, sp, { page: undefined }));
   const directory = type === "tag" ? "/tags" : type === "artist" || type === "group" ? "/artists" : type === "parody" ? "/parodies" : type === "character" ? "/characters" : "/browse";
 
@@ -93,8 +95,10 @@ export default async function TagPage({ params, searchParams }: { params: Params
       <div className="mt-6 sm:mt-8">
         {items.length ? (
           <>
-            <WorkGrid works={items} />
+            <AdSlot slot="list-top" className="mb-6 sm:mb-8" />
+            <WorkGrid works={items} breakNode={gridAd ? <AdView ad={gridAd} className="py-2" /> : null} />
             <Pagination base={base} params={sp} page={f.page} hasNext={hasNext} totalPages={Math.ceil(total.n / PAGE_SIZE)} />
+            <AdSlot slot="list-footer" className="mt-10" />
           </>
         ) : (
           <EmptyState title="Nothing here with these filters" hint="Try another language or category.">

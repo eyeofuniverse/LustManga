@@ -3,10 +3,12 @@ import { staticMeta } from "@/lib/seo";
 import Link from "next/link";
 import { CONTACT_EMAIL, SITE_NAME } from "@/lib/site";
 import { RETENTION_DAYS } from "@/lib/analytics/config";
+import { adsInUse } from "@/lib/ads/serve";
 
 export const metadata: Metadata = staticMeta({ title: "Privacy Policy", description: "LustPages has no accounts and keeps very little: what is stored in your browser, what we log, and how to clear it.", path: "/privacy" });
 
-export default function Page() {
+export default async function Page() {
+  const ads = await adsInUse().catch(() => false);
   return (
     <>
       <h1>Privacy</h1>
@@ -38,7 +40,10 @@ export default function Page() {
       </ul>
 
       <h2>Third parties</h2>
-      <p>Pages are delivered through our hosting and content-delivery providers, who see your requests as any network does. We do not run advertising trackers.{" "}
+      <p>Pages are delivered through our hosting and content-delivery providers, who see your requests as any network does.{" "}
+        {ads
+          ? <><b>Advertising.</b> This site shows advertisements supplied by advertising networks. When an ad loads, the network receives your IP address and browser details and may set its own cookies and measure whether you saw or clicked the ad; we do not control that, and we give them nothing about you beyond what your browser sends. Ads are only loaded after you have confirmed you are an adult. Separately, we count (in total, never per person) how many times each ad was shown and clicked, and nothing is counted if your browser sends Do Not Track or Global Privacy Control. A content blocker stops ads from loading at all. </>
+          : <>We do not run advertising trackers. </>}
         {process.env.NEXT_PUBLIC_GA_ID
           ? <>We also use <b>Google Analytics</b>, which sets cookies and sends Google information about your visit (pages viewed, device, approximate location) once you have confirmed you are an adult. It is not loaded at all if your browser sends Do Not Track or Global Privacy Control. You can block it with any content blocker or Google&apos;s opt-out add-on without affecting the site.</>
           : <>We do not use third-party analytics. If that changes, this page will say so before it does.</>}

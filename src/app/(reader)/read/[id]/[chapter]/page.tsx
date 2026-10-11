@@ -6,6 +6,7 @@ import { cdn } from "@/lib/cdn";
 import { workHref } from "@/lib/format";
 import { flatParams, idParam, intParam } from "@/lib/url";
 import { Reader } from "@/components/reader/Reader";
+import { AdSlot } from "@/components/ads/AdSlot";
 
 type Params = Promise<{ id: string; chapter: string }>;
 
@@ -58,6 +59,7 @@ export default async function ReadPage({ params, searchParams }: { params: Param
       next={data.next}
       chapters={data.chapters.map((c) => ({ number: c.number }))}
       startPage={startPage}
+      endAd={<AdSlot slot="reader-end" className="mt-6" />}
     />
   );
 }

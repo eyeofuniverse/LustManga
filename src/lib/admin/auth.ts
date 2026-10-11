@@ -124,6 +124,9 @@ export async function revokeAllSessions(adminId: string): Promise<void> {
 
 const ROLE_RANK: Record<AdminRole, number> = { MOD: 1, ADMIN: 2, OWNER: 3 };
 
+/** Does this signed-in admin have at least this role? (OWNER > ADMIN > MOD) */
+export const hasRole = (me: { role: AdminRole }, min: AdminRole): boolean => ROLE_RANK[me.role] >= ROLE_RANK[min];
+
 export class AdminForbidden extends Error {
   constructor() {
     super("Admin access required");

@@ -13,11 +13,16 @@ const tooMany = makeLimiter(90, 60_000);
 
 const SESSION_COOKIES = ["__Host-lm_session", "lm_session"];
 
-/** The Origin header must name this site. (A test server may run on any localhost port.) */
-function fromOurSite(origin: string): boolean {
+/**
+ * The Origin header must name this site: the canonical address, or the very host the request was sent to (a request whose
+ * Origin matches its own Host is same-origin by definition, which is what makes a preview deployment or another port work).
+ * (A forced test server also accepts any localhost port.)
+ */
+export function fromOurSite(origin: string, requestHost?: string | null): boolean {
   try {
     const u = new URL(origin);
-    return ownHosts().includes(u.host.toLowerCase()) || (process.env.ANALYTICS_FORCE === "1" && u.hostname === "localhost");
+    const host = u.host.toLowerCase();
+    return ownHosts().includes(host) || (!!requestHost && host === requestHost.toLowerCase()) || (process.env.ANALYTICS_FORCE === "1" && u.hostname === "localhost");
   } catch {
     return false;
   }
@@ -53,7 +58,7 @@ export async function collect(req: Request): Promise<Outcome> {
   if (!analyticsEnabled()) return { status: 204 };
 
   const origin = req.headers.get("origin");
-  if (origin && !fromOurSite(origin)) return { status: 403 };
+  if (origin && !fromOurSite(origin, req.headers.get("host"))) return { status: 403 };
   if (optedOut(req.headers)) {
     debug("skipped: opted out");
     return { status: 204 };

@@ -11,6 +11,7 @@ import { SectionHeader } from "@/components/work/Section";
 import { ContinueRow } from "@/components/work/ContinueRow";
 import { ReadButton } from "@/components/work/Actions";
 import { Faq, type QA } from "@/components/seo/Faq";
+import { AdSlot } from "@/components/ads/AdSlot";
 import { HOME_DESCRIPTION, HOME_TITLE, ldJson, organizationLd, socialMeta, websiteLd } from "@/lib/seo";
 
 export const metadata: Metadata = {
@@ -164,6 +165,8 @@ export default async function Home() {
         </div>
       </section>
 
+      <AdSlot slot="home-top" contained className="pt-8" />
+
       <ContinueRow />
 
       {rest.length > 0 && (
@@ -190,6 +193,8 @@ export default async function Home() {
           </div>
         </section>
       )}
+
+      <AdSlot slot="home-mid" contained className="pt-10 sm:pt-12" />
 
       {cats.length > 0 && (
         <section className="container-x pt-12 sm:pt-16" aria-label="Categories">
@@ -246,6 +251,8 @@ export default async function Home() {
           </ul>
         </section>
       )}
+
+      <AdSlot slot="home-footer" contained className="pt-12 sm:pt-16" />
 
       <Faq items={FAQ} />
     </>

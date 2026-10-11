@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import { FileText } from "lucide-react";
 import type { WorkCard as Work } from "@/lib/types";
@@ -35,13 +36,30 @@ export function WorkCard({ work, priority = false, index = 0, note }: { work: Wo
   );
 }
 
-export function WorkGrid({ works, priorityCount = 6 }: { works: Work[]; priorityCount?: number }) {
+/**
+ * The in-grid ad goes after the 12th work, which ends a row at 2, 3, 4 and 6 columns. At exactly 5 columns (1024 to 1279 px
+ * wide) 12 would leave a hole in the row above the ad, so there it goes after the 10th. Both copies are in the page; the
+ * one that is not showing is display:none, so it never loads, runs or counts anything.
+ */
+export const AD_AFTER = 12;
+const AD_AFTER_5COL = 10;
+
+/**
+ * `breakNode`, when there is one, is shown as a full-width row after the 12th work. The page passes it only when there is
+ * something to show (not an empty placeholder), so a grid with no ad has no extra row and no extra spacing. (This file is also
+ * used by client components, so it must not import anything server-only: the page builds the node.)
+ */
+export function WorkGrid({ works, priorityCount = 6, breakNode }: { works: Work[]; priorityCount?: number; breakNode?: React.ReactNode }) {
   return (
     <ul className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-3 sm:gap-x-4 sm:gap-y-8 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
       {works.map((w, i) => (
-        <li key={w.publicId}>
-          <WorkCard work={w} index={i} priority={i < priorityCount} />
-        </li>
+        <Fragment key={w.publicId}>
+          <li>
+            <WorkCard work={w} index={i} priority={i < priorityCount} />
+          </li>
+          {breakNode && works.length > AD_AFTER && i === AD_AFTER_5COL - 1 && <li className="col-span-full hidden lg:max-xl:block">{breakNode}</li>}
+          {breakNode && works.length > AD_AFTER && i === AD_AFTER - 1 && <li className="col-span-full lg:max-xl:hidden">{breakNode}</li>}
+        </Fragment>
       ))}
     </ul>
   );

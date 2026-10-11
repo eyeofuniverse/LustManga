@@ -8,6 +8,8 @@ import { flatParams, withQuery } from "@/lib/url";
 import { PAGE_SIZE } from "@/lib/site";
 import { FilterBar } from "@/components/work/FilterBar";
 import { EmptyState, WorkGrid } from "@/components/work/WorkCard";
+import { AdSlot, AdView } from "@/components/ads/AdSlot";
+import { serveAd } from "@/lib/ads/serve";
 import { Pagination } from "@/components/work/Pagination";
 import { breadcrumbLd, itemListLd, ldJson, listingMetadata } from "@/lib/seo";
 import { PageHeading } from "@/components/work/Section";
@@ -32,7 +34,7 @@ export default async function Browse({ searchParams }: { searchParams: Promise<R
     exclude: prefFilters(prefs).exclude,
     page: f.page,
   };
-  const [{ items, hasNext }, total] = await Promise.all([listWorks(opts), countWorks(opts)]);
+  const [{ items, hasNext }, total, gridAd] = await Promise.all([listWorks(opts), countWorks(opts), serveAd("list-in-grid")]);
   // a page number past the end (an old bookmark, a shrunken list) goes back to the first page instead of an empty screen
   if (!items.length && f.page > 1) redirect(withQuery("/browse", sp, { page: undefined }));
 
@@ -46,8 +48,10 @@ export default async function Browse({ searchParams }: { searchParams: Promise<R
       <div className="mt-6 sm:mt-8">
         {items.length ? (
           <>
-            <WorkGrid works={items} />
+            <AdSlot slot="list-top" className="mb-6 sm:mb-8" />
+            <WorkGrid works={items} breakNode={gridAd ? <AdView ad={gridAd} className="py-2" /> : null} />
             <Pagination base="/browse" params={sp} page={f.page} hasNext={hasNext} totalPages={Math.ceil(total.n / PAGE_SIZE)} />
+            <AdSlot slot="list-footer" className="mt-10" />
           </>
         ) : (
           <EmptyState title="No works match these filters" hint="Try another language or category.">

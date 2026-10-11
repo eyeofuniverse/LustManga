@@ -17,6 +17,7 @@ import { FavoriteButton, ReadButton, ReportLink, ShareButton, ViewPing } from "@
 import { ScrollRow } from "@/components/work/ScrollRow";
 import { WorkCard } from "@/components/work/WorkCard";
 import { SectionHeader } from "@/components/work/Section";
+import { AdSlot } from "@/components/ads/AdSlot";
 
 type Params = Promise<{ ref: string }>;
 const idOf = (ref: string) => idParam(ref);
@@ -168,6 +169,8 @@ export default async function WorkPage({ params }: { params: Params }) {
             ))}
           </section>
 
+          <AdSlot slot="work-mid" />
+
           {about && (
             <section aria-label="Description">
               <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-muted">About</h2>
@@ -178,6 +181,8 @@ export default async function WorkPage({ params }: { params: Params }) {
           {w.chapters.length > 1 && <ChapterList publicId={w.publicId} slug={w.slug} chapters={w.chapters} />}
         </div>
       </div>
+
+      <AdSlot slot="work-footer" className="pt-10" />
 
       {moreBy.map(({ tag, items }) => (
         <section key={tag.id} className="pt-14" aria-label={`More from ${tag.name}`}>
