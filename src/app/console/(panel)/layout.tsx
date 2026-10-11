@@ -9,20 +9,19 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   const me = await getAdminSession();
   if (!me) redirect("/console/login");
 
-  const [held, deferred, quarantined, failed, dups, reports] = await db(() =>
+  const [held, deferred, failed, dups, reports] = await db(() =>
     Promise.all([
       prisma.work.count({ where: { needsReview: true, publish: "DRAFT", deferFetch: false } }),
       prisma.work.count({ where: { needsReview: true, publish: "DRAFT", deferFetch: true } }),
-      prisma.suppressedSource.count({ where: { confirmedAt: null } }),
       prisma.chapter.count({ where: { status: "FAILED" } }),
       prisma.duplicateCandidate.count({ where: { status: "OPEN" } }),
       prisma.report.count({ where: { status: "OPEN" } }),
     ]),
-  ).catch(() => [0, 0, 0, 0, 0, 0]);
+  ).catch(() => [0, 0, 0, 0, 0]);
 
   const items: NavItem[] = [
     { href: "/console", label: "Dashboard", icon: "dashboard", group: "Overview" },
-    { href: "/console/review", label: "Review queue", icon: "review", group: "Moderation", badge: held + deferred + quarantined || undefined },
+    { href: "/console/review", label: "Review queue", icon: "review", group: "Moderation", badge: held + deferred || undefined },
     { href: "/console/reports", label: "Reports", icon: "reports", group: "Moderation", badge: reports || undefined },
     { href: "/console/duplicates", label: "Duplicates", icon: "duplicates", group: "Moderation", badge: dups || undefined },
     { href: "/console/works", label: "Works", icon: "works", group: "Catalogue" },

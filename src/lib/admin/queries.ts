@@ -2,6 +2,7 @@ import "server-only";
 import type { Prisma, PublishStatus, TagType } from "@prisma/client";
 import { prisma, db } from "@/lib/db";
 import { cdn } from "@/lib/cdn";
+import { guardConsole } from "@/lib/admin/guard";
 import { pagesOf } from "@/lib/pages";
 import type {
   AuditData, DuplicatesData, DupSide, ReportsData, ReviewData, ReviewTab, RunsData, TagsData, WorksData,
@@ -16,6 +17,7 @@ const num = (v: string | undefined, d = 1) => Math.max(1, Number(v) || d);
 const REVIEW_PAGE = 12;
 
 export async function loadReview(sp: { tab?: string; page?: string }): Promise<ReviewData> {
+  await guardConsole();
   const tab: ReviewTab = sp.tab === "deferred" || sp.tab === "quarantined" ? sp.tab : "held";
   const page = num(sp.page);
   const [held, deferred, quarantined] = await db(() =>
@@ -78,6 +80,7 @@ const WORKS_PAGE = 30;
 const STATES: PublishStatus[] = ["PUBLISHED", "DRAFT", "REJECTED"];
 
 export async function loadWorks(sp: { q?: string; publish?: string; lang?: string; page?: string }): Promise<WorksData> {
+  await guardConsole();
   const page = num(sp.page);
   const q = (sp.q ?? "").trim();
   const publish = STATES.includes(sp.publish as PublishStatus) ? (sp.publish as PublishStatus) : undefined;
@@ -112,6 +115,7 @@ export async function loadWorks(sp: { q?: string; publish?: string; lang?: strin
 /* ───────────────────────── reports ───────────────────────── */
 
 export async function loadReports(sp: { status?: string }): Promise<ReportsData> {
+  await guardConsole();
   const status = sp.status === "closed" ? "closed" : "open";
   const [rows, open, closed] = await db(() =>
     Promise.all([
@@ -144,6 +148,7 @@ const loadSide = async (id: string): Promise<DupSide | null> => {
 };
 
 export async function loadDuplicates(): Promise<DuplicatesData> {
+  await guardConsole();
   const [cands, open, merged] = await db(() =>
     Promise.all([
       prisma.duplicateCandidate.findMany({ where: { status: "OPEN" }, orderBy: { score: "desc" }, take: 30 }),
@@ -164,6 +169,7 @@ const TAG_TYPES: TagType[] = ["TAG", "ARTIST", "GROUP", "PARODY", "CHARACTER", "
 export const TAG_TYPE_LIST = TAG_TYPES.map((t) => t.toLowerCase());
 
 export async function loadTags(sp: { q?: string; type?: string; sort?: string; flag?: string; page?: string; view?: string }): Promise<TagsData> {
+  await guardConsole();
   const page = num(sp.page);
   const type = TAG_TYPES.includes(sp.type as TagType) ? (sp.type as TagType) : undefined;
   const q = (sp.q ?? "").trim();
@@ -209,6 +215,7 @@ export async function loadTags(sp: { q?: string; type?: string; sort?: string; f
 /* ───────────────────────── ingest runs ───────────────────────── */
 
 export async function loadRuns(): Promise<RunsData> {
+  await guardConsole();
   const [runs, failed, failedCount] = await db(() =>
     Promise.all([
       prisma.ingestRun.findMany({ orderBy: { startedAt: "desc" }, take: 30 }),
@@ -234,6 +241,7 @@ export async function loadRuns(): Promise<RunsData> {
 /* ───────────────────────── audit log ───────────────────────── */
 
 export async function loadAudit(sp: { q?: string }): Promise<AuditData> {
+  await guardConsole();
   const q = (sp.q ?? "").trim();
   const rows = await db(() =>
     prisma.auditLog.findMany({

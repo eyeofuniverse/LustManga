@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma, db } from "@/lib/db";
 import { dayBuckets } from "@/lib/admin/format";
+import { guardConsole } from "@/lib/admin/guard";
 
 export interface RunRow {
   id: string;
@@ -31,6 +32,7 @@ export interface DashboardData {
 
 /** Everything the dashboard shows, in one round of queries. */
 export async function loadDashboard(): Promise<DashboardData> {
+  await guardConsole();
   const [byPublish, series, chapters, pages, runs, langs, topTags, suppressed, held, reports, dups, sources, growth] = await db(() =>
     Promise.all([
       prisma.work.groupBy({ by: ["publish"], _count: true }),

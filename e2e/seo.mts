@@ -428,6 +428,20 @@ const sitemapUrls: string[] = [];
     ok(r.status === 404, `console: ${path} is a 404 for a visitor`, String(r.status));
   }
   ok((await get("/console-preview/dashboard")).status === 404, "console: the local-only design preview is not served by a production build");
+
+  // The panel layout checks the login, but a layout is skipped when a browser navigates inside the app: the request names
+  // only the page. A junk session cookie (the edge only checks one EXISTS) plus a router header that says "the layouts are
+  // already loaded" used to return a page's data. Every page's data must demand a real session on its own.
+  const pages: [string, string][] = [["/console", "Dashboard"], ["/console/review", "Review queue"], ["/console/reports", "Reports"], ["/console/duplicates", "Duplicates"], ["/console/works", "Works"], ["/console/tags", "Tags & safety"], ["/console/runs", "Ingest runs"], ["/console/audit", "Audit log"]];
+  const segs = (p: string) => p.split("/").filter(Boolean);
+  for (const [path, title] of pages) {
+    const s2 = segs(path);
+    const page = s2.length === 1 ? ["(panel)", { children: ["__PAGE__", {}] }] : ["(panel)", { children: [s2[1], { children: ["__PAGE__", {}] }] }];
+    const tree = encodeURIComponent(JSON.stringify(["", { children: ["console", { children: page }] }, null, null, true]));
+    const r = await fetch(`${BASE}${path}?_rsc=probe`, { redirect: "manual", headers: { cookie: "__Host-lm_session=junk; lm_session=junk", rsc: "1", "next-router-state-tree": tree } });
+    const body = await r.text();
+    ok(!body.includes(title) || /NEXT_REDIRECT|\/console\/login/.test(body), `console: ${path} gives a junk session nothing, even when only the page is requested`, `${r.status} ${body.length} bytes`);
+  }
 }
 
 const failed = results.filter(([c]) => !c).length;

@@ -5,7 +5,7 @@ import { addTermAction, createTagAction, deleteAction, flagAction, mergeAction, 
 import type { TagRow, TagsData, TermRow } from "@/lib/admin/types";
 import { compact } from "@/lib/format";
 import { ActionForm, ChipRemove } from "../ActionForm";
-import { Badge, Card, Empty, Note, PageHeader, Pager, SearchField, SectionTitle, SelectField, Tabs, type Tone } from "../ui";
+import { Badge, Card, Empty, Note, PageHeader, Pager, SearchField, SelectField, Tabs, type Tone } from "../ui";
 
 const TYPES = ["tag", "artist", "group", "parody", "character", "language", "category"];
 

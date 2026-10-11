@@ -86,6 +86,7 @@ export function Shell({ items, email, role, children }: { items: NavItem[]; emai
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const menuBtn = useRef<HTMLButtonElement>(null);
   const closeBtn = useRef<HTMLButtonElement>(null);
+  const drawerEl = useRef<HTMLDivElement>(null);
 
   const current = items.find((i) => isActive(i.href, path));
 
@@ -106,17 +107,34 @@ export function Shell({ items, email, role, children }: { items: NavItem[]; emai
   };
 
   /* the drawer: closes on navigation, Escape or the backdrop; locks page scroll; hands focus back to its button */
+  const restoreFocus = useRef(false);
   const closeDrawer = useCallback(() => {
+    restoreFocus.current = true; // dismissed (not navigated away): hand focus back once the page behind it is live again
     setDrawer(false);
-    menuBtn.current?.focus();
   }, []);
+  useEffect(() => {
+    if (!drawer && restoreFocus.current) {
+      restoreFocus.current = false;
+      menuBtn.current?.focus();
+    }
+  }, [drawer]);
   useEffect(() => setDrawer(false), [path]);
   useEffect(() => {
     if (!drawer) return;
     closeBtn.current?.focus();
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && closeDrawer();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") return closeDrawer();
+      if (e.key !== "Tab") return;
+      // keep Tab inside the drawer: from the last control back to the first, and Shift+Tab the other way
+      const items = [...(drawerEl.current?.querySelectorAll<HTMLElement>("a[href], button:not([disabled])") ?? [])].filter((el) => el.tabIndex >= 0);
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) (e.preventDefault(), last.focus());
+      else if (!e.shiftKey && document.activeElement === last) (e.preventDefault(), first.focus());
+    };
     window.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = prev;
@@ -174,7 +192,7 @@ export function Shell({ items, email, role, children }: { items: NavItem[]; emai
         {User}
       </aside>
 
-      <div className="min-w-0">
+      <div className="min-w-0" inert={drawer}>
         {/* top bar: search and theme on desktop; menu, title and search on a phone */}
         <header className="sticky top-0 z-40 flex h-14 items-center gap-2 border-b border-line bg-bg/85 px-3 backdrop-blur-xl sm:px-4 lg:h-16 lg:px-8">
           <button ref={menuBtn} type="button" onClick={() => setDrawer(true)} className="c-btn-ghost !px-2.5 lg:hidden" aria-label="Open the menu" aria-expanded={drawer}>
@@ -212,7 +230,7 @@ export function Shell({ items, email, role, children }: { items: NavItem[]; emai
       {drawer && (
         <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
           <button type="button" aria-label="Close the menu" tabIndex={-1} className="c-fade-in absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeDrawer} />
-          <div className="absolute inset-y-0 left-0 flex w-[min(86vw,20rem)] flex-col bg-surface shadow-card" style={{ animation: "drawer .22s cubic-bezier(.2,.8,.3,1) both" }}>
+          <div ref={drawerEl} className="absolute inset-y-0 left-0 flex w-[min(86vw,20rem)] flex-col bg-surface shadow-card" style={{ animation: "drawer .22s cubic-bezier(.2,.8,.3,1) both" }}>
             <div className="flex items-center justify-between px-4 pb-2 pt-4">
               <Brand />
               <button ref={closeBtn} type="button" onClick={closeDrawer} className="c-btn-ghost !px-2.5" aria-label="Close the menu">
