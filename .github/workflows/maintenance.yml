@@ -1,4 +1,8 @@
 name: Maintenance
+
+# the workflows only read the repository and talk to the database and storage with their own secrets
+permissions:
+  contents: read
 # Daily housekeeping: dependency health check, integrity verify (stored pages still load
 # through the CDN; broken chapters go back in the queue), recompute tag counts.
 on:

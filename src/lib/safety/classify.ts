@@ -44,6 +44,19 @@ export function norm(s: string): string {
 }
 
 /**
+ * A hard term standing alone as an ENTRY OF A LIST inside a description: "...hidden sex, lolicon, maid, ..." or "Tags: loli".
+ * Some sources (MangaDex) paste the source's own tag list into the description, so a work tagged that way can carry the term
+ * ONLY there. Prose that merely mentions the word ("No loli or shota content, all characters are adults") is not a list
+ * entry and does not match, which is why descriptions are not scanned wholesale. A list entry sits between separators
+ * (comma, semicolon, pipe, slash, bullet, colon or a line break) and is the whole entry.
+ */
+export function listedHardTerms(description: string | null | undefined): string[] {
+  if (!description) return [];
+  const d = description.normalize("NFKC").toLowerCase();
+  return CORE_QUARANTINE.filter((t) => new RegExp(`(?:^|[,;:|/\\n\\r•·])\\s*${t}\\s*(?:$|[,;|/\\n\\r•·.])`, "m").test(d));
+}
+
+/**
  * Classify a work. The core quarantine terms are always enforced, whatever the
  * supplied term set says, so a bad or empty database cannot weaken the gate.
  */
@@ -66,8 +79,9 @@ export function classify(input: SafetyInput, terms: TermSet = DEFAULT_TERMS): Sa
     return [...new Set(found)];
   };
 
-  // QUARANTINE: tags + titles only (never the description)
-  const quarantine = scan(quarantineTerms, false);
+  // QUARANTINE: tags and titles, plus a hard term that is an entry of a tag list pasted into the description (see
+  // listedHardTerms). Prose in the description never quarantines on its own.
+  const quarantine = [...new Set([...scan(quarantineTerms, false), ...listedHardTerms(input.description).map((t) => `description:${t}`)])];
   if (quarantine.length) return { verdict: "QUARANTINE", reasons: quarantine, deferFetch: false };
 
   // DEFER: explicit age markers in tags + titles. Held without downloading anything.

@@ -21,7 +21,13 @@ async function load(params: Params) {
   const { type, slug } = await params;
   const t = tagTypeOf(type);
   if (!t) notFound();
-  const decoded = decodeURIComponent(slug);
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(slug);
+  } catch {
+    notFound(); // a broken percent-escape (/tag/%E0%A4%A) is a bad address, not a server error
+  }
+  if (decoded.includes("\u0000")) notFound(); // Postgres cannot store or match a NUL byte; /tag/%00 was a 500
   const tag = await getTag(t, decoded);
   // a tag an admin has hidden has no public page, and must not be indexable through a remembered address
   if (!tag || tag.hidden) notFound();

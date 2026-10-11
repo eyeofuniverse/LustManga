@@ -11,6 +11,15 @@ export function withQuery(base: string, current: Record<string, string | undefin
 /** Postgres rejects NUL bytes in text, so one ?q=%00 would otherwise be a 500. */
 export const stripNul = (s: string) => s.replace(/\u0000/g, "");
 
+/**
+ * The JSON body of a request as a plain object, whatever was sent: a missing body, invalid JSON, `null`, a number, a string
+ * or an array all give `{}`. (`(await req.json().catch(() => ({}))).x` throws on a body of `null`, which is valid JSON.)
+ */
+export async function readJson(req: Request): Promise<Record<string, unknown>> {
+  const v: unknown = await req.json().catch(() => null);
+  return v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+
 /** Search params -> a flat string record (first value wins, NUL bytes removed). */
 export function flatParams(sp: Record<string, string | string[] | undefined>): Record<string, string | undefined> {
   const out: Record<string, string | undefined> = {};

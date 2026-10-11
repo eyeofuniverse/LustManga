@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { clientIp, makeLimiter } from "@/lib/ratelimit";
-import { idParam } from "@/lib/url";
+import { idParam, readJson } from "@/lib/url";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +13,7 @@ const tooMany = makeLimiter(30, 60_000);
  * remembers that this browser has been counted). It feeds the "Most saved" sort and the Popular order.
  */
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => ({}))) as { id?: unknown; on?: unknown };
+  const body = await readJson(req);
   const id = idParam(body.id as number | string | undefined);
   if (id == null || typeof body.on !== "boolean") return new NextResponse(null, { status: 400 });
 

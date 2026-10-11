@@ -1,4 +1,8 @@
 name: Source probe (Phase 0)
+
+# the workflows only read the repository and talk to the database and storage with their own secrets
+permissions:
+  contents: read
 # Checks which candidate source sites are reachable from GitHub's hosted runners
 # (datacenter IPs) and whether real page images can be fetched. Read-only GETs.
 on:

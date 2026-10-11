@@ -21,7 +21,7 @@ export async function GET(req: Request) {
       const [type, ...rest] = s.split(":");
       const t = tagTypeOf(type ?? "");
       const slug = rest.join(":");
-      return t && slug && slug.length <= 120 ? { type: t, slug } : null;
+      return t && slug && slug.length <= 120 && !slug.includes("\u0000") ? { type: t, slug } : null;
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
   const plain = (sp.get("ids") ?? "")

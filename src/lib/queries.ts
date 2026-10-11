@@ -201,6 +201,7 @@ const tagColsWithHidden = { ...tagCols, hidden: true } as const;
 
 /** Find a tag by type and slug (or by an old/merged spelling). Returns the canonical tag. */
 export const getTag = cache(async (type: TagType, slugOrName: string): Promise<TagLite | null> => {
+  if (slugOrName.includes("\u0000")) return null; // never reaches the database: Postgres rejects a NUL byte in text
   const s = makeSlug(slugOrName) || slugOrName.toLowerCase();
   const direct = await db(() => prisma.tag.findUnique({ where: { type_slug: { type, slug: s } }, select: tagColsWithHidden }));
   if (direct) return direct;

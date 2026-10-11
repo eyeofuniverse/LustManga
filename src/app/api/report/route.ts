@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { clientIp } from "@/lib/ratelimit";
-import { MAX_INT } from "@/lib/url";
+import { MAX_INT, readJson } from "@/lib/url";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +18,7 @@ const Body = z.object({
 
 /** Visitor reports (takedown requests, broken pages, anything else). Rate-limited per visitor; stored for the console. */
 export async function POST(req: Request) {
-  const parsed = Body.safeParse(await req.json().catch(() => ({})));
+  const parsed = Body.safeParse(await readJson(req));
   if (!parsed.success) return NextResponse.json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid report" }, { status: 400 });
   const b = parsed.data;
   if (b.kind === "DMCA" && !EMAIL.test(b.contact ?? "")) return NextResponse.json({ ok: false, error: "A takedown request needs a valid email address so we can reply." }, { status: 400 });

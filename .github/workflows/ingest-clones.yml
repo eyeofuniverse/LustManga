@@ -1,4 +1,8 @@
 name: Ingest clone sites
+
+# the workflows only read the repository and talk to the database and storage with their own secrets
+permissions:
+  contents: read
 # hentaifox, hentaiera and nhentai.xxx share one engine, so one adapter and one workflow cover all
 # three, as parallel jobs. Releases we already hold from another source are attached as an extra
 # source, not re-downloaded. Hard-tagged works are recorded as metadata only; other flagged ones are

@@ -1,4 +1,8 @@
 name: Ingest Hitomi
+
+# the workflows only read the repository and talk to the database and storage with their own secrets
+permissions:
+  contents: read
 # Doujinshi / manga galleries from Hitomi: one Work per gallery (each language is its own
 # gallery; translations are linked through translationGroupId). Hard-tagged galleries are
 # recorded as metadata only; other flagged ones are held for an admin. Safe to re-run.

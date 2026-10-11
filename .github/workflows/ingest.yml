@@ -1,4 +1,8 @@
 name: Ingest MangaDex
+
+# the workflows only read the repository and talk to the database and storage with their own secrets
+permissions:
+  contents: read
 # Pulls adult-rated works from MangaDex: stores pages in R2 as WebP, creates Works.
 # Flagged works are held as DRAFT for an admin (see scripts/review.mts); clean works
 # auto-publish. Safe to re-run: targets are re-derived from the DB, popular mode

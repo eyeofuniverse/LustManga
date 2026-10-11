@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { clientIp } from "@/lib/ratelimit";
+import { readJson } from "@/lib/url";
 import { hashPassword, setPending, constEq, recordAttempt } from "@/lib/admin/auth";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export async function POST(req: Request) {
   }
 
   const secret = process.env.ADMIN_BOOTSTRAP_SECRET;
-  const body = await req.json().catch(() => ({}));
+  const body = await readJson(req);
   const email = String(body.email ?? "").trim().toLowerCase();
   const password = String(body.password ?? "");
   const given = String(body.secret ?? "");

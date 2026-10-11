@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { clientIp } from "@/lib/ratelimit";
+import { readJson } from "@/lib/url";
 import {
   readPending,
   clearPending,
@@ -25,7 +26,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Account unavailable." }, { status: 401 });
   }
 
-  const code = String((await req.json().catch(() => ({}))).code ?? "").trim();
+  const code = String((await readJson(req)).code ?? "").trim();
   let good = code.length >= 6 && verifyTotp(admin.totpSecret, code);
   let usedBackupIdx = -1;
   if (!good && admin.backupCodes.length) {

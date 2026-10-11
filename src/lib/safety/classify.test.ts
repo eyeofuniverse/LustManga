@@ -27,9 +27,28 @@ test("quarantine is whole-word: lookalikes do not trip it", () => {
   assert.equal(classify({ title: "Shotaro's Day Off", tags: [] }).verdict, "CLEAN");
 });
 
-test("description never causes quarantine or defer, even with a hard term", () => {
+test("prose in a description never causes quarantine or defer, even when it names a hard term", () => {
   const r = classify({ ...base, description: "No loli or shota content, all characters are adults, not underage." });
   assert.equal(r.verdict, "CLEAN");
+  for (const prose of ["A story about a lolicon who learns better.", "Shota is the hero's name here", "He hates loli. She hates shota!", "Not lolicon, not shotacon, just adults"]) {
+    assert.equal(classify({ ...base, description: prose }).verdict, "CLEAN", prose);
+  }
+});
+
+test("a hard term that is an entry of a tag list pasted into the description quarantines (MangaDex puts the source's tags there)", () => {
+  const pasted = "Two people meet.\n\nTags: Anal, blowjob, kimono, lolicon, maid, nakadashi, rape";
+  const r = classify({ ...base, description: pasted });
+  assert.equal(r.verdict, "QUARANTINE");
+  assert.deepEqual(r.reasons, ["description:lolicon"]);
+  for (const list of ["|FEMALE| anal, blowjob, lingerie, lolicon, maid", "lolicon", "loli, anal", "tags: shotacon.", "hidden sex; shota; maid", "• loli\n• maid", "anal / lolis / maid", "x, toddlercon"]) {
+    assert.equal(classify({ ...base, description: list }).verdict, "QUARANTINE", list);
+  }
+});
+
+test("list entries must be the whole entry: lookalikes inside longer words or phrases do not trip it", () => {
+  for (const d of ["anal, lolita fashion, maid", "tags: loli pop candy, maid", "anal, not loli content, maid", "shotaro, maid", "anal, lolicons club, maid", "a b, c lolicon d, e"]) {
+    assert.equal(classify({ ...base, description: d }).verdict, "CLEAN", d);
+  }
 });
 
 test("explicit age markers are held for admin WITHOUT downloading (deferFetch)", () => {

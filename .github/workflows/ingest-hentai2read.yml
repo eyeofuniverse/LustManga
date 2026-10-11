@@ -1,4 +1,8 @@
 name: Ingest Hentai2Read
+
+# the workflows only read the repository and talk to the database and storage with their own secrets
+permissions:
+  contents: read
 # Doujinshi and manga from Hentai2Read, one Work per title. Releases we already hold from another
 # source are attached as an extra source, not re-downloaded. Hard-tagged works are recorded as
 # metadata only; other flagged ones are held for an admin. Safe to re-run.

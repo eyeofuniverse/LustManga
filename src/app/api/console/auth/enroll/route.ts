@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { clientIp } from "@/lib/ratelimit";
+import { readJson } from "@/lib/url";
 import { readPending, clearPending, createAdminSession } from "@/lib/admin/auth";
 import { verifyTotp, newBackupCodes } from "@/lib/admin/totp";
 
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Already enrolled." }, { status: 409 });
   }
 
-  const code = String((await req.json().catch(() => ({}))).code ?? "").trim();
+  const code = String((await readJson(req)).code ?? "").trim();
   if (!verifyTotp(admin.totpSecret, code)) {
     return NextResponse.json({ error: "That code didn't match — check the app time." }, { status: 400 });
   }

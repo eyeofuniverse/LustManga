@@ -1,4 +1,8 @@
 name: Refresh source signals
+
+# the workflows only read the repository and talk to the database and storage with their own secrets
+permissions:
+  contents: read
 # What the SOURCE sites say about our works (MangaDex followers and ratings, Hitomi's popular-today / this-week /
 # this-month charts, and the favourites / ratings / upload times on each work's own page at Hentai2Read, HentaiFox,
 # HentaiEra, AsmHentai and nhentai.xxx) decides Popular, Trending and Top rated, so a site with few readers of its

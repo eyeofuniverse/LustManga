@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { flatParams, idParam, intParam, MAX_INT, stripNul, withQuery, workNumber } from "./url";
+import { flatParams, idParam, intParam, MAX_INT, readJson, stripNul, withQuery, workNumber } from "./url";
 import { parsePrefs, MAX_HIDDEN } from "./prefs";
 import { isEmptyQuery, parseQuery } from "./search";
 
@@ -68,4 +68,14 @@ test("a hand-edited cookie cannot smuggle in a bad tag id or an oversized list",
   assert.equal(p.hide.length, MAX_HIDDEN);
   assert.ok(p.hide.every((h) => Number.isInteger(h.id) && h.id > 0 && h.id <= MAX_INT));
   assert.deepEqual(parsePrefs("%E0%A4%A"), { langs: [], hide: [] }); // malformed
+});
+
+test("readJson: whatever is sent, the handler gets a plain object (a body of `null` used to crash four endpoints)", async () => {
+  const req = (body: string | undefined) => new Request("http://x.test/api", { method: "POST", body });
+  assert.deepEqual(await readJson(req('{"id":5,"on":true}')), { id: 5, on: true });
+  for (const bad of [undefined, "", "{not json", "null", "[]", "[1,2]", "5", '"text"', "true"]) {
+    assert.deepEqual(await readJson(req(bad)), {}, String(bad));
+  }
+  const b = await readJson(req("null"));
+  assert.equal(String(b.code ?? "").trim(), ""); // the pattern the auth routes use
 });

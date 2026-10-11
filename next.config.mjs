@@ -6,6 +6,7 @@ const nextConfig = {
   // dev and production can run side by side (QA) without trampling each other's build output
   distDir: process.env.NEXT_DIST_DIR || ".next",
   reactStrictMode: true,
+  poweredByHeader: false,
   eslint: { ignoreDuringBuilds: true },
   images: {
     remotePatterns: [{ protocol: "https", hostname: process.env.NEXT_PUBLIC_IMG_CDN_HOST ?? "img-cdn.lustpages.com" }],

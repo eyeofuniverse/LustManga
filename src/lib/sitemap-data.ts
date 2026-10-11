@@ -32,7 +32,7 @@ const counts = unstable_cache(
     );
     return { tags, works };
   },
-  ["sitemap-counts-v1"],
+  ["sitemap-counts-v2"],
   { revalidate: HOURS },
 );
 
@@ -82,7 +82,7 @@ const workChunk = unstable_cache(
     );
     return rows.map((w) => ({ url: abs(workHref(w)), lastmod: w.updatedAt.toISOString(), image: cdn(w.coverKey) ?? undefined }));
   },
-  ["sitemap-works-v2"],
+  ["sitemap-works-v3"],
   { revalidate: 6 * HOURS },
 );
 

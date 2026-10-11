@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { clientIp, makeLimiter } from "@/lib/ratelimit";
-import { idParam } from "@/lib/url";
+import { idParam, readJson } from "@/lib/url";
 
 // best effort per server instance: stops a script from inflating views just by dropping the cookie each time
 const tooMany = makeLimiter(40, 60_000);
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
  * daily table behind Trending / This week / This month.
  */
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => ({}))) as { id?: unknown };
+  const body = await readJson(req);
   const id = idParam(body.id as number | string | undefined);
   if (id == null) return new NextResponse(null, { status: 400 });
 

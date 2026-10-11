@@ -1,4 +1,8 @@
 name: CI
+
+# the workflows only read the repository and talk to the database and storage with their own secrets
+permissions:
+  contents: read
 on:
   push:
     branches: [main]
