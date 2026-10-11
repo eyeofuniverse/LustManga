@@ -6,6 +6,7 @@ import { Check } from "lucide-react";
 import { AGE_COOKIE, PREFS_COOKIE, serializePrefs, writeCookie } from "@/lib/prefs";
 import { LANGUAGES } from "@/lib/format";
 import { LogoMark } from "./Logo";
+import { track } from "@/lib/analytics/client";
 
 const QUICK = ["en", "ja", "zh", "ko", "es", "fr", "de", "ru"];
 
@@ -29,6 +30,7 @@ export function AgeGate({ initialLangs }: { initialLangs: string[] }) {
   const accept = () => {
     writeCookie(AGE_COOKIE, "1");
     writeCookie(PREFS_COOKIE, serializePrefs({ langs: all ? [] : langs, hide: [] }));
+    track("age_gate", { label: "pass" });
     setOpen(false);
     router.refresh();
   };

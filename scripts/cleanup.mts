@@ -6,6 +6,7 @@ import { prisma } from "../src/lib/db";
 import { pool } from "../src/lib/http";
 import { r2Delete, r2List } from "../src/lib/r2";
 import { MAX_ATTEMPTS } from "../src/lib/ingest/shared";
+import { RETENTION_DAYS } from "../src/lib/analytics/config";
 
 const days = (n: number) => new Date(Date.now() - n * 86_400_000);
 
@@ -14,6 +15,11 @@ const viewDays = await prisma.$executeRaw`DELETE FROM "WorkViewDay" WHERE day < 
 const snapshots = await prisma.$executeRaw`DELETE FROM "SignalSnapshot" WHERE day < (now() AT TIME ZONE 'utc')::date - 45`;
 const logins = await prisma.adminLoginAttempt.deleteMany({ where: { createdAt: { lt: days(30) } } });
 const dups = await prisma.duplicateCandidate.deleteMany({ where: { status: { in: ["MERGED", "DISMISSED"] }, createdAt: { lt: days(30) } } });
+// first-party analytics: raw rows only live for RETENTION_DAYS (the console and the privacy page state the same number)
+const oldViews = await prisma.pageView.deleteMany({ where: { at: { lt: days(RETENTION_DAYS) } } });
+const oldEvents = await prisma.analyticsEvent.deleteMany({ where: { at: { lt: days(RETENTION_DAYS) } } });
+const oldVitals = await prisma.webVital.deleteMany({ where: { at: { lt: days(RETENTION_DAYS) } } });
+console.log(`analytics retention: ${oldViews.count} page view(s), ${oldEvents.count} event(s), ${oldVitals.count} speed sample(s) older than ${RETENTION_DAYS} days removed`);
 console.log(`retention: ${runs.count} old run(s), ${viewDays} old daily view row(s), ${snapshots} old source snapshot(s), ${logins.count} login attempt(s), ${dups.count} resolved duplicate(s) removed`);
 
 // parked chapters (never got page data) may have partial objects; clear them once, then mark them cleaned

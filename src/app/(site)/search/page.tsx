@@ -14,6 +14,7 @@ import { EmptyState, WorkGrid } from "@/components/work/WorkCard";
 import { Pagination } from "@/components/work/Pagination";
 import { PageHeading } from "@/components/work/Section";
 import { AdvancedSearch } from "@/components/site/AdvancedSearch";
+import { SearchTracker } from "@/components/analytics/Events";
 
 export async function generateMetadata({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }): Promise<Metadata> {
   const q = flatParams(await searchParams).q?.trim();
@@ -85,6 +86,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       <PageHeading title={`Results for "${q}"`} sub={noMatch ? undefined : `${total.n.toLocaleString()}${total.capped ? "+" : ""} works`} eyebrow="Search" />
       {form}
         <AdvancedSearch initialQ={q} params={sp} />
+      {f.page === 1 && <SearchTracker q={q} results={total.n} />}
       <FilterBar base="/search" params={sp} sort={f.sort} langs={f.langs} cats={f.cats} />
       <div className="mt-6 sm:mt-8">
         {items.length ? (

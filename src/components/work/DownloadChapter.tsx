@@ -5,6 +5,7 @@ import { Check, Download, Loader2, X } from "lucide-react";
 import { buildCbz, safeFileName, saveBlob } from "@/lib/cbz";
 import { SITE_URL } from "@/lib/site";
 import { workHref } from "@/lib/format";
+import { track } from "@/lib/analytics/client";
 
 /** A chapter this large would not fit comfortably in a phone's memory while it is zipped. */
 const MAX_BYTES = 450 * 1024 * 1024;
@@ -70,6 +71,7 @@ export function DownloadChapter({
         signal: ctrl.signal,
       });
       saveBlob(blob, `${safeFileName(name)}.cbz`);
+      track("download", { work: publicId, v: Math.max(0, Math.round(chapter)) });
       setState({ kind: "done" });
       setTimeout(() => setState({ kind: "idle" }), 4000);
     } catch (e) {

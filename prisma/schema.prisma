@@ -424,3 +424,84 @@ model SignalSnapshot {
   @@id([workId, day])
   @@index([day])
 }
+
+// ───────────────────────────── analytics ─────────────────────────────
+// First-party, cookieless and anonymous. There is no IP address and no cookie here: `visitor` is a one-way hash of
+// (ip, user agent) salted with a secret AND the UTC date, so it can tell two page views of one browser apart from two
+// browsers within a single day, but it cannot follow anyone from one day to the next (see src/lib/analytics/visitor.ts).
+// The cleanup job deletes everything older than ANALYTICS_RETENTION_DAYS.
+
+/// One page view. `id` is made by the browser so the later "leave" report can find the row without a round trip.
+model PageView {
+  id       String   @id
+  at       DateTime @default(now())
+  visitor  String
+  /// normalised: no query string, no slug (/g/123, /read/123, /tag/big-breasts)
+  path     String
+  /// home | browse | work | read | tag | search | list | static | other
+  kind     String
+  /// the work's public id for work and reader pages
+  workId   Int?
+  /// host of the page the visitor came from, only on the first view after arriving (null = direct or internal)
+  referrer String?
+  /// direct | search | social | referral
+  refKind  String   @default("direct")
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  /// ISO 3166 alpha-2, from the CDN's country header
+  country  String?
+  /// mobile | tablet | desktop
+  device   String
+  browser  String?
+  os       String?
+  /// primary language of the browser, e.g. "en"
+  lang     String?
+  /// true when the age gate was still showing
+  gated    Boolean  @default(false)
+  /// seconds the page was visible and in use, reported when the visitor leaves; null if that report never arrived
+  seconds  Int?
+
+  @@index([at])
+  @@index([kind, at])
+  @@index([workId, at])
+  @@index([visitor, at])
+}
+
+/// Something a visitor did: searched, started or finished reading, saved a work, downloaded, passed the age gate, hit a 404.
+model AnalyticsEvent {
+  id      String   @id
+  at      DateTime @default(now())
+  visitor String
+  /// search | read_start | read_end | favorite | follow | download | share | age_gate | not_found
+  name    String
+  path    String?
+  workId  Int?
+  /// the search words, the tag followed, "add" / "remove", the 404 path...
+  label   String?
+  /// result count, last page reached...
+  value   Int?
+  /// pages in the chapter, for read_end
+  total   Int?
+
+  @@index([name, at])
+  @@index([workId, at])
+  @@index([at])
+}
+
+/// Real-user Core Web Vitals, one row per metric per page load, so the console can show what visitors actually experience.
+model WebVital {
+  id     String   @id @default(cuid())
+  at     DateTime @default(now())
+  /// LCP | INP | CLS | FCP | TTFB
+  metric String
+  /// milliseconds; CLS is multiplied by 1000
+  value  Int
+  /// good | needs-improvement | poor
+  rating String
+  kind   String
+  device String
+
+  @@index([at])
+  @@index([metric, at])
+}

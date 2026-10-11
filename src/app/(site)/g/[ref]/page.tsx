@@ -129,7 +129,7 @@ export default async function WorkPage({ params }: { params: Params }) {
           <div className="flex flex-wrap items-stretch justify-center gap-2.5 lg:justify-start">
             <ReadButton publicId={w.publicId} chapters={chapterNumbers} />
             <FavoriteButton publicId={w.publicId} count={w.favorites} />
-            <ShareButton title={w.title} />
+            <ShareButton title={w.title} publicId={w.publicId} />
             {w.chapters.length === 1 && <DownloadChapter publicId={w.publicId} slug={w.slug} chapter={w.chapters[0].number} />}
             <ReportLink publicId={w.publicId} />
           </div>

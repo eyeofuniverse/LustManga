@@ -12,6 +12,7 @@ import { buildSlides, isLongStrip, pageOfSlide, slideOfPage, wantsSpread } from 
 import { BookStage, type BookHandle } from "./BookStage";
 import type { ReaderPage } from "./types";
 import { DownloadChapter } from "@/components/work/DownloadChapter";
+import { useReadTracking } from "@/components/analytics/Events";
 
 export type { ReaderPage };
 interface Props {
@@ -109,6 +110,7 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage }
   }, [work.publicId, chapter.number, total]);
   const pageRef = useRef(page);
   pageRef.current = page;
+  useReadTracking(work.publicId, chapter.number, total, page);
 
   // keep a refreshable position in the URL without adding history entries
   useEffect(() => {

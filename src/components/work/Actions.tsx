@@ -6,6 +6,7 @@ import { BookOpen, Bell, BellRing, Check, EyeOff, Flag, Heart, Link2, Play, Shar
 import { MAX_FOLLOWS, resumePoint, useFavorites, useFollows, useHistory } from "@/lib/library";
 import { compact, readHref } from "@/lib/format";
 import { usePrefs } from "@/components/site/PrefsProvider";
+import { track } from "@/lib/analytics/client";
 
 /** Start reading, or pick up where the visitor left off (the next chapter if they finished one, the beginning if they finished it all). */
 export function ReadButton({ publicId, chapters, className = "" }: { publicId: number; chapters: number[]; className?: string }) {
@@ -36,6 +37,7 @@ export function FavoriteButton({ publicId, compact: small = false, count }: { pu
   const click = () => {
     const next = !on;
     toggle(publicId);
+    track("favorite", { work: publicId, label: next ? "add" : "remove" });
     // the public counter; the visitor's own library never leaves the browser
     fetch("/api/favorite", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: publicId, on: next }), keepalive: true }).catch(() => {});
   };
@@ -54,7 +56,7 @@ export function FavoriteButton({ publicId, compact: small = false, count }: { pu
   );
 }
 
-export function ShareButton({ title, compact = false }: { title: string; compact?: boolean }) {
+export function ShareButton({ title, publicId, compact = false }: { title: string; publicId?: number; compact?: boolean }) {
   const [done, setDone] = useState(false);
   const [native, setNative] = useState(false);
   useEffect(() => setNative("share" in navigator), []);
@@ -63,9 +65,11 @@ export function ShareButton({ title, compact = false }: { title: string; compact
     try {
       if (navigator.share) {
         await navigator.share({ title, url });
+        if (publicId) track("share", { work: publicId });
         return;
       }
       await navigator.clipboard.writeText(url);
+      if (publicId) track("share", { work: publicId });
       setDone(true);
       setTimeout(() => setDone(false), 1800);
     } catch {
@@ -97,7 +101,7 @@ export function FollowButton({ id, type, slug, name }: { id: number; type: strin
   const on = mounted && has(id);
   const full = !on && items.length >= MAX_FOLLOWS;
   return (
-    <button type="button" onClick={() => toggle({ id, type, slug, name })} disabled={full} aria-pressed={on} className={`btn-soft h-11 ${on ? "!text-accent" : "text-muted"}`} title={full ? `You can follow up to ${MAX_FOLLOWS}` : undefined}>
+    <button type="button" onClick={() => { toggle({ id, type, slug, name }); track("follow", { label: on ? "remove" : "add" }); }} disabled={full} aria-pressed={on} className={`btn-soft h-11 ${on ? "!text-accent" : "text-muted"}`} title={full ? `You can follow up to ${MAX_FOLLOWS}` : undefined}>
       {on ? <BellRing className="h-4 w-4" /> : <Bell className="h-4 w-4" />}
       {on ? "Following" : "Follow"}
     </button>

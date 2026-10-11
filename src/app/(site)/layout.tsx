@@ -7,6 +7,9 @@ import { Footer } from "@/components/site/Footer";
 import { BottomNav } from "@/components/site/BottomNav";
 import { AgeGate } from "@/components/site/AgeGate";
 import { NavProgress } from "@/components/site/NavProgress";
+import { Tracker } from "@/components/analytics/Tracker";
+import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
+import { analyticsEnabled } from "@/lib/analytics/config";
 
 // Everything here depends on the visitor's cookies (language, hidden tags), so it is rendered per request.
 export const dynamic = "force-dynamic";
@@ -19,6 +22,8 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   return (
     <PrefsProvider initial={prefs}>
       <NavProgress />
+      <Tracker enabled={analyticsEnabled()} />
+      <GoogleAnalytics enabled={analyticsEnabled()} />
       <div id="site-content" data-gated={!ageOk} className="flex min-h-dvh flex-col" inert={!ageOk}>
         <a href="#main" className="skip-link">
           Skip to content
