@@ -3,6 +3,7 @@ import { approveWork, confirmSuppressed, rejectWork } from "@/lib/admin/actions"
 import type { QuarantineRow, ReviewData, ReviewWork } from "@/lib/admin/types";
 import { ago } from "@/lib/admin/format";
 import { ActionButton } from "../ActionForm";
+import { ActionBar, BulkProvider, SelectAllRow, SelectBox } from "../BulkReview";
 import { Badge, Card, Cover, Empty, Note, PageHeader, Pager, ReasonBadges, Tabs } from "../ui";
 
 function Previews({ w }: { w: ReviewWork }) {
@@ -27,6 +28,7 @@ function WorkCard({ w, deferred }: { w: ReviewWork; deferred: boolean }) {
         {!deferred && <Previews w={w} />}
         <div className="min-w-0 flex-1 space-y-3">
           <div className="flex flex-wrap items-center gap-1.5">
+            <SelectBox id={w.publicId} title={w.title} />
             <Badge tone="muted">#{w.publicId}</Badge>
             <Badge tone="info">{w.language}</Badge>
             {!deferred && <Badge tone="muted">{w.pageCount} pages</Badge>}
@@ -99,18 +101,34 @@ export function ReviewView({ d }: { d: ReviewData }) {
       {d.tab === "held" && (
         <>
           <Note tone="warn" icon={<Info className="h-4 w-4" />}>
-            <b className="text-text">Approve</b> if it was a false flag and it should be published. <b className="text-text">Reject</b> if the flag was right: the stored images are deleted.
+            <b className="text-text">Approve</b> if it was a false flag and it should be published. <b className="text-text">Reject</b> if the flag was right: the stored images are deleted. To approve many at once, tick works (or <b className="text-text">select all</b> on the page, then everything in Held).
           </Note>
-          {d.works.length ? <div className="space-y-4">{d.works.map((w) => <WorkCard key={w.id} w={w} deferred={false} />)}</div> : <Empty icon={<ShieldAlert className="h-5 w-5" />} title="Nothing is waiting" hint="Every held work has been decided." />}
+          {d.works.length ? (
+            <BulkProvider tab="held" ids={d.works.map((w) => w.publicId)} total={d.counts.held}>
+              <SelectAllRow />
+              <div className="space-y-4">{d.works.map((w) => <WorkCard key={w.id} w={w} deferred={false} />)}</div>
+              <ActionBar />
+            </BulkProvider>
+          ) : (
+            <Empty icon={<ShieldAlert className="h-5 w-5" />} title="Nothing is waiting" hint="Every held work has been decided." />
+          )}
         </>
       )}
 
       {d.tab === "deferred" && (
         <>
           <Note tone="bad" icon={<Info className="h-4 w-4" />}>
-            These carry an explicit age marker, so <b className="text-text">no images have been downloaded</b>. Judge from the source page. Approve fetches and publishes on the next ingest run; reject means it is never downloaded.
+            These carry an explicit age marker, so <b className="text-text">no images have been downloaded</b>. Judge from the source page. Approve fetches and publishes on the next ingest run; reject means it is never downloaded. You can tick several to approve them together, but there is no &ldquo;approve everything&rdquo; for this tab: only works you have checked.
           </Note>
-          {d.works.length ? <div className="space-y-4">{d.works.map((w) => <WorkCard key={w.id} w={w} deferred />)}</div> : <Empty icon={<ShieldAlert className="h-5 w-5" />} title="Nothing is waiting" hint="No work is held before download." />}
+          {d.works.length ? (
+            <BulkProvider tab="deferred" ids={d.works.map((w) => w.publicId)} total={d.counts.deferred}>
+              <SelectAllRow />
+              <div className="space-y-4">{d.works.map((w) => <WorkCard key={w.id} w={w} deferred />)}</div>
+              <ActionBar />
+            </BulkProvider>
+          ) : (
+            <Empty icon={<ShieldAlert className="h-5 w-5" />} title="Nothing is waiting" hint="No work is held before download." />
+          )}
         </>
       )}
 

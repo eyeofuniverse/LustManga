@@ -2,13 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import type { SafetyTier, TagType } from "@prisma/client";
+import type { Prisma, SafetyTier, TagType } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireAdmin, type AdminIdentity } from "@/lib/admin/auth";
 import { purgeImages } from "@/lib/purge";
 import { mergeWorks, pickSurvivor } from "@/lib/dedupe";
 import { isCoreTerm } from "@/lib/safety/core";
+import { classify } from "@/lib/safety/classify";
 import { loadTerms } from "@/lib/safety/load-terms";
+import { SAFETY_FIELDS, approveBatch, isQuarantined } from "@/lib/admin/approve";
 import { mergeTagRecords, slug } from "@/lib/tags";
 import { pingIndexNow } from "@/lib/indexnow";
 import { workHref } from "@/lib/format";
@@ -30,11 +32,73 @@ async function audit(me: AdminIdentity, action: string, targetType: string, targ
 
 /* ───────────────────────────── review + works ───────────────────────────── */
 
+/* ───────────── bulk approval ───────────── */
+
+/** The most works one request approves: a transaction of this size stays well inside a server action's time limit. */
+const BULK_MAX = 300;
+
+export interface BulkResult {
+  ok: boolean;
+  message: string;
+  /** works looked at (including any skipped), so a caller can show progress */
+  scanned: number;
+  approved: number;
+  /** of the approved, how many went live now (the rest wait for the next ingest run to store their images) */
+  live: number;
+  /** left in the queue because they match a hard safety term */
+  blocked: number;
+  /** the last work looked at: pass it back to continue with the next batch */
+  cursor: string | null;
+  done: boolean;
+}
+const noBulk = (message: string): BulkResult => ({ ok: false, message, scanned: 0, approved: 0, live: 0, blocked: 0, cursor: null, done: true });
+
+/** One transaction per batch: the decisions and their audit rows commit together or not at all. */
+async function runBatch(me: AdminIdentity, where: Prisma.WorkWhereInput, take: number) {
+  const terms = await loadTerms();
+  return prisma.$transaction(
+    (tx) => approveBatch(tx, me, where, take, terms, (paths) => after(() => pingIndexNow(paths).then(() => undefined))),
+    { timeout: 30_000 },
+  );
+}
+
+const summary = (r: { approved: number; live: number; blocked: number }) =>
+  `Approved ${r.approved.toLocaleString()} work${r.approved === 1 ? "" : "s"}` +
+  (r.approved ? ` (${r.live.toLocaleString()} published now${r.approved - r.live ? `, ${(r.approved - r.live).toLocaleString()} after the next ingest run` : ""})` : "") +
+  (r.blocked ? `. ${r.blocked.toLocaleString()} left in the queue: they match a hard safety term` : "");
+
+/** Approve the works with these public numbers (what ticking boxes on the review queue sends). */
+export async function approveWorks(publicIds: number[]): Promise<BulkResult> {
+  const me = await requireAdmin("MOD");
+  const ids = [...new Set((Array.isArray(publicIds) ? publicIds : []).filter((n) => Number.isInteger(n) && n > 0 && n <= 2_147_483_647))];
+  if (!ids.length) return noBulk("Nothing selected");
+  if (ids.length > BULK_MAX) return noBulk(`Select at most ${BULK_MAX} works at a time`);
+  const r = await runBatch(me, { publicId: { in: ids } }, ids.length);
+  revalidatePath("/console", "layout");
+  const gone = ids.length - r.scanned; // already decided by someone else, or never in the queue
+  return { ok: true, message: summary(r) + (gone ? `. ${gone} were no longer waiting for review` : ""), scanned: r.scanned, approved: r.approved, live: r.live, blocked: r.blocked, cursor: r.last, done: true };
+}
+
+/**
+ * Approve the next batch of the whole Held tab ("approve everything"). The caller repeats it, passing back `cursor`, until
+ * `done`: that keeps each request short and lets a person stop part-way. Only the Held tab, whose works have their images
+ * stored so they could be looked at. Works carrying an explicit age marker (the "Review before download" tab) are never
+ * approved by this, only by deliberately selecting them.
+ */
+export async function approveHeldBatch(cursor: string | null, limit = 200): Promise<BulkResult> {
+  const me = await requireAdmin("MOD");
+  const take = Math.min(BULK_MAX, Math.max(1, Math.floor(Number(limit)) || 200));
+  const r = await runBatch(me, { deferFetch: false, ...(typeof cursor === "string" && cursor ? { id: { gt: cursor } } : {}) }, take);
+  revalidatePath("/console", "layout");
+  return { ok: true, message: summary(r), scanned: r.scanned, approved: r.approved, live: r.live, blocked: r.blocked, cursor: r.last, done: r.scanned < take };
+}
+
 /** Admin decides a flagged work is a false positive. Publishes now if images exist, else once the next ingest run stores them. */
 export async function approveWork(publicId: number): Promise<ActionResult> {
   const me = await requireAdmin("MOD");
-  const w = await prisma.work.findUnique({ where: { publicId }, select: { id: true, slug: true, coverKey: true, pageCount: true, publish: true, title: true } });
+  const w = await prisma.work.findUnique({ where: { publicId }, select: { id: true, slug: true, coverKey: true, pageCount: true, publish: true, title: true, ...SAFETY_FIELDS } });
   if (!w) return fail("Work not found");
+  if (isQuarantined(w, await loadTerms())) return fail(`#${publicId} matches a hard safety term and cannot be approved. Reject it instead.`);
   const live = !!w.coverKey && w.pageCount > 0;
   await prisma.work.update({
     where: { id: w.id },
