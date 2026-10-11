@@ -18,7 +18,7 @@ export function PopUnder({ id, code }: { id: string; code: string }) {
     const run = () => {
       if (loaded) return;
       loaded = true;
-      injectCode(document.head, code);
+      void injectCode(document.head, code);
       sendImpression(id);
     };
     const ric = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 1500));

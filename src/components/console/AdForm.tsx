@@ -31,9 +31,9 @@ function Preview({ type, code, imageUrl, width, height }: { type: "code" | "bann
   );
 }
 
-export function AdForm({ slot, ad, device }: { slot: Slot; ad?: AdRow; device?: AdRow["device"] }) {
+export function AdForm({ slot, ad, device, canCode }: { slot: Slot; ad?: AdRow; device?: AdRow["device"]; canCode: boolean }) {
   const id = ad?.id ?? `new-${device ?? "all"}`;
-  const [type, setType] = useState<"code" | "banner">(ad?.type ?? "code");
+  const [type, setType] = useState<"code" | "banner">(ad?.type ?? (canCode ? "code" : "banner"));
   const [dev, setDev] = useState<AdRow["device"]>(ad?.device ?? device ?? "all");
   const [code, setCode] = useState(ad?.code ?? "");
   const [image, setImage] = useState(ad?.imageUrl ?? "");
@@ -43,6 +43,13 @@ export function AdForm({ slot, ad, device }: { slot: Slot; ad?: AdRow; device?: 
   const w = ad?.width ?? size?.w ?? 300;
   const h = ad?.height ?? size?.h ?? 250;
 
+  // Ad code is JavaScript that runs in every visitor's browser, so only the owner writes it; any admin can still pause, copy or remove it
+  if (!canCode && (isPop || ad?.type === "code"))
+    return (
+      <p className="rounded-xl border border-line bg-surface-2/50 px-4 py-3 text-xs leading-relaxed text-muted">
+        {ad ? "This ad is ad code, which only the owner can change. You can still pause it, copy it or remove it with the buttons below." : "The pop-under is a script that runs on every page, so only the owner can add it."}
+      </p>
+    );
   return (
     <ActionForm action={saveAdAction}>
     <div className="space-y-5">
@@ -64,7 +71,13 @@ export function AdForm({ slot, ad, device }: { slot: Slot; ad?: AdRow; device?: 
         </div>
       </div>
 
-      {!isPop && (
+      {!isPop && !canCode && (
+        <>
+          <input type="hidden" name="type" value="banner" />
+          <p className="text-xs text-muted">You can add banner images (an image and a link). Ad code from a network can only be added by the owner.</p>
+        </>
+      )}
+      {!isPop && canCode && (
         <fieldset className="space-y-2">
           <legend className="c-label">What kind of ad</legend>
           <div className="inline-flex gap-1 rounded-xl bg-surface-2 p-1" role="radiogroup" aria-label="Ad type">

@@ -80,7 +80,7 @@ export async function loadAdsOverview(rangeRaw: unknown): Promise<AdsOverview> {
 }
 
 export async function loadSlot(key: string, rangeRaw: unknown): Promise<SlotPage> {
-  await guardAds();
+  const me = await guardAds();
   const def = slotDef(key);
   if (!def) notFound();
   const range = parseRange(rangeRaw);
@@ -134,6 +134,7 @@ export async function loadSlot(key: string, rangeRaw: unknown): Promise<SlotPage
     ...sw,
     slot: { key: def.key, label: def.label, group: def.group, where: def.where, kind: def.kind, revenue: def.revenue, bands: bandsFor(def), desktop: def.desktop, mobile: def.mobile, tip: def.tip },
     ads,
+    canEditCode: hasRole(me, "OWNER"),
     asOf: now.toISOString(),
   };
 }

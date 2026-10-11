@@ -21,7 +21,7 @@ const STATUS: Record<AdRow["status"], { tone: Tone; text: string }> = { live: { 
 const n = (v: number) => v.toLocaleString();
 const when = (iso: string | null) => (iso ? iso.slice(0, 16).replace("T", " ") + " UTC" : null);
 
-function AdCard({ ad, slot, range }: { ad: AdRow; slot: SlotPage["slot"]; range: string }) {
+function AdCard({ ad, slot, canCode }: { ad: AdRow; slot: SlotPage["slot"]; canCode: boolean }) {
   const st = STATUS[ad.status];
   const isPop = slot.kind === "popunder";
   const schedule = [ad.startsAt ? `from ${when(ad.startsAt)}` : null, ad.endsAt ? `until ${when(ad.endsAt)}` : null].filter(Boolean).join(" ");
@@ -42,14 +42,14 @@ function AdCard({ ad, slot, range }: { ad: AdRow; slot: SlotPage["slot"]; range:
           </span>
         </span>
         <span className="flex items-center gap-5 text-right text-xs tabular-nums">
-          <span title={`${n(ad.impressionsAll)} since it was added`}><b className="block text-sm">{n(ad.impressions)}</b><span className="text-muted">shown</span></span>
+          <span title={`${n(ad.impressionsAll)} since it was added`}><b className="block text-sm">{n(ad.impressions)}</b><span className="text-muted">{isPop ? "script loads" : "shown"}</span></span>
           {ad.type === "banner" && (
             <span title={`${n(ad.clicksAll)} since it was added`}><b className="block text-sm">{n(ad.clicks)}</b><span className="text-muted">clicks · {ctr(ad.clicks, ad.impressions)}%</span></span>
           )}
         </span>
       </summary>
       <div className="space-y-5 border-t border-line bg-bg/30 px-4 py-5 sm:px-5">
-        <AdForm key={ad.updatedAt} slot={slot} ad={ad} />
+        <AdForm key={ad.updatedAt} slot={slot} ad={ad} canCode={canCode} />
         <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
           <ActionForm action={setAdActiveAction}>
             <input type="hidden" name="id" value={ad.id} />
@@ -110,7 +110,7 @@ export function SlotView({ d }: { d: SlotPage }) {
               <SectionTitle hint={BAND_HINT[b]}>
                 {BAND_TITLE[b]} <span className="font-normal text-muted">({ads.length})</span>
               </SectionTitle>
-              {ads.length ? <div className="space-y-3">{ads.map((a) => <AdCard key={a.id} ad={a} slot={s} range={d.range} />)}</div> : <p className="rounded-xl border border-dashed border-line px-4 py-5 text-center text-xs text-muted">No ad here yet.</p>}
+              {ads.length ? <div className="space-y-3">{ads.map((a) => <AdCard key={a.id} ad={a} slot={s} canCode={d.canEditCode} />)}</div> : <p className="rounded-xl border border-dashed border-line px-4 py-5 text-center text-xs text-muted">No ad here yet.</p>}
             </section>
           );
         })}
@@ -122,7 +122,7 @@ export function SlotView({ d }: { d: SlotPage }) {
               <ChevronDown className="ml-auto h-4 w-4 text-muted transition group-open:rotate-180" aria-hidden="true" />
             </summary>
             <div className="border-t border-line bg-bg/30 px-4 py-5 sm:px-5">
-              <AdForm key={d.ads.length} slot={s} />
+              <AdForm key={d.ads.length} slot={s} canCode={d.canEditCode} />
             </div>
           </details>
         </section>

@@ -2,7 +2,7 @@
 
 import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/db";
-import { requireAdmin } from "@/lib/admin/auth";
+import { hasRole, requireAdmin } from "@/lib/admin/auth";
 import { ADS_TAG } from "@/lib/ads/serve";
 import { deleteAd, duplicateAd, saveAd, setAdActive, setAdsEnabled, type Result } from "@/lib/admin/ads-core";
 
@@ -24,7 +24,7 @@ export async function saveAdAction(fd: FormData): Promise<Result> {
   const me = await requireAdmin("ADMIN");
   const raw: Record<string, unknown> = {};
   for (const [k, v] of fd.entries()) if (typeof v === "string") raw[k] = v;
-  return refresh(await saveAd(prisma, me, text(fd, "id") || null, raw));
+  return refresh(await saveAd(prisma, me, text(fd, "id") || null, raw, hasRole(me, "OWNER")));
 }
 
 export async function setAdActiveAction(fd: FormData): Promise<Result> {

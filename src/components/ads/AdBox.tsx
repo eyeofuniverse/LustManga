@@ -19,7 +19,8 @@ export interface BoxAd {
  * and only when it is worth it:
  *   - not until the visitor has confirmed they are an adult, and not while the box is far from the screen (a slot at the
  *     bottom of a page costs nothing until someone scrolls there);
- *   - the box keeps the ad's size from the start, so nothing around it moves when the ad arrives.
+ *   - the box keeps the ad's size from the start, so nothing around it moves when the ad arrives. An ad wider than the screen
+ *     (a 728-pixel leaderboard on a phone) is scaled down to fit instead of being cut off.
  * An impression is counted once the box has been at least half in view for a second, never earlier.
  */
 export function AdBox({ ad, className = "", children }: { ad: BoxAd; className?: string; children?: React.ReactNode }) {
@@ -27,12 +28,14 @@ export function AdBox({ ad, className = "", children }: { ad: BoxAd; className?:
   const box = useRef<HTMLDivElement>(null);
   const holder = useRef<HTMLDivElement>(null);
   const [near, setNear] = useState(false);
+  const [scale, setScale] = useState(1);
   const counted = useRef(false);
 
   // close to the screen: time to run the ad
   useEffect(() => {
     const el = box.current;
     if (!el || near) return;
+    if (typeof IntersectionObserver === "undefined") return setNear(true); // a very old browser: run it
     const io = new IntersectionObserver((e) => e.some((x) => x.isIntersecting) && setNear(true), { rootMargin: "400px 0px" });
     io.observe(el);
     return () => io.disconnect();
@@ -42,6 +45,15 @@ export function AdBox({ ad, className = "", children }: { ad: BoxAd; className?:
   useEffect(() => {
     const el = box.current;
     if (!adult || !el || counted.current) return;
+    const count = () => {
+      if (counted.current) return;
+      counted.current = true;
+      sendImpression(ad.id);
+    };
+    if (typeof IntersectionObserver === "undefined") {
+      const t = setTimeout(count, 1000);
+      return () => clearTimeout(t);
+    }
     let timer: ReturnType<typeof setTimeout> | undefined;
     const io = new IntersectionObserver(
       (entries) => {
@@ -49,9 +61,7 @@ export function AdBox({ ad, className = "", children }: { ad: BoxAd; className?:
         clearTimeout(timer);
         if (seen && !counted.current)
           timer = setTimeout(() => {
-            if (counted.current) return;
-            counted.current = true;
-            sendImpression(ad.id);
+            count();
             io.disconnect();
           }, 1000);
       },
@@ -64,11 +74,23 @@ export function AdBox({ ad, className = "", children }: { ad: BoxAd; className?:
     };
   }, [adult, ad.id]);
 
+  // a fixed-size ad wider than its box is scaled down to fit
+  useEffect(() => {
+    const el = box.current;
+    if (!el || ad.type !== "code" || !ad.width || typeof ResizeObserver === "undefined") return;
+    const w = ad.width;
+    const fit = () => setScale(Math.min(1, el.clientWidth / w));
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ad.type, ad.width]);
+
   // an ad network's code that runs in the page
   useEffect(() => {
     const el = holder.current;
     if (!adult || !near || !el || ad.type !== "code" || ad.isolation !== "inline" || !ad.code || el.childElementCount) return;
-    injectCode(el, ad.code);
+    void injectCode(el, ad.code);
     // the ad creative is an iframe the network makes itself, so there is no markup of ours to give it a title: do it as it appears
     const title = () => el.querySelectorAll("iframe:not([title]):not([aria-label])").forEach((f) => f.setAttribute("title", "Advertisement"));
     title();
@@ -77,7 +99,8 @@ export function AdBox({ ad, className = "", children }: { ad: BoxAd; className?:
     return () => mo.disconnect();
   }, [adult, near, ad.type, ad.isolation, ad.code]);
 
-  const fixedHeight = ad.type === "code" && ad.height ? { height: ad.height } : undefined;
+  const w = ad.width ?? undefined;
+  const h = ad.height ?? undefined;
   return (
     <div
       ref={box}
@@ -94,20 +117,27 @@ export function AdBox({ ad, className = "", children }: { ad: BoxAd; className?:
       {ad.type === "banner" ? (
         children
       ) : (
-        <div ref={holder} className="relative isolate flex max-w-full justify-center overflow-hidden [contain:layout_paint_style]" style={fixedHeight}>
-          {adult && near && ad.isolation === "frame" && ad.code && (
-            <iframe
-              title="Advertisement"
-              sandbox={FRAME_SANDBOX}
-              srcDoc={buildFrameDoc(ad.code)}
-              loading="lazy"
-              scrolling="no"
-              width={ad.width ?? undefined}
-              height={ad.height ?? undefined}
-              className="max-w-full border-0"
-              referrerPolicy="origin"
-            />
-          )}
+        // the outer box takes the space the (possibly scaled) ad will occupy; the inner one holds the ad at its real size
+        <div className="relative mx-auto max-w-full overflow-hidden" style={{ width: w ? w * scale : undefined, height: h ? h * scale : undefined }}>
+          <div
+            ref={holder}
+            className="relative isolate flex justify-center [contain:layout_paint_style]"
+            style={{ width: w, height: h, transform: scale < 1 ? `scale(${scale})` : undefined, transformOrigin: "0 0" }}
+          >
+            {adult && near && ad.isolation === "frame" && ad.code && (
+              <iframe
+                title="Advertisement"
+                sandbox={FRAME_SANDBOX}
+                srcDoc={buildFrameDoc(ad.code)}
+                loading="lazy"
+                scrolling="no"
+                width={w}
+                height={h}
+                className="max-w-none border-0"
+                referrerPolicy="origin"
+              />
+            )}
+          </div>
         </div>
       )}
     </div>

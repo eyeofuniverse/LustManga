@@ -5,9 +5,10 @@
 // the test runs. To keep that to a minute or two, run it against a server started with a one-second ad cache (no long waits):
 //   ADS_CACHE_SECONDS=1 NEXT_PUBLIC_SITE_URL=http://localhost:3200 npx next start -p 3201
 import { chromium } from "playwright";
+import AxeBuilder from "@axe-core/playwright";
 import { prisma, db } from "../src/lib/db";
 import { AGE_COOKIE } from "../src/lib/prefs";
-import { deleteAd, duplicateAd, MAX_ADS_PER_SLOT, saveAd, setAdActive, setAdsEnabled } from "../src/lib/admin/ads-core";
+import { CODE_OWNER_ONLY, deleteAd, duplicateAd, MAX_ADS_PER_SLOT, saveAd, setAdActive, setAdsEnabled } from "../src/lib/admin/ads-core";
 
 const BASE = (process.env.BASE_URL ?? "http://localhost:3200").replace(/\/$/, "");
 const DESKTOP = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -83,6 +84,17 @@ try {
   const noop = await saveAd(prisma, ME, adId, { name: "zz-test admin flow", type: "code", device: "all", code: "<b>v2</b>", active: "on", priority: "7" });
   ok(noop.ok && /Nothing changed/.test(noop.message), "saving without a change is harmless and says so", JSON.stringify(noop));
   ok((await setAdActive(prisma, ME, adId, false)).ok && (await prisma.ad.findUnique({ where: { id: adId } }))?.active === false, "an ad can be paused");
+  // ad code is the owner's: an admin may manage banners, pause, copy and remove, but not write or change code
+  const asAdmin = (id: string | null, raw: Record<string, unknown>) => saveAd(prisma, ME, id, raw, false);
+  const refusedCode = await asAdmin(null, { slot: "list-footer", name: "zz-test admin code", type: "code", device: "all", code: "<b>x</b>" });
+  ok(!refusedCode.ok && refusedCode.message === CODE_OWNER_ONLY, "an admin who is not the owner cannot add ad code");
+  const refusedEdit = await asAdmin(adId, { name: "zz-test admin flow", type: "code", device: "all", code: "<b>changed</b>", active: "on" });
+  ok(!refusedEdit.ok && (await prisma.ad.findUnique({ where: { id: adId } }))?.code === "<b>v2</b>", "...nor change existing ad code");
+  const refusedSwap = await asAdmin(adId, { name: "zz-test admin flow", type: "banner", device: "all", imageUrl: IMG, linkUrl: "https://example.com/", active: "on" });
+  ok(!refusedSwap.ok, "...nor replace a code ad with a banner (that removes code the owner wrote)");
+  const bannerByAdmin = await asAdmin(null, { slot: "list-footer", name: "zz-test admin banner", type: "banner", device: "all", imageUrl: IMG, linkUrl: "https://example.com/", active: "on" });
+  ok(bannerByAdmin.ok, "...but can add a banner");
+  ok((await setAdActive(prisma, ME, adId, true)).ok && (await setAdActive(prisma, ME, adId, false)).ok, "...and can still pause and resume ad code");
   const dup = await duplicateAd(prisma, ME, adId);
   const copy = dup.ok ? await prisma.ad.findUnique({ where: { id: dup.id! } }) : null;
   ok(!!copy && copy.name === "zz-test admin flow (copy)" && copy.active === false && copy.code === "<b>v2</b>", "a copy is made, paused");
@@ -112,7 +124,8 @@ try {
   const GRID = await banner("list-in-grid", "in grid");
   const RE = await banner("reader-end", "reader end");
   const POP = await code("global-popunder", "pop-under", "<script>window.__pop=(window.__pop||0)+1</script>");
-  const CODE = await code("work-mid", "inline code", '<div id="zz-inline">inline ad</div><script>window.__adran=(window.__adran||0)+1</script>', { width: 300, height: 250 });
+  const CODE = await code("work-mid", "inline code", '<div id="zz-inline">inline ad</div><script src="data:text/javascript,window.__lib=1"></script><script>window.__adran=(window.__adran||0)+1;window.__order=window.__lib===1?"ok":"bad"</script>', { width: 300, height: 250 });
+  const WIDE = await code("list-footer", "wide code", '<div id="zz-wide" style="width:728px;height:90px;background:#fde">wide</div>', { width: 728, height: 90, priority: "90" });
   const FRAME = await code("work-footer", "framed code", '<div id="zz-frame">framed ad</div><script>try{parent.document.title="pwned"}catch(e){document.body.setAttribute("data-blocked","1")}</script>', { isolation: "frame", width: 300, height: 250 });
 
   await settle();
@@ -239,8 +252,32 @@ try {
   const ran = await p.evaluate(() => (window as unknown as { __adran?: number }).__adran);
   ok(ran === 1 && (await p.locator("#zz-inline").count()) === 1, "after the visitor confirms they are adults, the code runs, once", String(ran));
   ok((await p.evaluate(() => (window as unknown as { __pop?: number }).__pop)) === 1, "the pop-under script is loaded once the gate is passed");
+  ok((await p.evaluate(() => (window as unknown as { __order?: string }).__order)) === "ok", "scripts in ad code run in order (a loader finishes before the code that uses it)");
   const box = await p.locator(`[data-ad-id="${CODE.id}"] > div`).last().evaluate((e) => (e as HTMLElement).style.height);
   ok(box === "250px", "the box keeps the ad's size from the start, so nothing around it moves", box);
+  await ctx.close();
+
+  // a wide fixed-size ad on a phone is scaled to fit, not cut off; on a computer it is shown at its real size
+  ctx = await mk({ phone: true });
+  p = await ctx.newPage();
+  await p.goto(`${BASE}/browse`, { waitUntil: "networkidle" });
+  await p.locator(`[data-ad-id="${WIDE.id}"]`).scrollIntoViewIfNeeded();
+  await p.waitForTimeout(1500);
+  const phoneBox = await p.evaluate((id) => {
+    const box = document.querySelector(`[data-ad-id="${id}"]`) as HTMLElement;
+    const inner = box.querySelector("div[style*='transform']") as HTMLElement | null;
+    const ad = box.querySelector("#zz-wide") as HTMLElement | null;
+    return { boxW: Math.round(box.getBoundingClientRect().width), adW: ad ? Math.round(ad.getBoundingClientRect().width) : -1, scaled: !!inner, viewport: window.innerWidth };
+  }, WIDE.id);
+  ok(phoneBox.scaled && phoneBox.adW > 0 && phoneBox.adW <= phoneBox.boxW + 1 && phoneBox.boxW <= phoneBox.viewport, "a 728-pixel ad on a 390-pixel phone is scaled down to fit", JSON.stringify(phoneBox));
+  await ctx.close();
+  ctx = await mk();
+  p = await ctx.newPage();
+  await p.goto(`${BASE}/browse`, { waitUntil: "networkidle" });
+  await p.locator(`[data-ad-id="${WIDE.id}"]`).scrollIntoViewIfNeeded();
+  await p.waitForTimeout(1500);
+  const deskAd = await p.evaluate(() => Math.round((document.querySelector("#zz-wide") as HTMLElement).getBoundingClientRect().width));
+  ok(deskAd === 728 && (await p.locator("div[style*='transform: scale']").count()) === 0, "on a computer the same ad is shown at its real size, unscaled", String(deskAd));
   await ctx.close();
 
   // an isolated frame
@@ -276,6 +313,19 @@ try {
   ok(popup.url().startsWith("https://example.com/offer") && (await stat(LT.id)).clicks === c0 + 1, "clicking a banner opens the advertiser in a new tab and counts one click", popup.url());
   await ctx.close();
 
+  // accessibility, with ads on the page
+  ctx = await mk();
+  for (const path of ["/", "/browse", `/g/${workId}`]) {
+    p = await ctx.newPage();
+    await p.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
+    await p.waitForTimeout(1200);
+    const res = await new AxeBuilder({ page: p }).withTags(["wcag2a", "wcag2aa"]).analyze();
+    const serious = res.violations.filter((v) => ["serious", "critical"].includes(v.impact ?? "")).map((v) => `${v.id}: ${v.nodes[0]?.target?.join(" ")}`);
+    ok(serious.length === 0 && (await p.locator("[data-ad-id]").count()) > 0, `${path}: no serious accessibility problems with ads showing`, serious.join(" | "));
+    await p.close();
+  }
+  await ctx.close();
+
   // the reader's end-of-chapter card
   if (short) {
     ctx = await mk();
@@ -295,6 +345,11 @@ try {
     await ctx.close();
   } else console.log("skip  no short work to reach the end card");
   await browser.close();
+
+  if (process.env.PREVIEW_BASE) {
+    const pv = await fetch(`${process.env.PREVIEW_BASE}/`, { headers: { "user-agent": DESKTOP } }).then((x) => x.text());
+    ok(!pv.includes("data-ad-id") && pv.length > 1000, "a preview deployment shows no ads (it shares the database but is not the registered site)");
+  }
 
   /* ───────────── 4. a change takes effect (after the one-minute cache) ───────────── */
 

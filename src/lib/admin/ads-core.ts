@@ -20,13 +20,20 @@ const audit = (db: Db, me: Me, action: string, targetId: string, diff?: object) 
 const FIELDS: (keyof AdData)[] = ["name", "type", "device", "code", "imageUrl", "linkUrl", "alt", "width", "height", "isolation", "priority", "weight", "startsAt", "endsAt", "active", "note"];
 const same = (a: unknown, b: unknown) => (a instanceof Date || b instanceof Date ? (a as Date | null)?.getTime() === (b as Date | null)?.getTime() : a === b);
 
-/** Create (id = null) or update an ad. The slot of an existing ad cannot be changed: add it to the other slot instead. */
-export async function saveAd(db: Db, me: Me, id: string | null, raw: Record<string, unknown>): Promise<Result> {
+export const CODE_OWNER_ONLY = "Only the owner can add or change ad code: it is JavaScript that runs in every visitor's browser. Banner images can be managed by any admin.";
+
+/**
+ * Create (id = null) or update an ad. The slot of an existing ad cannot be changed: add it to the other slot instead.
+ * `canCode` says whether this person may write ad code; a banner (an image and a link) is safe for any admin.
+ */
+export async function saveAd(db: Db, me: Me, id: string | null, raw: Record<string, unknown>, canCode = true): Promise<Result> {
   const existing = id ? await db.ad.findUnique({ where: { id } }) : null;
   if (id && !existing) return fail("That ad no longer exists. Reload the page.");
   const parsed = parseAdInput({ ...raw, slot: existing ? existing.slot : raw.slot });
   if (!parsed.ok) return fail(parsed.error);
   const d = parsed.data;
+  // writing code, and also replacing an existing code ad with something else, is the owner's call
+  if (!canCode && (d.type === "code" || existing?.type === "code")) return fail(CODE_OWNER_ONLY);
   if (!existing) {
     if ((await db.ad.count({ where: { slot: d.slot } })) >= MAX_ADS_PER_SLOT) return fail(`A slot can hold ${MAX_ADS_PER_SLOT} ads at most. Remove some you no longer use.`);
     const row = await db.ad.create({ data: { ...d, createdBy: me.email } });

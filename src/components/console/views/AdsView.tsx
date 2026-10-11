@@ -33,7 +33,7 @@ function Row({ s, range }: { s: SlotSummary; range: string }) {
           <span className="mt-1 block text-[11px] text-muted">{s.kind === "popunder" ? "A script, not a box" : `Fits ${s.bands.filter((b) => b !== "all").map((b) => BAND[b]).join(" and ")}`}</span>
         </span>
         <span className="flex items-center gap-5 text-right text-xs tabular-nums">
-          <span><b className="block text-sm">{n(s.impressions)}</b><span className="text-muted">shown</span></span>
+          <span><b className="block text-sm">{n(s.impressions)}</b><span className="text-muted">{s.kind === "popunder" ? "loads" : "shown"}</span></span>
           <span><b className="block text-sm">{s.kind === "popunder" ? "-" : n(s.clicks)}</b><span className="text-muted">clicks</span></span>
           <ArrowRight className="h-4 w-4 text-muted transition group-hover:translate-x-0.5 group-hover:text-accent" aria-hidden="true" />
         </span>

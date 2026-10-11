@@ -66,5 +66,7 @@ export interface SlotPage {
   envOff: boolean;
   slot: Omit<SlotSummary, "ads" | "impressions" | "clicks"> & { desktop: { w: number; h: number } | null; mobile: { w: number; h: number } | null; tip: string };
   ads: AdRow[];
+  /** may this admin write ad code? (the owner only) */
+  canEditCode: boolean;
   asOf: string;
 }

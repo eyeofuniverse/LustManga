@@ -3,6 +3,7 @@ import { unstable_cache } from "next/cache";
 import { cookies, headers } from "next/headers";
 import { prisma, db } from "@/lib/db";
 import { isBot, deviceOf } from "@/lib/analytics/ua";
+import { IS_PRODUCTION } from "@/lib/site";
 import { bandOfDevice, defaultSize, onDevice, slotDef, type Device } from "./registry";
 import { chooseAd, type PoolAd } from "./select";
 
@@ -63,9 +64,13 @@ const switchOn = unstable_cache(
   { revalidate: TTL, tags: [ADS_TAG] },
 );
 
-/** Master switch: ADS=off in the environment, or "Show ads" turned off in the console. */
+/**
+ * Master switch: ADS=off in the environment, or "Show ads" turned off in the console. Only the production deployment shows ads:
+ * a preview deployment has its own address but reads the same database, so it would otherwise serve real ad code from an
+ * address the ad network has never heard of, and add its visits to the real counts.
+ */
 export async function adsEnabled(): Promise<boolean> {
-  if (process.env.ADS === "off") return false;
+  if (process.env.ADS === "off" || !IS_PRODUCTION) return false;
   return switchOn().catch(() => true);
 }
 
@@ -114,7 +119,7 @@ export async function serveAd(slot: string): Promise<ServedAd | null> {
 /** Is any ad live anywhere? (The privacy page says so only when it is true.) */
 export const adsInUse = unstable_cache(
   async (): Promise<boolean> => {
-    if (process.env.ADS === "off") return false;
+    if (process.env.ADS === "off" || !IS_PRODUCTION) return false;
     const on = await db(() => prisma.setting.findUnique({ where: { key: "ads.enabled" } }));
     if (on && on.value === false) return false;
     return (await db(() => prisma.ad.count({ where: { active: true, OR: [{ endsAt: null }, { endsAt: { gt: new Date() } }] } }))) > 0;
