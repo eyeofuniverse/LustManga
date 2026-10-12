@@ -58,6 +58,11 @@ const newCtx = async () => {
     { name: "lm_age", value: "1", url: BASE },
     { name: "lm_nocount", value: "1", url: BASE }, // no ads, no analytics for the test
   ]);
+  // wait for the page to settle (the script that makes the buttons work) before the test clicks anything: a fast site is clicked before it is ready
+  ctx.on("page", (pg) => {
+    const go = pg.goto.bind(pg);
+    pg.goto = ((u: string, o?: Parameters<typeof go>[1]) => go(u, { ...o, waitUntil: "networkidle", timeout: 60000 })) as typeof pg.goto;
+  });
   return ctx;
 };
 async function signIn(p: Page, handle: string, pw = PW, next = "") {
