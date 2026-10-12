@@ -40,8 +40,8 @@ export function compact(n: number): string {
   return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
 }
 
-export function timeAgo(date: Date | string | number): string {
-  const s = Math.max(0, (Date.now() - new Date(date).getTime()) / 1000);
+export function timeAgo(date: Date | string | number, now: number = Date.now()): string {
+  const s = Math.max(0, (now - new Date(date).getTime()) / 1000);
   const units: [number, string][] = [
     [31_536_000, "year"],
     [2_592_000, "month"],

@@ -7,6 +7,9 @@ import { getMoreBy, getRelated, getVariants, getWork, hasTitleTwin } from "@/lib
 import { categoryHref, categoryLabel, compact, langLabel, tagHref, timeAgo, workHref } from "@/lib/format";
 import { cdn } from "@/lib/cdn";
 import { cleanDescription } from "@/lib/text";
+import { joinList, longDate, plural, readingTime } from "@/lib/blurbs";
+import { synopsis } from "@/lib/synopsis";
+import { Faq, type QA } from "@/components/seo/Faq";
 import { idParam } from "@/lib/url";
 import { findRedirect } from "@/lib/redirects";
 import { breadcrumbLd, hreflangFor, ldJson, socialMeta, titleCase, workDescription, workLd, workTitle, type WorkForSeo } from "@/lib/seo";
@@ -65,6 +68,123 @@ const GROUPS: { type: string; label: string }[] = [
   { type: "GROUP", label: "Groups" },
 ];
 
+const LINK = "text-accent underline underline-offset-2";
+
+type LoadedWork = NonNullable<Awaited<ReturnType<typeof getWork>>>;
+type Variant = Awaited<ReturnType<typeof getVariants>>[number];
+
+/**
+ * Questions a reader of this page would ask, answered from what we hold about the work (never a plot, which we do not know).
+ * Each answer is given twice: as links for the page and as plain text for the FAQ structured data.
+ */
+function workFaq(w: LoadedWork, variants: Variant[]): QA[] {
+  const out: QA[] = [];
+  const chapters = w.chapters.length;
+  const last = w.chapters[chapters - 1];
+  const artists = w.byType.ARTIST ?? [];
+  const circles = w.byType.GROUP ?? [];
+  const parody = (w.byType.PARODY ?? []).find((t) => t.name.toLowerCase() !== "original");
+  const characters = (w.byType.CHARACTER ?? []).slice(0, 5);
+  const themes = (w.byType.TAG ?? []).slice(0, 8);
+
+  const free = `Yes. You can read all ${plural(w.pageCount, "page")} of ${w.title} online for free on LustPages, with no account and no sign-up.`;
+  out.push({ q: `Can I read ${w.title} for free?`, text: free, a: free });
+
+  const length = `${w.title} has ${plural(w.pageCount, "page")}${chapters > 1 ? ` in ${plural(chapters, "chapter")}${last ? ` (the latest is chapter ${last.number})` : ""}` : ""}, which is ${readingTime(w.pageCount)} of reading at a relaxed pace.`;
+  out.push({ q: `How long is ${w.title}?`, text: length, a: length });
+
+  if (artists.length || circles.length) {
+    const names = [...artists, ...circles].map((t) => titleCase(t.name));
+    const text = `${w.title} is credited to ${joinList(names)}. Their other works are listed on their pages here.`;
+    out.push({
+      q: `Who made ${w.title}?`,
+      text,
+      a: (
+        <>
+          {w.title} is credited to{" "}
+          {[...artists.map((t) => ({ t, type: "artist" })), ...circles.map((t) => ({ t, type: "group" }))].map(({ t, type }, i, all) => (
+            <span key={`${type}-${t.id}`}>
+              <Link href={tagHref(type, t.slug)} className={LINK}>{titleCase(t.name)}</Link>
+              {i < all.length - 2 ? ", " : i === all.length - 2 ? " and " : ""}
+            </span>
+          ))}
+          . Their other works are listed on their pages here.
+        </>
+      ),
+    });
+  }
+
+  if (parody) {
+    const cast = characters.map((t) => titleCase(t.name));
+    const text = `${w.title} is tagged as a parody of ${titleCase(parody.name)}${cast.length ? `, with ${joinList(cast)} among the characters` : ""}. ${compact(parody.count)} works on LustPages carry the ${titleCase(parody.name)} tag.`;
+    out.push({
+      q: `Which series is ${w.title} a parody of?`,
+      text,
+      a: (
+        <>
+          {w.title} is tagged as a parody of <Link href={tagHref("parody", parody.slug)} className={LINK}>{titleCase(parody.name)}</Link>
+          {cast.length > 0 && <>, with {joinList(cast)} among the characters</>}. {compact(parody.count)} works on LustPages carry the {titleCase(parody.name)} tag.
+        </>
+      ),
+    });
+  }
+
+  if (themes.length) {
+    const text = `${w.title} is tagged ${joinList(themes.map((t) => titleCase(t.name)))}. Open any tag to see more works with it.`;
+    out.push({
+      q: `What tags does ${w.title} have?`,
+      text,
+      a: (
+        <>
+          {w.title} is tagged{" "}
+          {themes.map((t, i) => (
+            <span key={t.id}>
+              <Link href={tagHref("tag", t.slug)} className={LINK}>{titleCase(t.name)}</Link>
+              {i < themes.length - 2 ? ", " : i === themes.length - 2 ? " and " : ""}
+            </span>
+          ))}
+          . Open any tag to see more works with it.
+        </>
+      ),
+    });
+  }
+
+  if (variants.length) {
+    const langs = variants.map((v) => langLabel(v.language));
+    const text = `Yes. This is the ${langLabel(w.language)} edition, and ${w.title} is also on LustPages in ${joinList(langs)}.`;
+    out.push({
+      q: `Is ${w.title} available in other languages?`,
+      text,
+      a: (
+        <>
+          Yes. This is the {langLabel(w.language)} edition, and {w.title} is also on LustPages in{" "}
+          {variants.map((v, i) => (
+            <span key={v.publicId}>
+              <Link href={workHref(v)} className={LINK}>{langLabel(v.language)}</Link>
+              {i < variants.length - 2 ? ", " : i === variants.length - 2 ? " and " : ""}
+            </span>
+          ))}
+          .
+        </>
+      ),
+    });
+  } else {
+    const text = `This is the ${langLabel(w.language)} edition. No other language of ${w.title} is on LustPages yet; new translations show up on this page when they are added.`;
+    out.push({ q: `Is ${w.title} available in other languages?`, text, a: text });
+  }
+  return out;
+}
+
+/** One row of the details table. */
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 px-4 py-2.5 text-sm sm:grid sm:grid-cols-[130px_1fr] sm:justify-start">
+      <dt className="shrink-0 text-xs font-bold uppercase tracking-wider text-muted">{label}</dt>
+      <dd className="min-w-0 text-right sm:text-left">{children}</dd>
+    </div>
+  );
+}
+
 export default async function WorkPage({ params }: { params: Params }) {
   const { ref } = await params;
   const id = idOf(ref);
@@ -84,6 +204,23 @@ export default async function WorkPage({ params }: { params: Params }) {
   const cover = cdn(w.coverKey);
   const artists = (w.byType.ARTIST ?? []).map((t) => t.name);
   const about = cleanDescription(w.description);
+  const kinds = (t: string) => (w.byType[t] ?? []).map((x) => x.name);
+  const summary = synopsis({
+    publicId: w.publicId,
+    title: w.title,
+    language: w.language,
+    category: w.category,
+    pageCount: w.pageCount,
+    artists: kinds("ARTIST"),
+    circles: kinds("GROUP"),
+    parodies: kinds("PARODY"),
+    characters: kinds("CHARACTER"),
+    tags: kinds("TAG"),
+    translations: variants.map((v) => v.language),
+  });
+  const faq = workFaq(w, variants);
+  const langTag = w.byType.LANGUAGE?.[0];
+  const latestChapterAt = w.chapters.reduce<Date | null>((m, c) => (c.publishedAt && (!m || c.publishedAt > m) ? c.publishedAt : m), null);
 
   const ld = [
     workLd(forSeo(w), { kind: w.kind, cover, variants, chapters: w.chapters.length }),
@@ -171,12 +308,46 @@ export default async function WorkPage({ params }: { params: Params }) {
 
           <AdSlot slot="work-mid" />
 
-          {about && (
-            <section aria-label="Description">
-              <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-muted">About</h2>
-              <p className="line-clamp-6 whitespace-pre-line text-[15px] leading-relaxed text-text/90">{about}</p>
-            </section>
-          )}
+          <section aria-label="About this work">
+            <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-muted">About {w.title}</h2>
+            {about ? (
+              <p className="whitespace-pre-line text-[15px] leading-relaxed text-text/90">{about}</p>
+            ) : (
+              <>
+                <p className="text-[15px] leading-relaxed text-text/90">{summary}</p>
+                <p className="mt-2 text-xs text-muted">Summary compiled from this work&apos;s tags and details.</p>
+              </>
+            )}
+          </section>
+
+          <section aria-label="Details">
+            <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-muted">Details</h2>
+            <dl className="card divide-y divide-line">
+              <Fact label="Title">{w.title}</Fact>
+              {w.titleOriginal && w.titleOriginal !== w.title && <Fact label="Original title">{w.titleOriginal}</Fact>}
+              <Fact label="Language">
+                <Link href={langTag ? tagHref("language", langTag.slug) : `/browse?lang=${w.language}`} className={LINK}>{langLabel(w.language)}</Link>
+              </Fact>
+              <Fact label="Category">
+                <Link href={categoryHref(w.category)} className={LINK}>{categoryLabel(w.category)}</Link>
+              </Fact>
+              <Fact label="Length">
+                {plural(w.pageCount, "page")}
+                {w.chapters.length > 1 ? `, ${plural(w.chapters.length, "chapter")}` : ""}
+              </Fact>
+              <Fact label="Reading time">{readingTime(w.pageCount)}</Fact>
+              <Fact label="Added">
+                {longDate(w.createdAt)} <span className="text-muted">({timeAgo(w.createdAt)})</span>
+              </Fact>
+              {latestChapterAt && w.chapters.length > 1 && <Fact label="Latest chapter">{longDate(latestChapterAt)}</Fact>}
+              {w.srcRating != null && w.srcVotes > 0 && (
+                <Fact label="Reader rating">
+                  {w.srcRating.toFixed(1)}/10 <span className="text-muted">({compact(w.srcVotes)} votes on the source sites)</span>
+                </Fact>
+              )}
+              {w.favorites > 0 && <Fact label="Saved by">{plural(w.favorites, "reader")} here</Fact>}
+            </dl>
+          </section>
 
           {w.chapters.length > 1 && <ChapterList publicId={w.publicId} slug={w.slug} chapters={w.chapters} />}
         </div>
@@ -209,6 +380,19 @@ export default async function WorkPage({ params }: { params: Params }) {
           </ScrollRow>
         </section>
       )}
+
+      <nav className="pt-14" aria-label="Keep exploring">
+        <h2 className="section-title mb-4">Keep exploring</h2>
+        <ul className="flex flex-wrap gap-2">
+          <li><Link href={categoryHref(w.category)} className="chip min-h-[38px] px-3.5">More {categoryLabel(w.category)}</Link></li>
+          <li><Link href={langTag ? tagHref("language", langTag.slug) : `/browse?lang=${w.language}`} className="chip min-h-[38px] px-3.5">More in {langLabel(w.language)}</Link></li>
+          <li><Link href="/browse?sort=trending" className="chip min-h-[38px] px-3.5">Trending now</Link></li>
+          <li><Link href="/updates" className="chip min-h-[38px] px-3.5">Latest updates</Link></li>
+          <li><Link href="/random" className="chip min-h-[38px] px-3.5">Surprise me</Link></li>
+        </ul>
+      </nav>
+
+      <Faq className="pt-14" title={`Questions about ${w.title}`} items={faq} />
     </div>
   );
 }

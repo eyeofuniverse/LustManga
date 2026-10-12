@@ -164,8 +164,8 @@ export async function listUpdates(o: Pick<ListOpts, "langs" | "exclude" | "page"
 }
 
 /**
- * "More by this artist / circle": other works that share the work's first artist and first circle, most popular
- * first. Skips a tag that only this work carries.
+ * "More by this artist / circle / from this parody": other works that share the work's first artist, first circle and
+ * first real parody (not "original"), most popular first. Skips a tag that only this work carries.
  */
 export async function getMoreBy(
   work: { publicId: number; byType: Record<string, { id: number; name: string; slug: string; type: string; count: number }[]> },
@@ -173,7 +173,8 @@ export async function getMoreBy(
   take = 12,
 ): Promise<{ tag: { id: number; name: string; slug: string; type: string }; items: WorkCard[] }[]> {
   const f = prefFilters(prefs);
-  const picks = [work.byType.ARTIST?.[0], work.byType.GROUP?.[0]].filter((t): t is NonNullable<typeof t> => !!t && t.count > 1);
+  const parody = work.byType.PARODY?.find((t) => t.name.toLowerCase() !== "original");
+  const picks = [work.byType.ARTIST?.[0], work.byType.GROUP?.[0], parody].filter((t): t is NonNullable<typeof t> => !!t && t.count > 1);
   const rows = await Promise.all(picks.map((tag) => listWorks({ ...f, include: [tag.id], excludeId: work.publicId, sort: "popular", pageSize: take })));
   return picks.map((tag, i) => ({ tag, items: rows[i].items })).filter((r) => r.items.length > 0);
 }
@@ -391,11 +392,38 @@ export const categoryCounts = cached("category-counts", 900, async () =>
 );
 
 /** The home page lists for one set of preferences, cached briefly so a busy site is not one DB round-trip per visitor. */
-export const homeLists = cached("home", 120, async (langs: string[], hide: number[]) => {
+export const homeLists = cached("home-v2", 120, async (langs: string[], hide: number[]) => {
   const f = { langs: langs.length ? langs : undefined, exclude: hide.length ? hide : undefined };
-  const [popular, fresh] = await Promise.all([
+  const [popular, fresh, trending, rated, updates] = await Promise.all([
     listWorks({ ...f, sort: "popular", pageSize: 12 }),
     listWorks({ ...f, sort: "new", pageSize: 18 }),
+    listWorks({ ...f, sort: "trending", pageSize: 24 }), // more than shown: the page drops what an earlier row already has
+    listWorks({ ...f, sort: "rated", pageSize: 24 }),
+    listUpdates({ ...f, pageSize: 12 }),
   ]);
-  return { popular: popular.items, fresh: fresh.items };
+  return { popular: popular.items, fresh: fresh.items, trending: trending.items, rated: rated.items, updates: updates.items };
+});
+
+/**
+ * Totals for the "about this library" text on the home and Browse pages: what is here, how much of it, and when something
+ * was last added. Whole-library numbers (not per visitor), so they are cached for a quarter of an hour.
+ */
+export const siteStats = cached("site-stats", 900, async () => {
+  const live = Prisma.sql`w.publish = 'PUBLISHED' AND w."coverKey" IS NOT NULL AND w."pageCount" > 0`;
+  const [works, chapters, artists, circles, parodies, tags] = await Promise.all([
+    db(() => prisma.$queryRaw<{ works: number; pages: number; languages: number; latest: Date | null }[]>(Prisma.sql`SELECT count(*)::int AS works, coalesce(sum(w."pageCount"), 0)::int AS pages, count(DISTINCT w.language)::int AS languages, max(w."createdAt") AS latest FROM "Work" w WHERE ${live}`)),
+    db(() => prisma.$queryRaw<{ n: number }[]>(Prisma.sql`SELECT count(*)::int AS n FROM "Chapter" c JOIN "Work" w ON w.id = c."workId" WHERE c.status = 'READY' AND ${live}`)),
+    ...(["ARTIST", "GROUP", "PARODY", "TAG"] as const).map((type) => db(() => prisma.tag.count({ where: { type, hidden: false, count: { gt: 0 } } }))),
+  ]);
+  return {
+    works: works[0]?.works ?? 0,
+    pages: works[0]?.pages ?? 0,
+    languages: works[0]?.languages ?? 0,
+    latest: works[0]?.latest ?? null,
+    chapters: chapters[0]?.n ?? 0,
+    artists,
+    circles,
+    parodies,
+    tags,
+  };
 });

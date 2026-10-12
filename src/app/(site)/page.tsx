@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BookOpen, Flame, Images, Library, Palette, Gamepad2, Globe2, Sparkles, type LucideIcon } from "lucide-react";
+import { BookMarked, BookOpen, Compass, Flame, Images, Library, Palette, Gamepad2, Globe2, Sparkles, type LucideIcon } from "lucide-react";
 import { currentPrefs } from "@/lib/prefs-server";
-import { categoryCounts, getWork, homeLists, popularTags } from "@/lib/queries";
-import { categoryHref, categoryLabel, compact, langLabel, tagHref, workHref } from "@/lib/format";
+import { categoryCounts, getWork, homeLists, popularTags, siteStats } from "@/lib/queries";
+import { categoryHref, categoryLabel, compact, langLabel, tagHref, timeAgo, workHref } from "@/lib/format";
+import { libraryParagraph } from "@/lib/blurbs";
+import { ChipSection } from "@/components/work/ChipSection";
 import { CoverImage } from "@/components/work/CoverImage";
 import { WorkCard, WorkGrid } from "@/components/work/WorkCard";
 import { ScrollRow } from "@/components/work/ScrollRow";
@@ -20,6 +22,23 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
   ...socialMeta({ title: HOME_TITLE, description: HOME_DESCRIPTION, path: "/" }),
 };
+
+/** Questions whose answers come from the library itself. */
+function libraryFaq(about: string | null): QA[] {
+  if (!about) return [];
+  return [
+    { q: "How big is the library?", text: about, a: about },
+    {
+      q: "How do new works and chapters show up?",
+      text: "New uploads lists the newest works, and Latest updates lists the series that just got a new chapter. Popular, Trending and Top rated follow what readers are reading and rating.",
+      a: (
+        <>
+          <Link href="/browse?sort=new" className="text-accent underline underline-offset-2">New uploads</Link> lists the newest works, and <Link href="/updates" className="text-accent underline underline-offset-2">Latest updates</Link> lists the series that just got a new chapter. Popular, <Link href="/browse?sort=trending" className="text-accent underline underline-offset-2">Trending</Link> and <Link href="/browse?sort=rated" className="text-accent underline underline-offset-2">Top rated</Link> follow what readers are reading and rating.
+        </>
+      ),
+    },
+  ];
+}
 
 const FAQ: QA[] = [
   {
@@ -78,15 +97,28 @@ const CAT: Record<string, { Icon: LucideIcon; tone: string }> = {
 export default async function Home() {
   const prefs = await currentPrefs();
   const hide = prefs.hide.map((h) => h.id);
-  const [lists, cats, tags, artists] = await Promise.all([
+  const [lists, cats, tags, artists, parodies, languages, stats] = await Promise.all([
     homeLists(prefs.langs, hide),
     categoryCounts(),
     popularTags("TAG", 30),
     popularTags("ARTIST", 18),
+    popularTags("PARODY", 18),
+    popularTags("LANGUAGE", 16),
+    siteStats().catch(() => null), // the facts are a bonus: the page must not fail without them
   ]);
   const spot = lists.popular[0];
   const spotFull = spot ? await getWork(spot.publicId) : null;
   const rest = lists.popular.slice(spot ? 1 : 0);
+  const about = stats ? libraryParagraph(stats) : null;
+  // each row shows works the rows above it did not, so the page never repeats itself (a quiet chart falls back to popularity)
+  const shown = new Set(lists.popular.map((w) => w.publicId));
+  const fresh = (ws: typeof lists.popular, take: number) => {
+    const out = ws.filter((w) => !shown.has(w.publicId)).slice(0, take);
+    out.forEach((w) => shown.add(w.publicId));
+    return out;
+  };
+  const trending = fresh(lists.trending, 12);
+  const rated = fresh(lists.rated, 12);
 
   return (
     <>
@@ -167,6 +199,28 @@ export default async function Home() {
 
       <AdSlot slot="home-top" contained className="pt-8" />
 
+      {stats && stats.works > 0 && (
+        <section className="container-x pt-8 sm:pt-10" aria-label="About LustPages">
+          <div className="card p-5 sm:p-7">
+            <h2 className="font-display text-xl font-extrabold tracking-tight sm:text-2xl">A free hentai manga &amp; doujinshi library</h2>
+            <p className="mt-2 max-w-3xl text-[15px] leading-relaxed text-muted">{about}</p>
+            <dl className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[
+                ["Works", stats.works],
+                ["Chapters", stats.chapters],
+                ["Pages", stats.pages],
+                ["Languages", stats.languages],
+              ].map(([k, v]) => (
+                <div key={k} className="flex flex-col-reverse rounded-xl bg-surface-2/60 px-4 py-3 ring-1 ring-line">
+                  <dt className="text-xs font-semibold uppercase tracking-wider text-muted">{k}</dt>
+                  <dd className="font-display text-xl font-extrabold tabular-nums sm:text-2xl">{Number(v).toLocaleString("en-US")}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </section>
+      )}
+
       <ContinueRow />
 
       {rest.length > 0 && (
@@ -176,6 +230,32 @@ export default async function Home() {
             {rest.map((w, i) => (
               <li key={w.publicId}>
                 <WorkCard work={w} index={i} priority={i < 3} />
+              </li>
+            ))}
+          </ScrollRow>
+        </section>
+      )}
+
+      {trending.length > 0 && (
+        <section className="container-x pt-10 sm:pt-12" aria-label="Trending">
+          <SectionHeader title="Trending now" href="/browse?sort=trending" sub="Climbing the charts right now" />
+          <ScrollRow label="Trending works">
+            {trending.map((w, i) => (
+              <li key={w.publicId}>
+                <WorkCard work={w} index={i} />
+              </li>
+            ))}
+          </ScrollRow>
+        </section>
+      )}
+
+      {lists.updates.length > 0 && (
+        <section className="container-x pt-10 sm:pt-12" aria-label="Latest chapter updates">
+          <SectionHeader title="Latest chapter updates" href="/updates" label="All updates" sub="Series with a new chapter" />
+          <ScrollRow label="Series with new chapters">
+            {lists.updates.map((w, i) => (
+              <li key={w.publicId}>
+                <WorkCard work={w} index={i} note={`Chapter ${w.chapterNumber} · ${timeAgo(w.chapterAt)}`} />
               </li>
             ))}
           </ScrollRow>
@@ -195,6 +275,19 @@ export default async function Home() {
       )}
 
       <AdSlot slot="home-mid" contained className="pt-10 sm:pt-12" />
+
+      {rated.length > 0 && (
+        <section className="container-x pt-10 sm:pt-12" aria-label="Top rated">
+          <SectionHeader title="Top rated" href="/browse?sort=rated" sub="Best rated by readers on the source sites" />
+          <ScrollRow label="Top rated works">
+            {rated.map((w, i) => (
+              <li key={w.publicId}>
+                <WorkCard work={w} index={i} />
+              </li>
+            ))}
+          </ScrollRow>
+        </section>
+      )}
 
       {cats.length > 0 && (
         <section className="container-x pt-12 sm:pt-16" aria-label="Categories">
@@ -220,41 +313,33 @@ export default async function Home() {
         </section>
       )}
 
-      {tags.length > 0 && (
-        <section className="container-x pt-12 sm:pt-16" aria-label="Popular tags">
-          <SectionHeader title="Popular tags" href="/tags" label="All tags" />
-          <ul className="flex flex-wrap gap-2">
-            {tags.map((t) => (
-              <li key={t.id}>
-                <Link href={tagHref("tag", t.slug)} className="chip min-h-[38px] px-3.5">
-                  {t.name}
-                  <span className="text-xs font-normal text-muted">{compact(t.count)}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      <div className="container-x">
+        <ChipSection title="Read in your language" type="language" items={languages} href="/browse?lang=all" label="All languages" sub="Every language has its own page" />
+        <ChipSection title="Popular tags" type="tag" items={tags} href="/tags" label="All tags" />
+        <ChipSection title="Popular artists" type="artist" items={artists} href="/artists" label="All artists" />
+        <ChipSection title="Popular parodies" type="parody" items={parodies} href="/parodies" label="All parodies" sub="Works based on a series, game or franchise" />
+      </div>
 
-      {artists.length > 0 && (
-        <section className="container-x pt-12 sm:pt-16" aria-label="Popular artists">
-          <SectionHeader title="Popular artists" href="/artists" label="All artists" />
-          <ul className="flex flex-wrap gap-2">
-            {artists.map((t) => (
-              <li key={t.id}>
-                <Link href={tagHref("artist", t.slug)} className="chip min-h-[38px] px-3.5">
-                  {t.name}
-                  <span className="text-xs font-normal text-muted">{compact(t.count)}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      <section className="container-x pt-12 sm:pt-16" aria-label="How LustPages works">
+        <SectionHeader title="How LustPages works" />
+        <ul className="grid gap-3 sm:grid-cols-3">
+          {[
+            { Icon: Compass, h: "Find it fast", t: "Search by title, tag, artist, circle, parody or character. Include and exclude tags, and filter by language, category, page count and upload date." },
+            { Icon: BookOpen, h: "Read it your way", t: "Page-by-page like a book, with two-page spreads on wide screens, right-to-left for manga, zoom, or a continuous scroll for long strips. It remembers where you stopped." },
+            { Icon: BookMarked, h: "Keep track, no account", t: "Save works, follow tags and artists, and pick up where you left off. It all stays in your own browser, so there is nothing to sign up for." },
+          ].map(({ Icon, h, t }) => (
+            <li key={h} className="card p-5">
+              <Icon className="h-6 w-6 text-accent" aria-hidden="true" />
+              <h3 className="mt-3 font-display text-base font-bold">{h}</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted">{t}</p>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <AdSlot slot="home-footer" contained className="pt-12 sm:pt-16" />
 
-      <Faq items={FAQ} />
+      <Faq items={[...libraryFaq(about), ...FAQ]} />
     </>
   );
 }
