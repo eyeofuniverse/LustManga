@@ -71,6 +71,7 @@ export function ActionButton({
   confirm,
   icon,
   title,
+  pendingLabel,
 }: {
   action: () => Promise<Result>;
   label: string;
@@ -79,6 +80,7 @@ export function ActionButton({
   /** an icon shown before the label; the label stays visible for screen readers on its own */
   icon?: React.ReactNode;
   title?: string;
+  pendingLabel?: string;
 }) {
   const router = useRouter();
   const ui = useConsole();
@@ -103,7 +105,7 @@ export function ActionButton({
       }}
     >
       {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : icon}
-      {label}
+      {pending ? pendingLabel ?? label : label}
     </button>
   );
 }

@@ -189,11 +189,17 @@ export async function confirmSuppressed(id: string): Promise<ActionResult> {
 /** One-time recovery for records stopped by the former code-locked quarantine terms. */
 export async function migrateLegacyQuarantineAction(): Promise<ActionResult> {
   const me = await requireAdmin("ADMIN");
-  const result = await migrateLegacyQuarantine();
-  if (result.alreadyDone) return ok("This one-time migration has already been completed");
+  let result;
+  try {
+    result = await migrateLegacyQuarantine();
+  } catch (error) {
+    console.error("legacy quarantine migration failed", error);
+    return fail("Migration failed before it could finish. No partial changes were applied. Reload the page and try again.");
+  }
+  if (result.alreadyDone) return ok("This migration was already completed. Refresh the page and check Review before download.");
   await audit(me, "safety.legacy-quarantine-migrate", "safety", "legacy-quarantine-v1", result);
   revalidatePath("/console/review");
-  return ok(`Migration complete: ${result.terms} old terms moved to pre-download review; ${result.requeued} unconfirmed records queued for rediscovery. No images were downloaded. Source workflows will rediscover them as they run.`);
+  return ok(`Done: ${result.terms} old terms moved to pre-download review; ${result.requeued} unconfirmed records queued for rediscovery. No images were downloaded. Source workflows will rediscover them as they run.`);
 }
 
 export async function retryFailedChapters(): Promise<ActionResult> {

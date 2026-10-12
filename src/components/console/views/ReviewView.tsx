@@ -140,6 +140,7 @@ export function ReviewView({ d }: { d: ReviewData }) {
                 <p>These records were stopped by old hard-coded rules. Move them back into normal metadata review so an admin can decide each work. This does not approve works or download images; confirmed quarantine records stay here.</p>
                 <ActionButton
                   label="Move old records to review"
+                  pendingLabel="Moving records…"
                   tone="primary"
                   confirm={{ title: "Move old quarantine records to review?", message: "The old locked rules will become ordinary pre-download review terms. Unconfirmed matching records will be queued for the source workflows to rediscover. This does not approve or download any work.", confirmLabel: "Move to review" }}
                   action={migrateLegacyQuarantineAction}

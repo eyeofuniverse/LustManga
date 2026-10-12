@@ -29,6 +29,6 @@ export async function migrateLegacyQuarantine() {
     }
     await tx.setting.create({ data: { key: LEGACY_QUARANTINE_MIGRATION_KEY, value: { terms: legacy.length, requeued: requeue.length, cursors: cursorRows.length } } });
     return cursorRows.length;
-  });
+  }, { maxWait: 10_000, timeout: 60_000 });
   return { alreadyDone: false, terms: legacy.length, requeued: requeue.length, cursors };
 }
