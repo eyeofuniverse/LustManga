@@ -25,6 +25,25 @@ export function sendImpression(adId: string): void {
   fetch("/api/ads/i", { method: "POST", headers: { "content-type": "application/json" }, body, keepalive: true }).catch(() => {});
 }
 
+/** Elements an ad network's code leaves in the page that show nothing. */
+const SILENT = new Set(["SCRIPT", "STYLE", "LINK", "META", "NOSCRIPT", "TEMPLATE"]);
+
+/**
+ * Has the network put anything on screen yet? Its loader script and the empty tag it later fills (an `ins`) do not count, so a
+ * zone that has no ad to give (nothing to sell for this visitor, or a blocker stopped the loader) still reads as empty.
+ */
+export function hasContent(root: Element): boolean {
+  for (const el of Array.from(root.querySelectorAll("*"))) {
+    if (SILENT.has(el.tagName)) continue;
+    if (el.tagName === "INS" && !el.childElementCount && !el.textContent?.trim()) continue;
+    return true;
+  }
+  return false;
+}
+
+/** How long a network gets to fill its box before the empty space is given back to the page. */
+export const NO_FILL_MS = 10_000;
+
 /**
  * Put an ad network's embed code (HTML and scripts) into `target` and make its scripts run, which setting innerHTML alone
  * does not do. A network's loader script is the same file in every zone's code; a page with several ad boxes would

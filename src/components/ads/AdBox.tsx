@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { FRAME_SANDBOX, buildFrameDoc, injectCode, sendImpression } from "@/lib/ads/client";
+import { FRAME_SANDBOX, NO_FILL_MS, buildFrameDoc, hasContent, injectCode, sendImpression } from "@/lib/ads/client";
 import { useAdult } from "./useAdult";
 
 export interface BoxAd {
@@ -21,7 +21,10 @@ export interface BoxAd {
  *     bottom of a page costs nothing until someone scrolls there);
  *   - the box keeps the ad's size from the start, so nothing around it moves when the ad arrives. An ad wider than the screen
  *     (a 728-pixel leaderboard on a phone) is scaled down to fit instead of being cut off.
- * An impression is counted once the box has been at least half in view for a second, never earlier.
+ *   - a box whose network gave nothing to show (no ad for this visitor, or a content blocker stopped it) is given back to the page
+ *     after ten seconds instead of leaving a label over a hole, and comes back if the ad arrives late.
+ * An impression is counted once the box has been at least half in view for a second, never earlier, and only for an ad that is
+ * actually on screen: an empty zone is not a view.
  */
 export function AdBox({ ad, className = "", children }: { ad: BoxAd; className?: string; children?: React.ReactNode }) {
   const adult = useAdult();
@@ -29,6 +32,9 @@ export function AdBox({ ad, className = "", children }: { ad: BoxAd; className?:
   const holder = useRef<HTMLDivElement>(null);
   const [near, setNear] = useState(false);
   const [scale, setScale] = useState(1);
+  // is there an ad to see? A banner is on the page from the start; an isolated frame cannot be looked into; network code has to fill
+  const [shown, setShown] = useState(ad.type === "banner" || ad.isolation === "frame");
+  const [empty, setEmpty] = useState(false);
   const counted = useRef(false);
 
   // close to the screen: time to run the ad
@@ -44,7 +50,7 @@ export function AdBox({ ad, className = "", children }: { ad: BoxAd; className?:
   // seen: half in view for a second
   useEffect(() => {
     const el = box.current;
-    if (!adult || !el || counted.current) return;
+    if (!adult || !shown || empty || !el || counted.current) return;
     const count = () => {
       if (counted.current) return;
       counted.current = true;
@@ -72,7 +78,7 @@ export function AdBox({ ad, className = "", children }: { ad: BoxAd; className?:
       clearTimeout(timer);
       io.disconnect();
     };
-  }, [adult, ad.id]);
+  }, [adult, shown, empty, ad.id]);
 
   // a fixed-size ad wider than its box is scaled down to fit
   useEffect(() => {
@@ -89,14 +95,30 @@ export function AdBox({ ad, className = "", children }: { ad: BoxAd; className?:
   // an ad network's code that runs in the page
   useEffect(() => {
     const el = holder.current;
-    if (!adult || !near || !el || ad.type !== "code" || ad.isolation !== "inline" || !ad.code || el.childElementCount) return;
-    void injectCode(el, ad.code);
+    if (!adult || !near || !el || ad.type !== "code" || ad.isolation !== "inline" || !ad.code) return;
+    if (!el.childElementCount) void injectCode(el, ad.code);
     // the ad creative is an iframe the network makes itself, so there is no markup of ours to give it a title: do it as it appears
     const title = () => el.querySelectorAll("iframe:not([title]):not([aria-label])").forEach((f) => f.setAttribute("title", "Advertisement"));
-    title();
-    const mo = new MutationObserver(title);
+    // and the network's answer decides whether there is anything to show
+    const look = () => {
+      title();
+      if (hasContent(el)) {
+        setShown(true);
+        setEmpty(false);
+        return true;
+      }
+      return false;
+    };
+    look();
+    const mo = new MutationObserver(look);
     mo.observe(el, { childList: true, subtree: true });
-    return () => mo.disconnect();
+    const giveUp = setTimeout(() => {
+      if (!hasContent(el)) setEmpty(true);
+    }, NO_FILL_MS);
+    return () => {
+      clearTimeout(giveUp);
+      mo.disconnect();
+    };
   }, [adult, near, ad.type, ad.isolation, ad.code]);
 
   const w = ad.width ?? undefined;
@@ -109,7 +131,7 @@ export function AdBox({ ad, className = "", children }: { ad: BoxAd; className?:
       data-ad-slot={ad.slot}
       data-ad-id={ad.id}
       className={`mx-auto w-full ${className}`}
-      style={{ maxWidth: ad.width ?? undefined }}
+      style={{ maxWidth: ad.width ?? undefined, display: empty ? "none" : undefined }}
     >
       <p className="mb-1.5 text-center text-[10px] uppercase tracking-[0.2em] text-muted" aria-hidden="true">
         Advertisement

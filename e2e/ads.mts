@@ -8,6 +8,7 @@ import { chromium } from "playwright";
 import AxeBuilder from "@axe-core/playwright";
 import { prisma, db } from "../src/lib/db";
 import { AGE_COOKIE } from "../src/lib/prefs";
+import { NO_FILL_MS } from "../src/lib/ads/client";
 import { CODE_OWNER_ONLY, deleteAd, duplicateAd, MAX_ADS_PER_SLOT, saveAd, setAdActive, setAdsEnabled } from "../src/lib/admin/ads-core";
 
 const BASE = (process.env.BASE_URL ?? "http://localhost:3200").replace(/\/$/, "");
@@ -341,6 +342,35 @@ try {
   await popup.waitForLoadState("domcontentloaded").catch(() => {});
   ok(popup.url().startsWith("https://example.com/offer") && (await stat(LT.id)).clicks === c0 + 1, "clicking a banner opens the advertiser in a new tab and counts one click", popup.url());
   await ctx.close();
+
+  // a network with nothing to show gives its space back; one that answers late does not
+  console.log("\n— a zone that does not fill");
+  const NOFILL = await code("search-top", "never fills", '<script async src="data:text/javascript,void 0"></script> <ins data-zoneid="1"></ins>', { width: 728, height: 90 });
+  await settle();
+  ctx = await mk();
+  p = await ctx.newPage();
+  await p.goto(`${BASE}/search?q=school`, { waitUntil: "networkidle" });
+  const n0 = (await stat(NOFILL.id)).impressions;
+  await p.waitForTimeout(2500);
+  ok(await p.locator(`[data-ad-id="${NOFILL.id}"]`).isVisible(), "while the network may still answer, the box keeps its place");
+  await p.waitForTimeout(NO_FILL_MS);
+  ok(!(await p.locator(`[data-ad-id="${NOFILL.id}"]`).isVisible()) && (await p.getByText("Advertisement", { exact: true }).filter({ visible: true }).count()) === 0, "a zone that never fills is given back to the page (no label over an empty space)");
+  await p.waitForTimeout(1500);
+  ok((await stat(NOFILL.id)).impressions === n0, "...and an empty zone is not counted as a view");
+  await ctx.close();
+  await deleteAd(prisma, ME, NOFILL.id);
+  const LATE = await code("search-top", "fills late", '<ins></ins><script>var s=document.currentScript;setTimeout(function(){var d=document.createElement("div");d.id="zz-late";d.style.cssText="width:728px;height:90px";d.textContent="late ad";s.parentNode.appendChild(d)},6000)</script>', { width: 728, height: 90 });
+  await settle();
+  ctx = await mk();
+  p = await ctx.newPage();
+  await p.goto(`${BASE}/search?q=school`, { waitUntil: "networkidle" });
+  const l0 = (await stat(LATE.id)).impressions;
+  await p.waitForTimeout(2500);
+  ok((await stat(LATE.id)).impressions === l0, "an ad that has not arrived yet is not counted");
+  await p.waitForTimeout(8500);
+  ok((await p.locator("#zz-late").isVisible()) && (await stat(LATE.id)).impressions === l0 + 1, "an ad that arrives a few seconds late is shown and counted once");
+  await ctx.close();
+  await deleteAd(prisma, ME, LATE.id);
 
   // accessibility, with ads on the page
   ctx = await mk();

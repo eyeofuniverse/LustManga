@@ -1,5 +1,5 @@
 // Puts the LustPages ExoClick zones into the Ads section of the console. Safe to run again: an ad that already exists for a zone
-// is left alone. Changes are audited as "system: ExoClick setup".
+// (found by the zone number in its code) is left alone, whether it is live or paused. Changes are audited as "system: ExoClick setup".
 //   npm run seed:exoclick                 add what is missing
 //   npm run seed:exoclick -- --dry-run    only say what would be added
 //
@@ -53,7 +53,8 @@ let added = 0;
 let skipped = 0;
 for (const w of work) {
   const note = `ExoClick zone ${w.zone}`;
-  const have = await db(() => prisma.ad.findFirst({ where: { slot: w.slot, note: { startsWith: note } }, select: { id: true } }), 8); // retried: the connection can blip
+  // found by the zone number inside the ad code, so editing an ad's note in the console cannot make this add a second copy
+  const have = await db(() => prisma.ad.findFirst({ where: { slot: w.slot, type: "code", code: { contains: String(w.zone) } }, select: { id: true } }), 8); // retried: the connection can blip
   if (have) {
     skipped++;
     continue;

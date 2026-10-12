@@ -192,7 +192,12 @@ export function AdForm({ slot, ad, device, canCode }: { slot: Slot; ad?: AdRow; 
       {open && (
         <div className="rounded-xl border border-line bg-bg/40 p-3">
           <Preview type={isPop ? "code" : type} code={code} imageUrl={image} width={w} height={h} />
-          {(isPop || type === "code") && <p className="mt-2 text-center text-[11px] text-muted">Shown in an isolated frame. A network that only serves ads on your real site may show nothing here.</p>}
+          {(isPop || type === "code") && (
+            <p className="mt-2 text-center text-[11px] text-muted">
+              Shown in an isolated frame. A network that only serves ads on your real site may show nothing here. Real network code counts as a view
+              (and as a click or a pop-up if you click inside) in the network&apos;s own reports, so preview it sparingly.
+            </p>
+          )}
         </div>
       )}
     </div>

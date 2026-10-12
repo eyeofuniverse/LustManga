@@ -154,7 +154,7 @@ export const SLOTS: SlotDef[] = [
     desktop: null,
     mobile: null,
     revenue: "top",
-    tip: "Paste the network's pop-under zone script as an Ad code ad. Set the frequency limit (for example once a day) in the network's own zone settings; this site only loads the script, once per page, after the visitor has confirmed they are an adult. The count shown for it is script loads: whether a window actually opens is the network's decision.",
+    tip: "Paste the network's pop-under zone script as an Ad code ad. Set how often it opens (the frequency limit) in the network's zone settings and in the script's own options; this site only loads the script, once per page, after the visitor has confirmed they are an adult. The count shown for it is script loads: whether a window actually opens is the network's decision.",
   },
 ];
 
