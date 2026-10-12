@@ -3,7 +3,8 @@
  * chosen not to push the main actions (Read, Save, the grid itself) out of reach. Which ads fill them is managed in the
  * console (Ads). A slot with no ad renders nothing at all: no empty box, no shifted layout.
  *
- * Sizes are the standard ad-network banner sizes. Each slot has one size per device band; a slot that has no position on a
+ * Sizes are the ones ExoClick offers for its Banner (desktop) and Mobile Banner zones: 728x90, 300x250 and 900x250 on computers,
+ * 300x100 and 300x250 on phones. Each slot has one size per device band; a slot that has no position on a
  * device (`null`) never serves there.
  */
 export type Device = "desktop" | "mobile";
@@ -41,9 +42,9 @@ export const SLOTS: SlotDef[] = [
     where: "Between the spotlight work and the first row, at the top of the home page",
     kind: "banner",
     desktop: S(728, 90),
-    mobile: S(320, 100),
+    mobile: S(300, 100),
     revenue: "strong",
-    tip: "The first thing after the spotlight on the busiest page. A leaderboard (728x90) on desktop and a 320x100 on phones sit cleanly under it.",
+    tip: "The first thing after the spotlight on the busiest page. A leaderboard (728x90) on desktop and a 300x100 on phones sit cleanly under it.",
   },
   {
     key: "home-mid",
@@ -62,8 +63,8 @@ export const SLOTS: SlotDef[] = [
     group: "Home",
     where: "At the bottom of the home page, above the footer",
     kind: "banner",
-    desktop: S(728, 90),
-    mobile: S(300, 250),
+    desktop: S(900, 250),
+    mobile: S(300, 100),
     revenue: "steady",
     tip: "Reached only by visitors who scroll the whole page: good for a lower-priority or backup ad.",
   },
@@ -74,7 +75,7 @@ export const SLOTS: SlotDef[] = [
     where: "Above the works on Browse, tag, artist, circle, parody, character and language pages, and New uploads",
     kind: "banner",
     desktop: S(728, 90),
-    mobile: S(320, 100),
+    mobile: S(300, 100),
     revenue: "strong",
     tip: "A high-intent moment: the visitor is choosing what to read. One slot covers every list page.",
   },
@@ -95,8 +96,8 @@ export const SLOTS: SlotDef[] = [
     group: "Lists",
     where: "Under the works and the page numbers",
     kind: "banner",
-    desktop: S(728, 90),
-    mobile: S(300, 250),
+    desktop: S(900, 250),
+    mobile: S(300, 100),
     revenue: "steady",
     tip: "For visitors who reach the end of a page before choosing: a steady fill.",
   },
@@ -107,7 +108,7 @@ export const SLOTS: SlotDef[] = [
     where: "Above the works found by a search",
     kind: "banner",
     desktop: S(728, 90),
-    mobile: S(320, 100),
+    mobile: S(300, 100),
     revenue: "strong",
     tip: "Searchers know what they want. Native, styled like a result, usually draws the most clicks.",
   },
@@ -128,8 +129,8 @@ export const SLOTS: SlotDef[] = [
     group: "Work page",
     where: "After the chapter list, before the related works",
     kind: "banner",
-    desktop: S(728, 90),
-    mobile: S(300, 250),
+    desktop: S(900, 250),
+    mobile: S(300, 100),
     revenue: "steady",
     tip: "A break between the work and the suggestions.",
   },

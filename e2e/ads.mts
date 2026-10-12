@@ -38,6 +38,33 @@ const settle = async () => {
   await sleep(1500);
 };
 const retry = <T,>(fn: () => Promise<T>) => db(fn, 8);
+/**
+ * The site's own live ads (the ExoClick ones) would share every slot with the test ads and change who wins, so they are paused
+ * for the length of the run and switched on again at the end. Their ids, and what the master "Show ads" switch was, are written
+ * to a setting first, so that a run that is cut short is put right by the next one. By hand: set those ads live again in the
+ * console and make sure "Show ads" is on. (Killing the run while it is at work is the one way to leave them off.)
+ */
+const PAUSED_KEY = "ads.testPaused";
+async function resumeLiveAds() {
+  const row = await retry(() => prisma.setting.findUnique({ where: { key: PAUSED_KEY } }));
+  if (!row) return;
+  const v = row.value as { ids?: unknown[]; switch?: boolean | null };
+  const ids = (v.ids ?? []).filter((x): x is string => typeof x === "string");
+  if (ids.length) await retry(() => prisma.ad.updateMany({ where: { id: { in: ids } }, data: { active: true } }));
+  if (typeof v.switch === "boolean") await retry(() => prisma.setting.upsert({ where: { key: "ads.enabled" }, create: { key: "ads.enabled", value: v.switch! }, update: { value: v.switch! } }));
+  else await retry(() => prisma.setting.deleteMany({ where: { key: "ads.enabled" } }));
+  await retry(() => prisma.setting.deleteMany({ where: { key: PAUSED_KEY } }));
+}
+async function pauseLiveAds() {
+  await resumeLiveAds(); // leftovers of a run that was cut short
+  const live = await retry(() => prisma.ad.findMany({ where: { active: true, NOT: { name: { startsWith: "zz-test" } } }, select: { id: true } }));
+  const ids = live.map((a) => a.id);
+  const sw = await retry(() => prisma.setting.findUnique({ where: { key: "ads.enabled" } }));
+  const value = { ids, switch: typeof sw?.value === "boolean" ? sw.value : null };
+  await retry(() => prisma.setting.upsert({ where: { key: PAUSED_KEY }, create: { key: PAUSED_KEY, value }, update: { value } }));
+  await retry(() => prisma.ad.updateMany({ where: { id: { in: ids } }, data: { active: false } }));
+  console.log(`(${ids.length} live ad(s) paused for the length of the test)`);
+}
 async function cleanup() {
   await retry(() => prisma.ad.deleteMany({ where: { name: { startsWith: "zz-test" } } })); // their daily counts go with them
   await retry(() => prisma.auditLog.deleteMany({ where: { actorEmail: ME.email } }));
@@ -61,6 +88,7 @@ const settingBefore = await prisma.setting.findUnique({ where: { key: "ads.enabl
 const workId = (await retry(() => prisma.work.findFirst({ where: { publish: "PUBLISHED", coverKey: { not: null } }, select: { publicId: true }, orderBy: { publicId: "asc" } })))!.publicId;
 const short = await retry(() => prisma.work.findFirst({ where: { publish: "PUBLISHED", pageCount: { gte: 3, lte: 10 }, chapters: { some: { status: "READY" } } }, select: { publicId: true, pageCount: true } }));
 await cleanup();
+await pauseLiveAds();
 try {
   /* ───────────── 1. the admin actions ───────────── */
   console.log("\n— what an admin can do");
@@ -98,7 +126,7 @@ try {
   const dup = await duplicateAd(prisma, ME, adId);
   const copy = dup.ok ? await prisma.ad.findUnique({ where: { id: dup.id! } }) : null;
   ok(!!copy && copy.name === "zz-test admin flow (copy)" && copy.active === false && copy.code === "<b>v2</b>", "a copy is made, paused");
-  ok((await deleteAd(prisma, ME, adId)).ok && !(await prisma.ad.findUnique({ where: { id: adId } })), "an ad can be removed");
+  ok((await deleteAd(prisma, ME, adId)).ok && !(await retry(() => prisma.ad.findUnique({ where: { id: adId } }))), "an ad can be removed");
   ok((await deleteAd(prisma, ME, adId)).ok, "removing it twice is harmless");
   const audits = await prisma.auditLog.findMany({ where: { actorEmail: ME.email }, orderBy: { createdAt: "asc" } });
   ok(["ad.create", "ad.update", "ad.pause", "ad.delete"].every((k) => audits.some((x) => x.action === k)), "every change is in the audit log", audits.map((x) => x.action).join(","));
@@ -149,6 +177,7 @@ try {
   for (let i = 0; i < 100; i += 10) await Promise.all(Array.from({ length: 10 }, async () => { const p = await page("/"); const w = has(p.html, W1) ? "w1" : has(p.html, W3) ? "w3" : "none"; tally[w] = (tally[w] ?? 0) + 1; }));
   ok((tally.w3 ?? 0) >= 62 && (tally.w3 ?? 0) <= 88 && (tally.w1 ?? 0) >= 12 && !tally.none, "equal-priority ads share a slot in proportion to their weight (1:3 over 100 views)", JSON.stringify(tally));
 
+  await settle(); // the ad lists were last fetched before these ads existed on the list pages
   r = await page("/browse");
   ok(has(r.html, LT) && has(r.html, GRID), "the list pages show the top and the in-grid ads");
   const gridAt = r.html.indexOf(`data-ad-id="${GRID.id}"`);
@@ -365,6 +394,7 @@ try {
   r = await page("/");
   ok(has(r.html, A) && !r.html.includes('data-ad-slot="home-footer"'), "switched back on, ads return, and the two paused ones stay hidden (their slot is empty)");
 } finally {
+  await resumeLiveAds();
   await cleanup();
   if (settingBefore) await prisma.setting.upsert({ where: { key: "ads.enabled" }, create: { key: "ads.enabled", value: settingBefore.value as boolean }, update: { value: settingBefore.value as boolean } });
   else await prisma.setting.deleteMany({ where: { key: "ads.enabled" } });

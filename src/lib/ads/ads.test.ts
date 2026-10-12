@@ -22,7 +22,7 @@ test("registry: device bands and sizes follow the slot's definition", () => {
   const top = slotDef("home-top")!;
   assert.deepEqual(bandsFor(top), ["all", "desktop", "mobile"]);
   assert.deepEqual(defaultSize(top, "desktop"), { w: 728, h: 90 });
-  assert.deepEqual(defaultSize(top, "mobile"), { w: 320, h: 100 });
+  assert.deepEqual(defaultSize(top, "mobile"), { w: 300, h: 100 });
   assert.equal(slotDef("nope"), null);
   assert.equal(bandOfDevice("tablet"), "desktop");
   assert.equal(bandOfDevice("mobile"), "mobile");
