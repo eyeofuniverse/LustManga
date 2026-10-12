@@ -1,6 +1,12 @@
 // A preview deployment has its own address and must never appear in search results (it duplicates the real site).
 const NOT_PRODUCTION = !!process.env.VERCEL_ENV && process.env.VERCEL_ENV !== "production";
 
+// The project also answers on its *.vercel.app address. That is a second copy of the whole site (indexable, and running the ad
+// code on an address the ad network has never approved), so on the production build every such request is sent to the real
+// domain. Previews are left alone: they are behind Vercel's login and are how changes get checked.
+const SITE = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/+$/, "");
+const SEND_TO_REAL_DOMAIN = process.env.VERCEL_ENV === "production" && /^https:\/\/[^/]+$/.test(SITE) && !SITE.endsWith(".vercel.app");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // dev and production can run side by side (QA) without trampling each other's build output
@@ -10,6 +16,9 @@ const nextConfig = {
   eslint: { ignoreDuringBuilds: true },
   images: {
     remotePatterns: [{ protocol: "https", hostname: process.env.NEXT_PUBLIC_IMG_CDN_HOST ?? "img-cdn.lustpages.com" }],
+  },
+  async redirects() {
+    return SEND_TO_REAL_DOMAIN ? [{ source: "/:path*", has: [{ type: "host", value: ".*\\.vercel\\.app" }], destination: `${SITE}/:path*`, permanent: true }] : [];
   },
   async headers() {
     return [

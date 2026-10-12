@@ -5,7 +5,9 @@ import { cdn, thumbUrl } from "@/lib/cdn";
 
 /**
  * A cover that never causes layout shift (the parent sets the aspect ratio), fades in once decoded, and falls
- * back to the full-size cover if the small one is missing. Handles the case where the image finished loading
+ * back to the full-size cover if the small one is missing. A priority cover (the ones at the top of a page, likely to be the
+ * largest thing painted) is never hidden: it is visible in the server HTML, so it can paint before the page has hydrated
+ * instead of waiting for the script and a half-second fade; only the placeholder behind it fades away. Handles the case where the image finished loading
  * before React hydrated (onLoad would never fire).
  */
 export function CoverImage({
@@ -49,7 +51,7 @@ export function CoverImage({
         draggable={false}
         onLoad={() => setLoaded(true)}
         onError={() => full && src !== full && setSrc(full)}
-        className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-500 ${loaded ? "opacity-100" : "opacity-0"} ${className}`}
+        className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-500 ${priority || loaded ? "opacity-100" : "opacity-0"} ${className}`}
       />
     </>
   );
