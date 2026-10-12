@@ -10,9 +10,8 @@
  *
  * Matching is on whole normalised words / phrases, never substrings.
  */
-export const DEFAULT_DEFER: string[] = [
-  // Formerly hardcoded quarantine terms. Keep them in the editable, metadata-only
-  // review queue so an admin can approve a false positive before images are fetched.
+/** Historical terms used only to recover records left behind by the code-only quarantine check. */
+export const LEGACY_QUARANTINE_TERMS: string[] = [
   "loli",
   "lolis",
   "lolicon",
@@ -20,6 +19,11 @@ export const DEFAULT_DEFER: string[] = [
   "shotas",
   "shotacon",
   "toddlercon",
+];
+
+export const DEFAULT_DEFER: string[] = [
+  // Formerly hardcoded quarantine terms remain editable metadata-only flags.
+  ...LEGACY_QUARANTINE_TERMS,
   "underage",
   "under age",
   "preteen",
