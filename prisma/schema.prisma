@@ -134,6 +134,12 @@ model Work {
   viewDays WorkViewDay[]
   snapshots SignalSnapshot[]
 
+  /// What readers of THIS site think: the sum and count of their 1-5 star ratings (kept here so a page shows the average without a query)
+  ratingSum   Int @default(0)
+  ratingCount Int @default(0)
+  ratings     WorkRating[]
+  comments    Comment[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
@@ -554,4 +560,140 @@ model AdStat {
 
   @@id([adId, day])
   @@index([day])
+}
+
+/* ───────────────────────────── members: accounts, ratings, comments ───────────────────────────── */
+
+/// A reader with an account. Reading never needs one; an account is for rating and commenting. The sign-in name is the
+/// handle (lower case); no email is needed, so there is no mail to verify: a lost password is recovered with one of the
+/// recovery codes shown once at sign-up. An email, when given, is kept for the owner of the account only and is not used yet.
+model Member {
+  id             String    @id @default(cuid())
+  /// the sign-in name and profile address, lower case: 3-20 letters, digits and underscores
+  handle         String    @unique
+  /// the same name as the member typed it (capitals kept)
+  displayName    String
+  email          String?   @unique
+  passwordHash   String
+  bio            String?
+  /// bcrypt hashes of the recovery codes not used yet
+  recoveryHashes String[]  @default([])
+  /// whether the ratings of this member are listed on their public profile (comments are public by nature)
+  showRatings    Boolean   @default(false)
+  banned         Boolean   @default(false)
+  bannedReason   String?
+  bannedAt       DateTime?
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @default(now()) @updatedAt
+
+  sessions MemberSession[]
+  ratings  WorkRating[]
+  comments Comment[]
+  votes    CommentVote[]
+  reports  CommentReport[]
+}
+
+/// A signed-in browser. Only the sha256 of the cookie token is stored.
+model MemberSession {
+  id         String   @id @default(cuid())
+  memberId   String
+  member     Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  tokenHash  String   @unique
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([memberId])
+  @@index([expiresAt])
+}
+
+/// Sign-in, sign-up and reset attempts, so repeated failures can be slowed down. The key is a handle or a one-way hash of an
+/// address; rows older than a month are deleted by the nightly cleanup.
+model MemberAttempt {
+  id        String   @id @default(cuid())
+  kind      String // login | signup | reset | comment | report
+  key       String
+  ok        Boolean
+  createdAt DateTime @default(now())
+
+  @@index([kind, key, createdAt])
+}
+
+/// One member rating of one work, 1 to 5 stars.
+model WorkRating {
+  memberId  String
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  workId    String
+  work      Work     @relation(fields: [workId], references: [id], onDelete: Cascade)
+  value     Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@id([memberId, workId])
+  @@index([workId])
+}
+
+enum CommentStatus {
+  VISIBLE
+  /// held back by reports or a moderator; the author still sees it marked as hidden
+  HIDDEN
+  /// taken down for good (kept as a row so replies keep their place)
+  REMOVED
+}
+
+model Comment {
+  id        String        @id @default(cuid())
+  workId    String
+  work      Work          @relation(fields: [workId], references: [id], onDelete: Cascade)
+  /// null once the author deleted their account
+  memberId  String?
+  member    Member?       @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  /// replies are one level deep: the parent of a reply is always a top-level comment
+  parentId  String?
+  parent    Comment?      @relation("CommentTree", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Comment[]     @relation("CommentTree")
+  body      String
+  status    CommentStatus @default(VISIBLE)
+  /// up votes minus down votes
+  score     Int           @default(0)
+  edited    Boolean       @default(false)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @default(now()) @updatedAt
+
+  votes   CommentVote[]
+  reports CommentReport[]
+
+  @@index([workId, status, createdAt])
+  @@index([parentId])
+  @@index([memberId, createdAt])
+  @@index([status, updatedAt])
+}
+
+model CommentVote {
+  commentId String
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  memberId  String
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  /// 1 or -1
+  value     Int
+  createdAt DateTime @default(now())
+
+  @@id([commentId, memberId])
+}
+
+model CommentReport {
+  id        String   @id @default(cuid())
+  commentId String
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  memberId  String?
+  member    Member?  @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  reason    String // SPAM | ABUSE | MINORS | PRIVATE | OTHER
+  details   String?
+  status    String   @default("OPEN") // OPEN | RESOLVED | DISMISSED
+  createdAt DateTime @default(now())
+
+  @@unique([commentId, memberId])
+  @@index([status, createdAt])
 }

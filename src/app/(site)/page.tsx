@@ -43,8 +43,8 @@ function libraryFaq(about: string | null): QA[] {
 const FAQ: QA[] = [
   {
     q: "Is LustPages free to read?",
-    text: "Yes. Every hentai manga and doujinshi can be read online for free, with no account and no sign-up.",
-    a: "Yes. Every hentai manga and doujinshi can be read online for free, with no account and no sign-up.",
+    text: "Yes. Every hentai manga and doujinshi can be read online for free.",
+    a: "Yes. Every hentai manga and doujinshi can be read online for free.",
   },
   {
     q: "Which languages can I read in?",
@@ -71,8 +71,8 @@ const FAQ: QA[] = [
   },
   {
     q: "Where is my reading history kept?",
-    text: "Your saved works and reading history are stored in your own browser, not on our servers. There are no accounts.",
-    a: "Your saved works and reading history are stored in your own browser, not on our servers. There are no accounts.",
+    text: "Your saved works and reading history are stored in your own browser, not on our servers. Sign in only if you want to rate works and comment.",
+    a: "Your saved works and reading history are stored in your own browser, not on our servers. Sign in only if you want to rate works and comment.",
   },
   {
     q: "How do I report a problem or request a removal?",
@@ -278,7 +278,7 @@ export default async function Home() {
 
       {rated.length > 0 && (
         <section className="container-x pt-10 sm:pt-12" aria-label="Top rated">
-          <SectionHeader title="Top rated" href="/browse?sort=rated" sub="Best rated by readers on the source sites" />
+          <SectionHeader title="Top rated" href="/browse?sort=rated" sub="Best rated by readers" />
           <ScrollRow label="Top rated works">
             {rated.map((w, i) => (
               <li key={w.publicId}>
@@ -326,7 +326,7 @@ export default async function Home() {
           {[
             { Icon: Compass, h: "Find it fast", t: "Search by title, tag, artist, circle, parody or character. Include and exclude tags, and filter by language, category, page count and upload date." },
             { Icon: BookOpen, h: "Read it your way", t: "Page-by-page like a book, with two-page spreads on wide screens, right-to-left for manga, zoom, or a continuous scroll for long strips. It remembers where you stopped." },
-            { Icon: BookMarked, h: "Keep track, no account", t: "Save works, follow tags and artists, and pick up where you left off. It all stays in your own browser, so there is nothing to sign up for." },
+            { Icon: BookMarked, h: "Join in", t: "Save works, follow tags and artists, and pick up where you left off: it all stays in your own browser. Sign in to rate works and join the comments." },
           ].map(({ Icon, h, t }) => (
             <li key={h} className="card p-5">
               <Icon className="h-6 w-6 text-accent" aria-hidden="true" />

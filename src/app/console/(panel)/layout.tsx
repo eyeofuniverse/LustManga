@@ -9,15 +9,16 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   const me = await getAdminSession();
   if (!me) redirect("/console/login");
 
-  const [held, deferred, failed, dups, reports] = await db(() =>
+  const [held, deferred, failed, dups, reports, commentReports] = await db(() =>
     Promise.all([
       prisma.work.count({ where: { needsReview: true, publish: "DRAFT", deferFetch: false } }),
       prisma.work.count({ where: { needsReview: true, publish: "DRAFT", deferFetch: true } }),
       prisma.chapter.count({ where: { status: "FAILED" } }),
       prisma.duplicateCandidate.count({ where: { status: "OPEN" } }),
       prisma.report.count({ where: { status: "OPEN" } }),
+      prisma.commentReport.count({ where: { status: "OPEN" } }),
     ]),
-  ).catch(() => [0, 0, 0, 0, 0]);
+  ).catch(() => [0, 0, 0, 0, 0, 0]);
 
   const items: NavItem[] = [
     { href: "/console", label: "Dashboard", icon: "dashboard", group: "Overview" },
@@ -25,6 +26,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
     ...(hasRole(me, "ADMIN") ? [{ href: "/console/ads", label: "Ads", icon: "ads" as const, group: "Overview" }] : []), // revenue: not for moderators
     { href: "/console/review", label: "Review queue", icon: "review", group: "Moderation", badge: held + deferred || undefined },
     { href: "/console/reports", label: "Reports", icon: "reports", group: "Moderation", badge: reports || undefined },
+    { href: "/console/community", label: "Community", icon: "community", group: "Moderation", badge: commentReports || undefined },
     { href: "/console/duplicates", label: "Duplicates", icon: "duplicates", group: "Moderation", badge: dups || undefined },
     { href: "/console/works", label: "Works", icon: "works", group: "Catalogue" },
     { href: "/console/tags", label: "Tags & safety", icon: "tags", group: "Catalogue" },

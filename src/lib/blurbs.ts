@@ -33,7 +33,7 @@ export function libraryParagraph(s: LibraryFacts, now: Date = new Date()): strin
   const langs = s.languages > 1 ? `, in ${s.languages} languages` : "";
   const who = s.artists > 0 ? `, by ${n(s.artists)} artists${s.circles > 0 ? ` and ${n(s.circles)} circles` : ""}` : "";
   const fresh = s.latest && now.getTime() - new Date(s.latest).getTime() < 14 * 86_400_000 ? ` The newest work was added ${timeAgo(s.latest, now.getTime())}.` : "";
-  return `${head}${langs}${who}. Everything can be read online for free, with no account.${fresh}`;
+  return `${head}${langs}${who}. Everything can be read online for free.${fresh}`;
 }
 
 /** Whole minutes to read a work at a relaxed pace of about 20 seconds a page (never less than 1). */

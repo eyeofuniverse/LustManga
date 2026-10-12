@@ -21,6 +21,7 @@ const COLS = [
   {
     title: "Your library",
     links: [
+      ["Account", "/account"],
       ["Saved", "/favorites"],
       ["History", "/history"],
       ["Settings", "/settings"],
@@ -46,7 +47,7 @@ export function Footer() {
         <div className="space-y-4">
           <Logo />
           <p className="max-w-xs text-sm leading-relaxed text-muted">
-            Hentai manga and doujinshi in every language, collected from across the web. Fast to browse, comfortable to read.
+            Hentai manga and doujinshi in every language. Fast to browse, comfortable to read.
           </p>
           <p className="inline-flex items-center gap-2 rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-muted">
             <span className="grid h-5 w-5 place-items-center rounded-full bg-accent-fill text-[10px] font-extrabold text-white">18</span>
@@ -70,7 +71,7 @@ export function Footer() {
       </div>
       <div className="border-t border-line">
         <p className="container-x py-5 text-xs text-muted">
-          &copy; {new Date().getFullYear()} {SITE_NAME}. We host no content by claim of ownership; to request removal see the DMCA page.
+          &copy; {new Date().getFullYear()} {SITE_NAME}. To request removal of content, see the DMCA page.
         </p>
       </div>
     </footer>

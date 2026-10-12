@@ -23,8 +23,8 @@ import { SORT_OPTIONS } from "@/lib/sorts";
 const FAQ: QA[] = [
   {
     q: "How are the lists ordered?",
-    text: "Popular is all-time popularity from the source sites plus readers here. Trending, This week and This month follow what is climbing the charts. Top rated needs enough votes, Most saved counts readers who saved a work here, and Newest shows the latest additions.",
-    a: "Popular is all-time popularity from the source sites plus readers here. Trending, This week and This month follow what is climbing the charts. Top rated needs enough votes, Most saved counts readers who saved a work here, and Newest shows the latest additions.",
+    text: "Popular is all-time popularity. Trending, This week and This month follow what is climbing the charts. Top rated needs enough votes, Most saved counts readers who saved a work here, and Newest shows the latest additions.",
+    a: "Popular is all-time popularity. Trending, This week and This month follow what is climbing the charts. Top rated needs enough votes, Most saved counts readers who saved a work here, and Newest shows the latest additions.",
   },
   {
     q: "How do I narrow the list to what I like?",

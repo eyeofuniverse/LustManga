@@ -12,7 +12,7 @@
 export type Sort = "popular" | "trending" | "week" | "month" | "rated" | "saved" | "new";
 
 export const SORT_OPTIONS: { value: Sort; label: string; hint: string }[] = [
-  { value: "popular", label: "Popular", hint: "Most popular of all time, from readers on the source sites and here" },
+  { value: "popular", label: "Popular", hint: "Most popular of all time" },
   { value: "trending", label: "Trending", hint: "Climbing the charts today" },
   { value: "week", label: "This week", hint: "Climbing the charts this week" },
   { value: "month", label: "This month", hint: "Climbing the charts this month" },

@@ -11,7 +11,7 @@ const ROWS: [string, string][] = [
   ['tag:"big breasts"', "Works with that tag"],
   ["-tag:netorare", "Without that tag (a dash excludes anything)"],
   ["artist:name  group:name", "By artist or circle"],
-  ["parody:\"series name\"  character:name", "By source series or character"],
+  ["parody:\"series name\"  character:name", "By series or character"],
   ["language:english  category:doujinshi", "By language or category"],
   ["pages:>20   pages:<=40   pages:12", "Page count: > < >= <= ="],
   ["uploaded:<7d", "Added within the last 7 days (d, w, m, y)"],

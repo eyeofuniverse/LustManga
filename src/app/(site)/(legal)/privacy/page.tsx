@@ -5,14 +5,14 @@ import { CONTACT_EMAIL, SITE_NAME } from "@/lib/site";
 import { RETENTION_DAYS } from "@/lib/analytics/config";
 import { adsInUse } from "@/lib/ads/serve";
 
-export const metadata: Metadata = staticMeta({ title: "Privacy Policy", description: "LustPages has no accounts and keeps very little: what is stored in your browser, what we log, and how to clear it.", path: "/privacy" });
+export const metadata: Metadata = staticMeta({ title: "Privacy Policy", description: "What LustPages keeps: what is stored in your browser, a small record if you create an account, what we log, and how to clear it.", path: "/privacy" });
 
 export default async function Page() {
   const ads = await adsInUse().catch(() => false);
   return (
     <>
       <h1>Privacy</h1>
-      <p className="!text-muted">The short version: there are no accounts, and we keep very little.</p>
+      <p className="!text-muted">The short version: we keep very little.</p>
 
       <h2>What stays on your device</h2>
       <ul>
@@ -22,11 +22,22 @@ export default async function Page() {
         </li>
       </ul>
 
+      <h2>If you create an account</h2>
+      <p>If you create an account (to comment on and rate works) we store:</p>
+      <ul>
+        <li>your <b>username</b> (public: it is shown next to your comments and on your profile) and, if you write one, a short bio;</li>
+        <li>a <b>scrambled (bcrypt) copy of your password</b>, never the password itself, and scrambled copies of your recovery codes. We cannot read either, so we cannot recover an account whose password and codes are both lost;</li>
+        <li>your <b>email address, if you choose to add one</b>. It is kept private and is not used to contact you;</li>
+        <li>your <b>ratings</b> (private unless you choose to show them on your profile) and your <b>comments</b> (public, with the votes and reports they receive);</li>
+        <li>a <b>sign-in cookie</b> (a random token; we keep only its hash) and, for each signed-in browser, the browser type and when it was last used.</li>
+      </ul>
+      <p>To slow down password guessing and spam we also keep a one-way hash of your connection with the time of each sign-in, sign-up, comment and report attempt for 30 days. You can change your profile, change your password or delete your account at any time from your <Link href="/account">account page</Link>. Deleting it removes your profile, your ratings and your sign-in; your comments are emptied, and one that has replies stays as &ldquo;[deleted]&rdquo; so the conversation still reads.</p>
+
       <h2>What our servers see</h2>
       <ul>
         <li>Like every web server, ours and our hosting providers&apos; process your IP address and request details to deliver pages and protect the site. Logs are kept briefly.</li>
         <li>Reports you submit are stored with the details you type. A one-way hash of your IP address is kept only to limit abuse.</li>
-        <li>We count how many times a work is viewed. This is not tied to you.</li>
+        <li>We count how many times a work is viewed. This is not tied to you, whether or not you have an account.</li>
       </ul>
 
       <h2>Anonymous statistics</h2>

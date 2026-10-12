@@ -10,6 +10,10 @@ import { cleanDescription } from "@/lib/text";
 import { joinList, longDate, plural, readingTime } from "@/lib/blurbs";
 import { synopsis } from "@/lib/synopsis";
 import { Faq, type QA } from "@/components/seo/Faq";
+import { getMember } from "@/lib/member/session";
+import { loadThread, myRating } from "@/lib/member/community-queries";
+import { RatingBox } from "@/components/member/RatingBox";
+import { Comments } from "@/components/member/Comments";
 import { idParam } from "@/lib/url";
 import { findRedirect } from "@/lib/redirects";
 import { breadcrumbLd, hreflangFor, ldJson, socialMeta, titleCase, workDescription, workLd, workTitle, type WorkForSeo } from "@/lib/seo";
@@ -87,7 +91,7 @@ function workFaq(w: LoadedWork, variants: Variant[]): QA[] {
   const characters = (w.byType.CHARACTER ?? []).slice(0, 5);
   const themes = (w.byType.TAG ?? []).slice(0, 8);
 
-  const free = `Yes. You can read all ${plural(w.pageCount, "page")} of ${w.title} online for free on LustPages, with no account and no sign-up.`;
+  const free = `Yes. You can read all ${plural(w.pageCount, "page")} of ${w.title} online for free on LustPages.`;
   out.push({ q: `Can I read ${w.title} for free?`, text: free, a: free });
 
   const length = `${w.title} has ${plural(w.pageCount, "page")}${chapters > 1 ? ` in ${plural(chapters, "chapter")}${last ? ` (the latest is chapter ${last.number})` : ""}` : ""}, which is ${readingTime(w.pageCount)} of reading at a relaxed pace.`;
@@ -199,7 +203,15 @@ export default async function WorkPage({ params }: { params: Params }) {
   if (decodeURIComponent(ref) !== `${w.publicId}-${w.slug || "work"}`) permanentRedirect(workHref(w));
 
   const prefs = await currentPrefs();
-  const [variants, related, moreBy] = await Promise.all([getVariants(w.translationGroupId, w.id), getRelated(w, prefs), getMoreBy(w, prefs)]);
+  const me = await getMember();
+  const [variants, related, moreBy, thread, mine] = await Promise.all([
+    getVariants(w.translationGroupId, w.id),
+    getRelated(w, prefs),
+    getMoreBy(w, prefs),
+    // the community parts must never take the page down with them
+    loadThread(w.id, me?.id ?? null, { sort: "new", page: 1 }).catch(() => ({ items: [], total: 0, topLevel: 0 })),
+    myRating(me?.id ?? null, w.id).catch(() => 0),
+  ]);
   const chapterNumbers = w.chapters.map((c) => c.number);
   const cover = cdn(w.coverKey);
   const artists = (w.byType.ARTIST ?? []).map((t) => t.name);
@@ -257,7 +269,7 @@ export default async function WorkPage({ params }: { params: Params }) {
               <li className="inline-flex items-center gap-1.5"><FileText className="h-4 w-4" /> {w.pageCount} pages</li>
               <li className="inline-flex items-center gap-1.5"><CalendarDays className="h-4 w-4" /> Added {timeAgo(w.createdAt)}</li>
               {w.srcRating != null && w.srcVotes > 0 && (
-                <li className="inline-flex items-center gap-1.5" title="Average reader rating from the source sites, adjusted so sites that rate everything highly do not outrank the rest">
+                <li className="inline-flex items-center gap-1.5" title="Average reader rating">
                   <Star className="h-4 w-4 text-warn" /> {w.srcRating.toFixed(1)}/10 <span className="text-xs">({compact(w.srcVotes)} votes)</span>
                 </li>
               )}
@@ -271,6 +283,8 @@ export default async function WorkPage({ params }: { params: Params }) {
             {w.chapters.length === 1 && <DownloadChapter publicId={w.publicId} slug={w.slug} chapter={w.chapters[0].number} />}
             <ReportLink publicId={w.publicId} />
           </div>
+
+          <RatingBox work={w.publicId} sum={w.ratingSum} count={w.ratingCount} mine={mine} signedIn={!!me && !me.banned} next={workHref(w)} />
 
           {variants.length > 0 && (
             <section aria-label="Other languages">
@@ -341,8 +355,8 @@ export default async function WorkPage({ params }: { params: Params }) {
               </Fact>
               {latestChapterAt && w.chapters.length > 1 && <Fact label="Latest chapter">{longDate(latestChapterAt)}</Fact>}
               {w.srcRating != null && w.srcVotes > 0 && (
-                <Fact label="Reader rating">
-                  {w.srcRating.toFixed(1)}/10 <span className="text-muted">({compact(w.srcVotes)} votes on the source sites)</span>
+                <Fact label="Rating">
+                  {w.srcRating.toFixed(1)}/10 <span className="text-muted">({compact(w.srcVotes)} votes)</span>
                 </Fact>
               )}
               {w.favorites > 0 && <Fact label="Saved by">{plural(w.favorites, "reader")} here</Fact>}
@@ -352,6 +366,8 @@ export default async function WorkPage({ params }: { params: Params }) {
           {w.chapters.length > 1 && <ChapterList publicId={w.publicId} slug={w.slug} chapters={w.chapters} />}
         </div>
       </div>
+
+      <Comments work={w.publicId} initial={thread.items} total={thread.total} topLevel={thread.topLevel} me={me ? { handle: me.handle, displayName: me.displayName, banned: me.banned } : null} next={workHref(w)} />
 
       <AdSlot slot="work-footer" className="pt-10" />
 

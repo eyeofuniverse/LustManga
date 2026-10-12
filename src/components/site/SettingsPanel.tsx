@@ -50,7 +50,7 @@ function BackupCard() {
   };
 
   return (
-    <Card title="Backup and restore" hint="No account needed: save your library to a file, and load it in any other browser or device.">
+    <Card title="Backup and restore" hint="Save your library to a file, and load it in any other browser or device.">
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={exportFile} className="btn-soft">
           <Download className="h-4 w-4" /> Download backup

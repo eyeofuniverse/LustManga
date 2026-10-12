@@ -59,6 +59,10 @@ const PAGES: [string, string][] = [
   ["report", "/report-content"],
   ["dmca", "/dmca"],
   ["privacy", "/privacy"],
+  ["terms", "/terms"],
+  ["login", "/login"],
+  ["signup", "/signup"],
+  ["forgot", "/forgot"],
   ["not-found", "/g/99999999"],
 ];
 
