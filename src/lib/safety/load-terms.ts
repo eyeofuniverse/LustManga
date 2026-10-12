@@ -6,8 +6,7 @@ const TTL_MS = 60_000;
 
 /**
  * The live term lists from the database (admin-edited). Falls back to the
- * built-in defaults if the table is empty or unreachable. Core quarantine terms
- * are unioned in by classify() regardless.
+ * built-in defaults if the table is empty or unreachable.
  */
 export async function loadTerms(force = false): Promise<TermSet> {
   if (!force && cache && Date.now() - cache.at < TTL_MS) return cache.terms;

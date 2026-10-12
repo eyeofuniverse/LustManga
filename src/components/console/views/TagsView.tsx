@@ -13,15 +13,15 @@ const TYPES = ["tag", "artist", "group", "parody", "character", "language", "cat
 const TIERS: { tier: string; title: string; blurb: string; tone: Tone; icon: React.ReactNode }[] = [
   {
     tier: "QUARANTINE",
-    title: "Hard terms: quarantined",
-    blurb: "A work carrying one of these (in its tags or title) is recorded as metadata only: no images are downloaded and it is never published. The core terms are enforced from code and cannot be removed here. You can add more terms to make the gate stricter.",
+    title: "Admin quarantine: metadata only",
+    blurb: "Optional admin-added exclusions. Matching works are recorded as metadata only and are not sent to the review queue.",
     tone: "bad",
     icon: <Ban className="h-4 w-4" />,
   },
   {
     tier: "DEFER",
-    title: "Explicit age markers: review before download",
-    blurb: "Held as a draft for an admin and not downloaded until approved. A rejected work never has its images stored. Matched in tags and titles.",
+    title: "Review before download",
+    blurb: "Held as a metadata-only draft. Images are fetched only after an admin approves; rejected works are never downloaded.",
     tone: "warn",
     icon: <ShieldAlert className="h-4 w-4" />,
   },
@@ -58,7 +58,7 @@ function Terms({ terms }: { terms: TermRow[] }) {
   return (
     <>
       <Note tone="info" icon={<ShieldAlert className="h-4 w-4" />}>
-        These lists decide what the importers hold for you. Everything except quarantine is decided by an admin in the Review queue, never automatically. Changes apply to the next ingest run.
+        These editable lists decide what importers do. Defer matches stay metadata-only until an admin approves; review matches include images for inspection; quarantine matches are skipped. Changes apply to the next ingest run.
       </Note>
       <div className="grid gap-4 xl:grid-cols-2">
         {TIERS.map(({ tier, title, blurb, tone, icon }) => {

@@ -222,7 +222,7 @@ async function processManga(
     }
     const work = ws.work;
 
-    // explicit age markers: hold with NO downloads until an admin approves
+    // pre-download flags: hold with NO downloads until an admin approves
     if (work.deferFetch && work.reviewDecision !== "APPROVED") {
       o.log("  held (review before download), nothing fetched");
       continue;

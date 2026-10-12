@@ -7,13 +7,13 @@ import { prisma } from "@/lib/db";
 import { requireAdmin, type AdminIdentity } from "@/lib/admin/auth";
 import { purgeImages } from "@/lib/purge";
 import { mergeWorks, pickSurvivor } from "@/lib/dedupe";
-import { isCoreTerm } from "@/lib/safety/core";
 import { classify } from "@/lib/safety/classify";
 import { loadTerms } from "@/lib/safety/load-terms";
 import { SAFETY_FIELDS, approveBatch, isQuarantined } from "@/lib/admin/approve";
 import { mergeTagRecords, slug } from "@/lib/tags";
 import { pingIndexNow } from "@/lib/indexnow";
 import { workHref } from "@/lib/format";
+import { migrateLegacyQuarantine } from "@/lib/safety/migrate-legacy-quarantine";
 
 export type ActionResult = { ok: true; message: string } | { ok: false; message: string };
 const ok = (message: string): ActionResult => ({ ok: true, message });
@@ -43,9 +43,9 @@ export interface BulkResult {
   /** works looked at (including any skipped), so a caller can show progress */
   scanned: number;
   approved: number;
-  /** of the approved, how many went live now (the rest wait for the next ingest run to store their images) */
+  /** of the approved, how many went live now (the rest wait for a retry run to fetch images) */
   live: number;
-  /** left in the queue because they match a hard safety term */
+  /** left in the queue because they match an admin quarantine term */
   blocked: number;
   /** the last work looked at: pass it back to continue with the next batch */
   cursor: string | null;
@@ -74,8 +74,8 @@ async function runBatch(me: AdminIdentity, where: Prisma.WorkWhereInput, take: n
 
 const summary = (r: { approved: number; live: number; blocked: number }) =>
   `Approved ${r.approved.toLocaleString()} work${r.approved === 1 ? "" : "s"}` +
-  (r.approved ? ` (${r.live.toLocaleString()} published now${r.approved - r.live ? `, ${(r.approved - r.live).toLocaleString()} after the next ingest run` : ""})` : "") +
-  (r.blocked ? `. ${r.blocked.toLocaleString()} left in the queue: they match a hard safety term` : "");
+  (r.approved ? ` (${r.live.toLocaleString()} published now${r.approved - r.live ? `, ${(r.approved - r.live).toLocaleString()} after the next retry run` : ""})` : "") +
+  (r.blocked ? `. ${r.blocked.toLocaleString()} left in the queue: they match an admin quarantine term` : "");
 
 /** Approve the works with these public numbers (what ticking boxes on the review queue sends). */
 export async function approveWorks(publicIds: number[]): Promise<BulkResult> {
@@ -92,7 +92,7 @@ export async function approveWorks(publicIds: number[]): Promise<BulkResult> {
 /**
  * Approve the next batch of the whole Held tab ("approve everything"). The caller repeats it, passing back `cursor`, until
  * `done`: that keeps each request short and lets a person stop part-way. Only the Held tab, whose works have their images
- * stored so they could be looked at. Works carrying an explicit age marker (the "Review before download" tab) are never
+ * stored so they could be looked at. Works carrying a pre-download flag (the "Review before download" tab) are never
  * approved by this, only by deliberately selecting them.
  */
 export async function approveHeldBatch(cursor: string | null, limit = 200, asOf = ""): Promise<BulkResult> {
@@ -108,12 +108,12 @@ export async function approveHeldBatch(cursor: string | null, limit = 200, asOf 
   return { ok: true, message: summary(r), scanned: r.scanned, approved: r.approved, live: r.live, blocked: r.blocked, cursor: r.last, done: r.scanned < take };
 }
 
-/** Admin decides a flagged work is a false positive. Publishes now if images exist, else once the next ingest run stores them. */
+/** Admin approves a flagged work. Publishes now if images exist, else after a retry run fetches them. */
 export async function approveWork(publicId: number): Promise<ActionResult> {
   const me = await requireAdmin("MOD");
   const w = await prisma.work.findUnique({ where: { publicId }, select: { id: true, slug: true, coverKey: true, pageCount: true, publish: true, title: true, ...SAFETY_FIELDS } });
   if (!w) return fail("Work not found");
-  if (isQuarantined(w, await loadTerms())) return fail(`#${publicId} matches a hard safety term and cannot be approved. Reject it instead.`);
+  if (isQuarantined(w, await loadTerms())) return fail(`#${publicId} matches an admin quarantine term and cannot be approved. Reject it instead.`);
   const live = !!w.coverKey && w.pageCount > 0;
   await prisma.work.update({
     where: { id: w.id },
@@ -125,7 +125,7 @@ export async function approveWork(publicId: number): Promise<ActionResult> {
   await audit(me, "work.approve", "work", String(publicId), { live });
   if (live) announce(publicId, w.slug);
   refreshConsole();
-  return ok(live ? `#${publicId} approved and published` : `#${publicId} approved: images are fetched on the next ingest run, then it goes live`);
+  return ok(live ? `#${publicId} approved and published` : `#${publicId} approved: images are fetched on the next retry run, then it goes live`);
 }
 
 /** Admin confirms the flag. Rejects and deletes all stored images. */
@@ -148,7 +148,7 @@ export async function setWorkPublish(publicId: number, to: "PUBLISHED" | "DRAFT"
   const w = await prisma.work.findUnique({ where: { publicId }, select: { id: true, slug: true, coverKey: true, pageCount: true, deferFetch: true, needsReview: true } });
   if (!w) return fail("Work not found");
   if (to === "PUBLISHED") {
-    if (!w.coverKey || w.pageCount === 0) return fail("No images stored yet: approve it so the next ingest run fetches them");
+    if (!w.coverKey || w.pageCount === 0) return fail("No images stored yet: approve it so the next retry run fetches them");
     await prisma.work.update({
       where: { id: w.id },
       data: { publish: "PUBLISHED", needsReview: false, reviewDecision: "APPROVED", reviewedAt: new Date(), reviewedBy: me.email },
@@ -184,6 +184,16 @@ export async function confirmSuppressed(id: string): Promise<ActionResult> {
   await audit(me, "suppressed.confirm", "suppressed", id);
   revalidatePath("/console/review");
   return ok("Confirmed");
+}
+
+/** One-time recovery for records stopped by the former code-locked quarantine terms. */
+export async function migrateLegacyQuarantineAction(): Promise<ActionResult> {
+  const me = await requireAdmin("ADMIN");
+  const result = await migrateLegacyQuarantine();
+  if (result.alreadyDone) return ok("This one-time migration has already been completed");
+  await audit(me, "safety.legacy-quarantine-migrate", "safety", "legacy-quarantine-v1", result);
+  revalidatePath("/console/review");
+  return ok(`Migration complete: ${result.terms} old terms moved to pre-download review; ${result.requeued} unconfirmed records queued for rediscovery. No images were downloaded. Source workflows will rediscover them as they run.`);
 }
 
 export async function retryFailedChapters(): Promise<ActionResult> {
@@ -275,7 +285,6 @@ export async function addTerm(tier: SafetyTier, raw: string): Promise<ActionResu
   const me = await requireAdmin("ADMIN");
   const term = normTerm(raw);
   if (term.length < 2) return fail("Enter a term");
-  if (tier !== "QUARANTINE" && isCoreTerm(term)) return fail(`"${term}" is a core hard term and is always quarantined`);
   await prisma.safetyTerm.upsert({
     where: { term_tier: { term, tier } },
     create: { term, tier, createdBy: me.email },
@@ -291,9 +300,7 @@ export async function removeTerm(id: string): Promise<ActionResult> {
   const me = await requireAdmin("ADMIN");
   const t = await prisma.safetyTerm.findUnique({ where: { id } });
   if (!t) return fail("Term not found");
-  // the core hard terms are enforced from code; this guard also stops the table row from being edited away
-  if (t.locked || (t.tier === "QUARANTINE" && isCoreTerm(t.term)))
-    return fail(`"${t.term}" is a core hard term: it is enforced from code and cannot be removed`);
+  if (t.locked) return fail(`"${t.term}" is locked and cannot be removed`);
   await prisma.safetyTerm.delete({ where: { id } });
   await loadTerms(true);
   await audit(me, "term.remove", "term", t.term, { tier: t.tier });

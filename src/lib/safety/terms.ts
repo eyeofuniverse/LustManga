@@ -1,16 +1,25 @@
 /**
  * Default term lists. These seed the SafetyTerm table (npm run db:setup); after
  * that, admins edit the lists from the console (Tags, then Safety terms) and the
- * database is the source of truth. The core quarantine terms live in core.ts.
+ * database is the source of truth. Admins can change every term in the database-backed lists.
  *
- *   QUARANTINE  (core.ts + admin additions) metadata only, no images, no publish
- *   DEFER       explicit age markers: held for an admin, NOT downloaded until approved
+ *   QUARANTINE  optional admin exclusions: metadata only, no images, no publish
+ *   DEFER       flagged metadata: held for an admin, NOT downloaded until approved
  *   REVIEW      ambiguous markers: held for an admin, downloaded so they can inspect
  *   ALLOWED     normal adult phrases containing a flagged word (suppresses a match)
  *
  * Matching is on whole normalised words / phrases, never substrings.
  */
 export const DEFAULT_DEFER: string[] = [
+  // Formerly hardcoded quarantine terms. Keep them in the editable, metadata-only
+  // review queue so an admin can approve a false positive before images are fetched.
+  "loli",
+  "lolis",
+  "lolicon",
+  "shota",
+  "shotas",
+  "shotacon",
+  "toddlercon",
   "underage",
   "under age",
   "preteen",

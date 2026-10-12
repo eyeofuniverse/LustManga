@@ -5,6 +5,7 @@ import { prisma, db } from "@/lib/db";
 import { cdn } from "@/lib/cdn";
 import { guardConsole } from "@/lib/admin/guard";
 import { pagesOf } from "@/lib/pages";
+import { LEGACY_QUARANTINE_MIGRATION_KEY } from "@/lib/safety/migrate-legacy-quarantine";
 import type {
   AuditData, DuplicatesData, DupSide, ReportsData, ReviewData, ReviewTab, RunsData, TagsData, WorksData,
 } from "@/lib/admin/types";
@@ -22,16 +23,17 @@ export async function loadReview(sp: { tab?: string; page?: string }): Promise<R
   const asOf = new Date().toISOString(); // taken before the counts, so the count is never smaller than the set it will approve
   const tab: ReviewTab = sp.tab === "deferred" || sp.tab === "quarantined" ? sp.tab : "held";
   const page = num(sp.page);
-  const [held, deferred, quarantined] = await db(() =>
+  const [held, deferred, quarantined, migration] = await db(() =>
     Promise.all([
       prisma.work.count({ where: { needsReview: true, publish: "DRAFT", deferFetch: false } }),
       prisma.work.count({ where: { needsReview: true, publish: "DRAFT", deferFetch: true } }),
       prisma.suppressedSource.count(),
+      prisma.setting.findUnique({ where: { key: LEGACY_QUARANTINE_MIGRATION_KEY }, select: { key: true } }),
     ]),
   );
   const counts = { held, deferred, quarantined };
   const total = counts[tab];
-  const base = { tab, page, pages: Math.max(1, Math.ceil(total / REVIEW_PAGE)), total, pageSize: REVIEW_PAGE, counts, asOf, canApproveAll: me.role !== "MOD" };
+  const base = { tab, page, pages: Math.max(1, Math.ceil(total / REVIEW_PAGE)), total, pageSize: REVIEW_PAGE, counts, asOf, canApproveAll: me.role !== "MOD", legacyQuarantineMigrationDone: !!migration };
 
   if (tab === "quarantined") {
     const rows = await db(() => prisma.suppressedSource.findMany({ orderBy: { createdAt: "desc" }, skip: (page - 1) * REVIEW_PAGE, take: REVIEW_PAGE }));

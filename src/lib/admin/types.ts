@@ -35,6 +35,7 @@ export interface ReviewData {
   asOf: string;
   /** administrators only: moderators approve works one at a time, or by ticking them */
   canApproveAll: boolean;
+  legacyQuarantineMigrationDone: boolean;
   works: ReviewWork[];
   quarantined: QuarantineRow[];
 }

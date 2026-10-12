@@ -56,16 +56,16 @@ test("every approved work gets its own audit row, marked as a bulk approval", as
   assert.ok(data.every((d) => (d.diff as { bulk: boolean }).bulk === true));
 });
 
-test("a work that matches a hard term is never approved, however the queue got it: it stays and is counted", async () => {
+test("an admin can approve a former hard-term false positive from the metadata-only queue", async () => {
   const { tx, calls } = fake([row({ publicId: 1 }), row({ publicId: 2, tags: [{ name: "loli" }] }), row({ publicId: 3 })]);
   const r = await approveBatch(tx, me, {}, 10, DEFAULT_TERMS, () => undefined);
-  assert.deepEqual([r.scanned, r.approved, r.blocked], [3, 2, 1]);
+  assert.deepEqual([r.scanned, r.approved, r.blocked], [3, 3, 0]);
   const approvedIds = calls.updates.flatMap((u) => u.where.id.in);
-  assert.deepEqual(approvedIds.sort(), ["id1", "id3"]);
-  assert.deepEqual(calls.audit[0].data.map((d) => d.targetId), ["1", "3"], "no audit row claims the blocked work was approved");
+  assert.deepEqual(approvedIds.sort(), ["id1", "id2", "id3"]);
+  assert.deepEqual(calls.audit[0].data.map((d) => d.targetId), ["1", "2", "3"]);
 });
 
-test("the hard-term check reads every wording of the work, not just the displayed title", async () => {
+test("admins can review all title wording in metadata before approval", async () => {
   const hidden = [
     row({ publicId: 10, titleOriginal: "Some Title shota edition" }),
     row({ publicId: 11, titleNorm: " circle lolicon scans title " }),
@@ -73,9 +73,9 @@ test("the hard-term check reads every wording of the work, not just the displaye
   ];
   const { tx, calls } = fake(hidden);
   const r = await approveBatch(tx, me, {}, 10, DEFAULT_TERMS, () => undefined);
-  assert.deepEqual([r.approved, r.blocked], [0, 3]);
-  assert.equal(calls.updates.length, 0);
-  assert.equal(calls.audit.length, 0);
+  assert.deepEqual([r.approved, r.blocked], [3, 0]);
+  assert.equal(calls.updates.length, 1);
+  assert.equal(calls.audit.length, 1);
 });
 
 test("only works really waiting for review are queried, in a stable order, with the caller's filter and limit", async () => {

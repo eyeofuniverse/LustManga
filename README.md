@@ -20,10 +20,8 @@ sources ──► ingest ──► safety gate ──► dedupe ──► fetch 
 | HentaiFox, HentaiEra, AsmHentai, nhentai.xxx | HTML, one shared adapter | newest, and popular where the site has it |
 
 * **Safety gate** (`src/lib/safety`): every work is classified before anything is downloaded.
-  Works the source itself tags as sexual content involving minors are never downloaded or published: only
-  an id, title and the matching tags are recorded. The core terms live in `core.ts` and are enforced from code.
-  Everything else that is flagged is held as a draft for an admin (`/console` → Review queue); explicit
-  age markers are held *without* downloading until an admin approves.
+  Pre-download terms flag a work into a metadata-only draft in `/console` review. No images are fetched until an admin
+  approves; rejection prevents image storage. Safety terms are editable in the console.
 * **Dedupe** (`src/lib/dedupe.ts`): the same release from two sources is attached as an extra source of one work
   instead of being stored twice. Near-matches go to an admin; the daily job merges the clear ones.
 * **Page data** is stored compactly per chapter (`pageData`), not one row per page, so the database stays small.
@@ -34,7 +32,8 @@ sources ──► ingest ──► safety gate ──► dedupe ──► fetch 
 npm install
 cp .env.example .env      # fill it in (see the comments there)
 npx prisma db push
-npm run db:setup          # indexes + default safety terms
+npm run db:setup          # indexes + default safety terms; also migrates old locked quarantine terms
+# On an existing deployment, rerun this once to migrate old locked terms and requeue matching metadata
 npm run dev
 ```
 

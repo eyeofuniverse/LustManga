@@ -10,15 +10,17 @@ test("clean work passes", () => {
   assert.equal(r.deferFetch, false);
 });
 
-test("the five hard tags quarantine, regardless of case and punctuation", () => {
+test("former hard tags create metadata-only drafts", () => {
   for (const tag of ["Lolicon", "LOLI", "shota", "Shotacon", "loli.", "toddlercon", "lolis", "shotas"]) {
-    assert.equal(classify({ ...base, tags: [tag] }).verdict, "QUARANTINE", tag);
+    const r = classify({ ...base, tags: [tag] });
+    assert.equal(r.verdict, "REVIEW", tag);
+    assert.equal(r.deferFetch, true, tag);
   }
 });
 
-test("quarantine on title and alt titles", () => {
-  assert.equal(classify({ title: "Loli Paradise", tags: [] }).verdict, "QUARANTINE");
-  assert.equal(classify({ title: "x", altTitles: ["Shotacon Days"], tags: [] }).verdict, "QUARANTINE");
+test("former hard terms in title and alt titles require approval before fetch", () => {
+  assert.equal(classify({ title: "Loli Paradise", tags: [] }).deferFetch, true);
+  assert.equal(classify({ title: "x", altTitles: ["Shotacon Days"], tags: [] }).deferFetch, true);
 });
 
 test("quarantine is whole-word: lookalikes do not trip it", () => {
@@ -27,27 +29,25 @@ test("quarantine is whole-word: lookalikes do not trip it", () => {
   assert.equal(classify({ title: "Shotaro's Day Off", tags: [] }).verdict, "CLEAN");
 });
 
-test("prose in a description never causes quarantine or defer, even when it names a hard term", () => {
+test("flagged terms in descriptions enter metadata-only review", () => {
   const r = classify({ ...base, description: "No loli or shota content, all characters are adults, not underage." });
-  assert.equal(r.verdict, "CLEAN");
-  for (const prose of ["A story about a lolicon who learns better.", "Shota is the hero's name here", "He hates loli. She hates shota!", "Not lolicon, not shotacon, just adults"]) {
-    assert.equal(classify({ ...base, description: prose }).verdict, "CLEAN", prose);
+  assert.equal(r.verdict, "REVIEW");
+  assert.equal(r.deferFetch, true);
+});
+
+test("flagged terms in source tag lists pasted into descriptions require approval", () => {
+  const description = "Two people meet.\n\nTags: Anal, blowjob, kimono, lolicon, maid, nakadashi, rape";
+  const r = classify({ ...base, description });
+  assert.equal(r.verdict, "REVIEW");
+  assert.equal(r.deferFetch, true);
+  for (const text of ["|FEMALE| anal, blowjob, lingerie, lolicon, maid", "lolicon", "loli, anal", "tags: shotacon.", "hidden sex; shota; maid", "anal / lolis / maid", "x, toddlercon"]) {
+    assert.equal(classify({ ...base, description: text }).deferFetch, true, text);
   }
 });
 
-test("a hard term that is an entry of a tag list pasted into the description quarantines (MangaDex puts the source's tags there)", () => {
-  const pasted = "Two people meet.\n\nTags: Anal, blowjob, kimono, lolicon, maid, nakadashi, rape";
-  const r = classify({ ...base, description: pasted });
-  assert.equal(r.verdict, "QUARANTINE");
-  assert.deepEqual(r.reasons, ["description:lolicon"]);
-  for (const list of ["|FEMALE| anal, blowjob, lingerie, lolicon, maid", "lolicon", "loli, anal", "tags: shotacon.", "hidden sex; shota; maid", "• loli\n• maid", "anal / lolis / maid", "x, toddlercon"]) {
-    assert.equal(classify({ ...base, description: list }).verdict, "QUARANTINE", list);
-  }
-});
-
-test("list entries must be the whole entry: lookalikes inside longer words or phrases do not trip it", () => {
-  for (const d of ["anal, lolita fashion, maid", "tags: loli pop candy, maid", "anal, not loli content, maid", "shotaro, maid", "anal, lolicons club, maid", "a b, c lolicon d, e"]) {
-    assert.equal(classify({ ...base, description: d }).verdict, "CLEAN", d);
+test("lookalikes do not trigger pre-download review", () => {
+  for (const description of ["anal, lolita fashion, maid", "shotaro, maid", "anal, lolicons club, maid"]) {
+    assert.equal(classify({ ...base, description }).verdict, "CLEAN", description);
   }
 });
 
@@ -90,24 +90,26 @@ test("allowed adult context is not flagged", () => {
 
 test("allowed context does not shield a separate flagged term", () => {
   assert.equal(classify({ ...base, tags: ["college student", "schoolgirl"] }).verdict, "REVIEW");
-  assert.equal(classify({ ...base, tags: ["young wife", "loli"] }).verdict, "QUARANTINE");
+  assert.equal(classify({ ...base, tags: ["young wife", "loli"] }).deferFetch, true);
 });
 
-test("quarantine outranks defer outranks review", () => {
-  assert.equal(classify({ ...base, tags: ["school uniform", "loli"] }).verdict, "QUARANTINE");
+test("pre-download terms defer fetching and admin quarantine still takes precedence", () => {
+  assert.equal(classify({ ...base, tags: ["school uniform", "loli"] }).deferFetch, true);
   const r = classify({ ...base, tags: ["school uniform", "underage"] });
   assert.equal(r.verdict, "REVIEW");
   assert.equal(r.deferFetch, true);
 });
 
 test("fullwidth forms normalise", () => {
-  assert.equal(classify({ ...base, tags: ["ｌｏｌｉ"] }).verdict, "QUARANTINE");
+  assert.equal(classify({ ...base, tags: ["ｌｏｌｉ"] }).deferFetch, true);
 });
 
-test("core quarantine terms hold even when the supplied term set is empty", () => {
+test("former hard terms are editable pre-download terms", () => {
   const empty = { quarantine: [], defer: [], review: [], allowed: [] };
-  assert.equal(classify({ ...base, tags: ["loli"] }, empty).verdict, "QUARANTINE");
-  assert.equal(classify({ ...base, tags: ["shotacon"] }, empty).verdict, "QUARANTINE");
+  assert.equal(classify({ ...base, tags: ["loli"] }, empty).verdict, "CLEAN");
+  assert.equal(classify({ ...base, tags: ["shotacon"] }, empty).verdict, "CLEAN");
+  const configured = { ...empty, defer: ["loli", "shotacon"] };
+  assert.equal(classify({ ...base, tags: ["loli"] }, configured).deferFetch, true);
   assert.equal(classify({ ...base, tags: ["school uniform"] }, empty).verdict, "CLEAN");
 });
 

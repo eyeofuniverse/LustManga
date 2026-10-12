@@ -1,5 +1,5 @@
 import { Check, ExternalLink, Info, Lock, ShieldAlert, X } from "lucide-react";
-import { approveWork, confirmSuppressed, rejectWork } from "@/lib/admin/actions";
+import { approveWork, confirmSuppressed, migrateLegacyQuarantineAction, rejectWork } from "@/lib/admin/actions";
 import type { QuarantineRow, ReviewData, ReviewWork } from "@/lib/admin/types";
 import { ago } from "@/lib/admin/format";
 import { ActionButton } from "../ActionForm";
@@ -118,7 +118,7 @@ export function ReviewView({ d }: { d: ReviewData }) {
       {d.tab === "deferred" && (
         <>
           <Note tone="bad" icon={<Info className="h-4 w-4" />}>
-            These carry an explicit age marker, so <b className="text-text">no images have been downloaded</b>. Judge from the source page. Approve fetches and publishes on the next ingest run; reject means it is never downloaded. You can tick several to approve them together, but there is no &ldquo;approve everything&rdquo; for this tab: only works you have checked.
+            These carry a pre-download flag, so <b className="text-text">no images have been downloaded</b>. Review the metadata before approving. Approve queues fetching for the next retry run; reject means it is never downloaded. You can tick several to approve them together, but there is no &ldquo;approve everything&rdquo; for this tab: only works you have checked.
           </Note>
           {d.works.length ? (
             <BulkProvider tab="deferred" ids={d.works.map((w) => w.publicId)} total={d.counts.deferred} asOf={d.asOf} canApproveAll={false}>
@@ -134,6 +134,19 @@ export function ReviewView({ d }: { d: ReviewData }) {
 
       {d.tab === "quarantined" && (
         <>
+          {!d.legacyQuarantineMigrationDone && d.canApproveAll && (
+            <Note tone="warn" icon={<Info className="h-4 w-4" />}>
+              <div className="space-y-3">
+                <p>These records were stopped by old hard-coded rules. Move them back into normal metadata review so an admin can decide each work. This does not approve works or download images; confirmed quarantine records stay here.</p>
+                <ActionButton
+                  label="Move old records to review"
+                  tone="primary"
+                  confirm={{ title: "Move old quarantine records to review?", message: "The old locked rules will become ordinary pre-download review terms. Unconfirmed matching records will be queued for the source workflows to rediscover. This does not approve or download any work.", confirmLabel: "Move to review" }}
+                  action={migrateLegacyQuarantineAction}
+                />
+              </div>
+            </Note>
+          )}
           <Note tone="bad" icon={<Lock className="h-4 w-4" />}>
             The source itself tags these as child or child-like sexual content. <b className="text-text">Only the id, title and tags are stored</b>: no images are downloaded and there is no publish action. Check the source, then confirm.
           </Note>

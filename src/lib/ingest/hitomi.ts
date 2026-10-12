@@ -150,7 +150,7 @@ async function processGallery(id: number, seed: number, c: Ctx): Promise<void> {
   }
   const work = ws.work;
 
-  // explicit age markers: hold with NO downloads until an admin approves
+  // pre-download flags: hold with NO downloads until an admin approves
   if (work.deferFetch && work.reviewDecision !== "APPROVED") return void o.log("  held (review before download), nothing fetched");
   if (work.publish === "REJECTED") return;
 
@@ -210,7 +210,13 @@ export async function runHitomi(o: HitomiOptions): Promise<IngestStats> {
         prisma.workSource.findMany({
           where: {
             site: hm.SITE,
-            work: { publish: { not: "REJECTED" }, chapters: { some: { status: { not: "READY" }, attempts: { lt: MAX_ATTEMPTS } } } },
+            work: {
+              publish: { not: "REJECTED" },
+              OR: [
+                { chapters: { some: { status: { not: "READY" }, attempts: { lt: MAX_ATTEMPTS } } } },
+                { deferFetch: true, reviewDecision: "APPROVED" },
+              ],
+            },
           },
           orderBy: { lastFetchedAt: { sort: "asc", nulls: "first" } },
           take: o.limit,

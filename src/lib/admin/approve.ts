@@ -19,7 +19,7 @@ export const SAFETY_FIELDS = {
 
 export type SafetyWork = { title: string; titleOriginal: string | null; titleNorm: string | null; altTitles: string[]; description: string | null; tags: { name: string }[] };
 
-/** Would the classifier quarantine this work right now? Approving must never publish one, whatever the queue says. */
+/** Would the classifier quarantine this work right now? */
 export const isQuarantined = (w: SafetyWork, terms: TermSet): boolean =>
   classify(
     { title: w.title, altTitles: [...w.altTitles, w.titleOriginal, w.titleNorm].filter((x): x is string => !!x), description: w.description, tags: w.tags.map((t) => t.name) },
@@ -33,7 +33,7 @@ export interface BatchOutcome {
   scanned: number;
   approved: number;
   live: number;
-  /** left in the queue because they match a hard term */
+  /** left in the queue because they match an admin quarantine term */
   blocked: number;
   /** the last work looked at, to continue from */
   last: string | null;
@@ -42,7 +42,7 @@ export interface BatchOutcome {
 /**
  * Approve the works in the review queue that match `where`, up to `take`, exactly as approving one does: the decision is
  * recorded, a work that already has images goes live, and each gets its own audit row. Only works that really are waiting
- * (a draft with needsReview) are touched, and any that match a hard term stay where they are and are counted.
+ * (a draft with needsReview) are touched, and any that match an admin quarantine term stay where they are.
  * `db` is a transaction client, so all of it commits together or not at all. `notify` receives the paths that just went live.
  */
 export async function approveBatch(

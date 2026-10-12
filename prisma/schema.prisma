@@ -91,7 +91,7 @@ model Work {
   safetyVerdict SafetyVerdict @default(CLEAN)
   /// why it was held, e.g. ["tag:school uniform"]
   safetyReasons String[] @default([])
-  /// REVIEW works with explicit age markers: no images are downloaded until an admin approves
+  /// REVIEW works with pre-download flags: no images are downloaded until an admin approves
   deferFetch   Boolean  @default(false)
   /// APPROVED | REJECTED, set by the admin
   reviewDecision String?
@@ -271,7 +271,7 @@ model TagAlias {
 enum SafetyTier {
   /// source-tagged child sexualisation: metadata only, never downloaded or published
   QUARANTINE
-  /// explicit age markers: held for an admin, NOT downloaded until approved
+  /// pre-download flags: held for an admin, NOT downloaded until approved
   DEFER
   /// ambiguous markers: held for an admin, downloaded so they can inspect
   REVIEW
@@ -279,8 +279,7 @@ enum SafetyTier {
   ALLOWED
 }
 
-/// Admin-editable term lists for the ingest safety gate. The core QUARANTINE terms
-/// (src/lib/safety/core.ts) are enforced from code and cannot be removed here.
+/// Admin-editable term lists for the ingest safety gate.
 model SafetyTerm {
   id        String     @id @default(cuid())
   term      String

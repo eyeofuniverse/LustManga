@@ -1,9 +1,8 @@
 // Indexes Prisma cannot express in the schema, plus default safety terms. Idempotent.
-import { PrismaClient } from "@prisma/client";
-import { CORE_QUARANTINE } from "../src/lib/safety/core";
+import { prisma } from "../src/lib/db";
 import { DEFAULT_ALLOWED, DEFAULT_DEFER, DEFAULT_REVIEW } from "../src/lib/safety/terms";
+import { migrateLegacyQuarantine } from "../src/lib/safety/migrate-legacy-quarantine";
 
-const prisma = new PrismaClient();
 const stmts = [
   `CREATE EXTENSION IF NOT EXISTS pg_trgm`,
   `CREATE INDEX IF NOT EXISTS work_tagids_gin ON "Work" USING GIN ("tagIds")`,
@@ -30,11 +29,14 @@ for (const sql of stmts) {
 
 // seed term lists (never overwrites admin edits: only inserts missing rows)
 const seed = [
-  ...CORE_QUARANTINE.map((term) => ({ term, tier: "QUARANTINE" as const, locked: true })),
   ...DEFAULT_DEFER.map((term) => ({ term, tier: "DEFER" as const, locked: false })),
   ...DEFAULT_REVIEW.map((term) => ({ term, tier: "REVIEW" as const, locked: false })),
   ...DEFAULT_ALLOWED.map((term) => ({ term, tier: "ALLOWED" as const, locked: false })),
 ];
 const r = await prisma.safetyTerm.createMany({ data: seed.map((s) => ({ ...s, createdBy: "seed" })), skipDuplicates: true });
 console.log(`safety terms: ${r.count} inserted (${seed.length} defaults)`);
+// Keep CLI setup and the admin one-off button on the same idempotent migration.
+const migration = await migrateLegacyQuarantine();
+if (migration.alreadyDone) console.log("legacy quarantine migration already completed");
+else console.log(`moved ${migration.terms} legacy terms to editable pre-download review; ${migration.requeued} unconfirmed suppressions requeued; reset ${migration.cursors} source cursors`);
 await prisma.$disconnect();

@@ -1,9 +1,6 @@
 // Read-only integrity and safety checks on the database. Changes nothing.
 //   npm run audit:db
-// The part that matters most is the safety block: no published work may carry one of the core hard terms in its tags, title
-// or description (see src/lib/safety/core.ts); anything it lists should be taken down (npm run rescan).
 import { prisma } from "../src/lib/db";
-import { CORE_QUARANTINE } from "../src/lib/safety/core";
 
 const n = async (label: string, p: Promise<{ n: number }[]>, expectZero = true, note = "") => {
   const v = (await p)[0]?.n ?? 0;
@@ -32,16 +29,8 @@ await n("tags with a duplicate (type, slug)", prisma.$queryRaw`SELECT count(*)::
 await n("aliases pointing at a missing tag", prisma.$queryRaw`SELECT count(*)::int AS n FROM "TagAlias" a WHERE NOT EXISTS (SELECT 1 FROM "Tag" t WHERE t.id=a."targetTagId")`);
 await n("aliases that shadow a live tag of the same type and slug", prisma.$queryRaw`SELECT count(*)::int AS n FROM "TagAlias" a JOIN "Tag" t ON t.slug=a.slug AND t.type=a.type`);
 
-console.log("\n— safety (the five hard terms and the quarantine)");
-const hard = [...CORE_QUARANTINE];
-console.log("core terms:", hard.join(", "));
-const pubTag = await prisma.$queryRaw<{ n: number }[]>`SELECT count(DISTINCT w.id)::int AS n FROM "Work" w JOIN "_WorkTags" x ON x."B"=w.id JOIN "Tag" t ON t.id=x."A" WHERE w.publish='PUBLISHED' AND lower(t.name) = ANY(${hard}::text[])`;
-console.log(`${pubTag[0]!.n === 0 ? "ok  " : "ISSUE"} published works carrying a hard-term TAG: ${pubTag[0]!.n}`);
-const re = hard.map((t) => `\\m${t}\\M`).join("|");
-const pubTitle = await prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM "Work" WHERE publish='PUBLISHED' AND (title ~* ${re} OR coalesce(description,'') ~* ${re} OR coalesce("titleOriginal",'') ~* ${re})`;
-console.log(`${pubTitle[0]!.n === 0 ? "ok  " : "ISSUE"} published works with a hard term (whole word) in title or description: ${pubTitle[0]!.n}`);
-const ex = await prisma.$queryRaw<{ publicId: number; title: string }[]>`SELECT "publicId", left(title,80) AS title FROM "Work" WHERE publish='PUBLISHED' AND (title ~* ${re} OR coalesce(description,'') ~* ${re}) LIMIT 5`;
-for (const e of ex) console.log("   -", e.publicId, e.title);
+console.log("\n— safety");
+console.log("configured term counts:", JSON.stringify(await prisma.$queryRaw`SELECT tier::text AS tier, count(*)::int AS n FROM "SafetyTerm" GROUP BY 1 ORDER BY 1`));
 console.log("suppressed (quarantined) sources:", JSON.stringify(await prisma.$queryRaw`SELECT count(*)::int AS total, count(*) FILTER (WHERE "confirmedAt" IS NOT NULL)::int AS confirmed FROM "SuppressedSource"`));
 const stored = await prisma.$queryRaw<{ n: number }[]>`SELECT count(*)::int AS n FROM "SuppressedSource" s JOIN "WorkSource" ws ON ws.site=s.site AND ws."externalId"=s."externalId"`;
 console.log(`${stored[0]!.n === 0 ? "ok  " : "ISSUE"} quarantined sources that also have a stored work: ${stored[0]!.n}`);

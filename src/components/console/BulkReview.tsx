@@ -87,7 +87,7 @@ export function BulkProvider({ tab, ids, total, asOf, canApproveAll, children }:
     if (!list.length || busy) return;
     const ok = await ui.confirm({
       title: `Approve ${list.length.toLocaleString()} work${list.length === 1 ? "" : "s"}?`,
-      message: "Each is approved exactly as if you clicked Approve on it: published now if its images are stored, otherwise after the next ingest run, and recorded in the audit log. Any that match a hard safety term are skipped.",
+      message: "Each is approved exactly as if you clicked Approve on it: published now if its images are stored, otherwise after the next retry run, and recorded in the audit log. Any that match an admin quarantine term are skipped.",
       confirmLabel: `Approve ${list.length.toLocaleString()}`,
     });
     if (!ok) return;
@@ -107,7 +107,7 @@ export function BulkProvider({ tab, ids, total, asOf, canApproveAll, children }:
     if (tab !== "held" || busy || !canApproveAll) return;
     const ok = await ui.confirm({
       title: `Approve all ${total.toLocaleString()} held works?`,
-      message: "Every work in the Held tab that you were shown (those that arrive while this runs are not included) is approved without being looked at one by one. Those with images stored are published immediately; the rest go live after the next ingest run. You can stop part-way, but what was approved stays approved. Works that match a hard safety term are skipped.",
+      message: "Every work in the Held tab that you were shown (those that arrive while this runs are not included) is approved without being looked at one by one. Those with images stored are published immediately; the rest go live after the next retry run. You can stop part-way, but what was approved stays approved. Works that match an admin quarantine term are skipped.",
       confirmLabel: `Approve all ${total.toLocaleString()}`,
       tone: "bad",
     });
@@ -139,7 +139,7 @@ export function BulkProvider({ tab, ids, total, asOf, canApproveAll, children }:
       finish({
         approved,
         blocked,
-        message: `${wasStopped ? "Stopped. " : ""}Approved ${approved.toLocaleString()} work${approved === 1 ? "" : "s"} (${live.toLocaleString()} published now${approved - live ? `, ${(approved - live).toLocaleString()} after the next ingest run` : ""})${blocked ? `. ${blocked.toLocaleString()} left in the queue: they match a hard safety term` : ""}`,
+        message: `${wasStopped ? "Stopped. " : ""}Approved ${approved.toLocaleString()} work${approved === 1 ? "" : "s"} (${live.toLocaleString()} published now${approved - live ? `, ${(approved - live).toLocaleString()} after the next retry run` : ""})${blocked ? `. ${blocked.toLocaleString()} left in the queue: they match an admin quarantine term` : ""}`,
       });
     } catch {
       ui.toast(`${FAILED}${approved ? ` ${approved.toLocaleString()} were approved before it stopped.` : ""}`, "bad");

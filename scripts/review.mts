@@ -2,7 +2,7 @@
 //   npm run review -- list
 //   npm run review -- approve <publicId...>   false positive: release it (publishes once images are stored)
 //   npm run review -- reject  <publicId...>   confirmed minor content: reject and purge stored images
-//   npm run review -- suppressed              quarantined (hard-tag) works: metadata only
+//   npm run review -- suppressed              quarantined works: metadata only
 //   npm run review -- confirm <id...>         confirm a suppression after looking at it
 // There is deliberately no "approve" for suppressed works.
 import { prisma } from "../src/lib/db";
@@ -23,7 +23,7 @@ if (cmd === "list") {
     console.log(
       `#${w.publicId} [${w.language}] ${w.title}\n` +
         `   why: ${w.safetyReasons.join(", ")}\n` +
-        `   ${w.deferFetch ? "NOT downloaded (explicit age marker) - judge from the source, approve to fetch" : `images stored, ${w.pageCount} pages`}\n` +
+        `   ${w.deferFetch ? "NOT downloaded (pre-download flag) - review metadata, approve to fetch" : `images stored, ${w.pageCount} pages`}\n` +
         `   source: ${w.sources[0]?.url ?? "-"}\n`,
     );
   }
