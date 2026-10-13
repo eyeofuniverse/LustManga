@@ -59,7 +59,7 @@ export async function loadCommunity(sp: { tab?: string; q?: string; page?: strin
   let total = 0;
   let memberRows: MemberRow[] = [];
   if (tab === "members") {
-    const where: Prisma.MemberWhereInput = q ? { OR: [{ handle: { contains: q.toLowerCase() } }, { email: { contains: q.toLowerCase() } }] } : {};
+    const where: Prisma.MemberWhereInput = q ? { OR: [{ handle: { contains: q.toLowerCase() } }, ...(me.role === "MOD" ? [] : [{ email: { contains: q.toLowerCase() } }])] } : {};
     const [rows, n] = await db(() =>
       Promise.all([
         prisma.member.findMany({
@@ -73,7 +73,8 @@ export async function loadCommunity(sp: { tab?: string; q?: string; page?: strin
       ]),
     );
     total = n;
-    memberRows = rows.map((m) => ({ id: m.id, handle: m.handle, displayName: m.displayName, email: m.email, createdAt: m.createdAt, lastLoginAt: m.lastLoginAt, banned: m.banned, bannedReason: m.bannedReason, comments: m._count.comments, ratings: m._count.ratings }));
+    // an email address is private: only admins see it (and search by it)
+    memberRows = rows.map((m) => ({ id: m.id, handle: m.handle, displayName: m.displayName, email: me.role === "MOD" ? null : m.email, createdAt: m.createdAt, lastLoginAt: m.lastLoginAt, banned: m.banned, bannedReason: m.bannedReason, comments: m._count.comments, ratings: m._count.ratings }));
   } else {
     const where: Prisma.CommentWhereInput = tab === "reported" ? reportedWhere : q ? { body: { contains: q, mode: "insensitive" } } : {};
     const [rows, n] = await db(() =>

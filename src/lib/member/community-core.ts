@@ -1,7 +1,7 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { AUTO_HIDE_REPORTS, checkComment, fingerprint, isReason, limitsFor } from "./rules";
+import { AUTO_HIDE_REPORTS, checkComment, fingerprint, isReason, limitsFor, reportWeight } from "./rules";
 import { noteAttempt, type Out } from "./auth-core";
 
 /**
@@ -141,8 +141,9 @@ export async function reportComment(me: Who, id: unknown, reason: unknown, detai
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") return { ok: true }; // already reported by this member: said thanks the first time
     throw e;
   }
-  // enough different members agree: take it out of sight until a moderator has looked
-  const open = await prisma.commentReport.count({ where: { commentId: id, status: "OPEN" } });
-  if (open >= AUTO_HIDE_REPORTS) await prisma.comment.updateMany({ where: { id, status: "VISIBLE" }, data: { status: "HIDDEN" } });
+  // enough weight (members of some standing agreeing, or one mention of minors): out of sight until a moderator has looked
+  const open = await prisma.commentReport.findMany({ where: { commentId: id, status: "OPEN" }, select: { reason: true, member: { select: { createdAt: true } } } });
+  const weight = open.reduce((sum, r) => sum + reportWeight(r.reason, r.member ? Date.now() - r.member.createdAt.getTime() : Infinity), 0);
+  if (weight >= AUTO_HIDE_REPORTS) await prisma.comment.updateMany({ where: { id, status: "VISIBLE" }, data: { status: "HIDDEN" } });
   return { ok: true };
 }

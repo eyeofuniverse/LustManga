@@ -39,7 +39,9 @@ export function checkHandle(raw: unknown): Checked<{ handle: string; displayName
   if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name)) return bad("Usernames use letters, digits and underscores, and start with a letter.");
   if (/__/.test(name) || name.endsWith("_")) return bad("Usernames cannot have double or trailing underscores.");
   const handle = handleOf(name);
-  if (RESERVED.has(handle) || /^(admin|mod|staff|support|lustpage)/.test(handle)) return bad("That username is not available.");
+  // staff-like names: the exact words, and the longer ones that begin like the site or its team ("modern_reader" and "supportive" are fine)
+  // the site's own names, and staff-like names ("admin", "support_team", "mod2"); a word that merely starts the same ("modern_reader", "supportive") is fine
+  if (RESERVED.has(handle) || /^lust(page|hentai|tube)/.test(handle) || /^(admin|administrator|staff|support|moderator|mods?|owner|official)(_?(team|desk|help|official|staff|admin|support|mods?|\d+))*$/.test(handle)) return bad("That username is not available.");
   if (blockedTerm(handle.replace(/_/g, " "))) return bad("That username is not available.");
   return { ok: true, value: { handle, displayName: name } };
 }
@@ -148,5 +150,15 @@ export function limitsFor(accountAgeMs: number): CommentLimits {
 
 /** A comment goes out of sight when this many different members have reported it (a moderator then decides). */
 export const AUTO_HIDE_REPORTS = 3;
+
+/**
+ * How much one report counts towards hiding a comment. A report from an account less than an hour old counts for nothing (it is
+ * still kept for the moderators), so a handful of fresh accounts cannot hide anyone's comment. A report that a comment mentions
+ * minors counts as much as the whole threshold: that one is hidden at once and a moderator decides.
+ */
+export function reportWeight(reason: string, reporterAgeMs: number): number {
+  if (reporterAgeMs < 3_600_000) return 0;
+  return reason === "MINORS" ? AUTO_HIDE_REPORTS : 1;
+}
 
 export const isReason = (v: unknown): v is (typeof REPORT_REASONS)[number]["value"] => REPORT_REASONS.some((r) => r.value === v);

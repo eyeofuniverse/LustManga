@@ -65,9 +65,8 @@ export async function signUp(input: { username: unknown; password: unknown; emai
     return { ok: true, memberId: m.id, codes };
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      const target = String((e.meta as { target?: unknown } | undefined)?.target ?? "");
       await noteAttempt("signup", input.ipKey, false);
-      return fail(target.includes("email") ? "That email address is already used by another account." : "That username is taken.");
+      return fail("That username is taken.");
     }
     throw e;
   }
@@ -172,12 +171,7 @@ export async function updateProfile(memberId: string, input: { displayName: unkn
   if (!bio.ok) return fail(bio.error);
   const email = checkEmail(input.email);
   if (!email.ok) return fail(email.error);
-  try {
-    await prisma.member.update({ where: { id: memberId }, data: { displayName: name.value.displayName, bio: bio.value, email: email.value, showRatings: input.showRatings === true || input.showRatings === "on" || input.showRatings === "true" } });
-  } catch (e) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") return fail("That email address is already used by another account.");
-    throw e;
-  }
+  await prisma.member.update({ where: { id: memberId }, data: { displayName: name.value.displayName, bio: bio.value, email: email.value, showRatings: input.showRatings === true || input.showRatings === "on" || input.showRatings === "true" } });
   return { ok: true };
 }
 

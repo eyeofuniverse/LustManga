@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { blockedTerm, checkBio, checkComment, checkEmail, checkHandle, checkPassword, fingerprint, handleOf, hasLink, isReason, limitsFor, tidy } from "./rules";
+import { AUTO_HIDE_REPORTS, reportWeight, blockedTerm, checkBio, checkComment, checkEmail, checkHandle, checkPassword, fingerprint, handleOf, hasLink, isReason, limitsFor, tidy } from "./rules";
 
 const refused = (r: { ok: boolean }) => assert.equal(r.ok, false);
 
@@ -70,6 +70,18 @@ test("limits: a new account is slower than an old one", () => {
   assert.deepEqual(limitsFor(60_000), { cooldownS: 120, per10min: 1, perDay: 3 });
   assert.deepEqual(limitsFor(3 * 3_600_000), { cooldownS: 45, per10min: 3, perDay: 10 });
   assert.deepEqual(limitsFor(3 * 86_400_000), { cooldownS: 15, per10min: 6, perDay: 40 });
+});
+
+test("usernames: only names that could pass for staff are reserved, ordinary words that start the same are not", () => {
+  for (const ok of ["modern_reader", "modelfan", "supportive", "staffy", "model_kit", "moby", "admiral_ack", "stafford"]) assert.ok(checkHandle(ok).ok, ok);
+  for (const bad of ["mod", "Mod", "mods", "moderator", "moderator2", "mod_team", "modteam", "admin", "admin1", "admin_help", "administrator", "staff", "staff_team", "support", "support_desk", "supportteam", "lustpages", "lustpages_team", "lustpage_fan"]) refused(checkHandle(bad));
+});
+
+test("report weights: a fresh account counts for nothing, a minors report hides on its own", () => {
+  assert.equal(reportWeight("SPAM", 30 * 60_000), 0);
+  assert.equal(reportWeight("MINORS", 59 * 60_000), 0);
+  assert.equal(reportWeight("SPAM", 2 * 3_600_000), 1);
+  assert.equal(reportWeight("MINORS", 2 * 3_600_000), AUTO_HIDE_REPORTS);
 });
 
 test("report reasons are a closed list", () => {

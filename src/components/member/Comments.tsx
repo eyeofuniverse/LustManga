@@ -147,7 +147,8 @@ function Item({ c, work, me, onChanged, depth }: { c: CommentDto; work: number; 
             ) : (
               <span className="font-semibold text-muted">[deleted]</span>
             )}
-            <time className="text-xs text-muted" dateTime={c.createdAt}>
+            {/* the relative time is worked out on the server and again in the browser a moment later; the two can differ by a unit */}
+            <time className="text-xs text-muted" dateTime={c.createdAt} suppressHydrationWarning>
               {timeAgo(c.createdAt)}
             </time>
             {c.edited && !gone && <span className="text-xs text-muted">(edited)</span>}
@@ -251,7 +252,7 @@ export function Comments({ work, initial, total, topLevel, me, next }: { work: n
       setTops(r.topLevel);
       setPage(1);
       setSort(s);
-      setCount((c) => Math.max(c, r.items.length));
+      setCount(r.total);
     });
   const more = () =>
     start(async () => {

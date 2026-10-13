@@ -284,7 +284,7 @@ export default async function WorkPage({ params }: { params: Params }) {
             <ReportLink publicId={w.publicId} />
           </div>
 
-          <RatingBox work={w.publicId} sum={w.ratingSum} count={w.ratingCount} mine={mine} signedIn={!!me && !me.banned} next={workHref(w)} />
+          <RatingBox work={w.publicId} sum={w.ratingSum} count={w.ratingCount} mine={mine} signedIn={!!me && !me.banned} banned={!!me?.banned} next={workHref(w)} />
 
           {variants.length > 0 && (
             <section aria-label="Other languages">

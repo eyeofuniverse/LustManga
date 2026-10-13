@@ -368,16 +368,16 @@ try {
 
   console.log("\n— reports and the automatic hide");
   const target = await prisma.comment.create({ data: { workId: work.id, memberId: D.id, body: "zztest report me" } });
-  const reportFrom = async (handle: string) => {
+  const reportFrom = async (handle: string, tgt: { id: string } = target, reason = "SPAM") => {
     const c = await newCtx();
     const pg = await c.newPage();
     await signIn(pg, handle);
     await pg.waitForURL(`${BASE}/`, { timeout: 25000 }).catch(() => {});
     await pg.goto(WORK_URL, { waitUntil: "domcontentloaded" });
-    const el = pg.locator(`#comment-${target.id}`);
+    const el = pg.locator(`#comment-${tgt.id}`);
     await el.waitFor({ timeout: 20000 });
     await el.getByRole("button", { name: "Report" }).first().click();
-    await el.getByRole("combobox").selectOption("SPAM");
+    await el.getByRole("combobox").selectOption(reason);
     await el.getByRole("button", { name: "Send report" }).click();
     const sent = await waitText(pg, /a moderator will look at it/);
     await c.close();
@@ -392,6 +392,14 @@ try {
   ok((await retry(() => prisma.comment.findUnique({ where: { id: target.id }, select: { status: true } })))!.status === "HIDDEN", "three different members reporting hides it");
   const anon = await (await fetch(WORK_URL, { headers: { "user-agent": DESKTOP } })).text();
   ok(!anon.includes("zztest report me"), "a hidden comment is not in the page for visitors");
+  // one mention of minors hides at once; reports from accounts under an hour old count for nothing
+  const flagged = await prisma.comment.create({ data: { workId: work.id, memberId: D.id, body: "zztest minors flag" } });
+  await reportFrom("zztestCara", flagged, "MINORS");
+  ok(await eventually(async () => (await retry(() => prisma.comment.findUnique({ where: { id: flagged.id }, select: { status: true } })))!.status === "HIDDEN"), "a report that a comment mentions minors hides it at once (a moderator then decides)");
+  await seed("zztestFresh", { ageDays: 0 });
+  const unharmed = await prisma.comment.create({ data: { workId: work.id, memberId: D.id, body: "zztest fresh account reports" } });
+  await reportFrom("zztestFresh", unharmed, "MINORS");
+  ok((await retry(() => prisma.commentReport.count({ where: { commentId: unharmed.id } }))) === 1 && (await retry(() => prisma.comment.findUnique({ where: { id: unharmed.id }, select: { status: true } })))!.status === "VISIBLE", "a report from an account under an hour old is kept for the moderators but cannot hide a comment");
   const ctxD = await newCtx();
   const pd = await ctxD.newPage();
   await signIn(pd, "zztestDan");

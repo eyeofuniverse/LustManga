@@ -573,7 +573,8 @@ model Member {
   handle         String    @unique
   /// the same name as the member typed it (capitals kept)
   displayName    String
-  email          String?   @unique
+  /// kept private, not verified and not used yet; not unique, so nobody can block or probe for an address
+  email          String?
   passwordHash   String
   bio            String?
   /// bcrypt hashes of the recovery codes not used yet
@@ -592,6 +593,8 @@ model Member {
   comments Comment[]
   votes    CommentVote[]
   reports  CommentReport[]
+
+  @@index([email])
 }
 
 /// A signed-in browser. Only the sha256 of the cookie token is stored.

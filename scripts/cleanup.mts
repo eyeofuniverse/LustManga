@@ -21,7 +21,7 @@ const oldEvents = await prisma.analyticsEvent.deleteMany({ where: { at: { lt: da
 const oldVitals = await prisma.webVital.deleteMany({ where: { at: { lt: days(RETENTION_DAYS) } } });
 console.log(`analytics retention: ${oldViews.count} page view(s), ${oldEvents.count} event(s), ${oldVitals.count} speed sample(s) older than ${RETENTION_DAYS} days removed`);
 // accounts: the attempt log (sign-ins, sign-ups, comments, reports) lives a month, and a session is useless once it has expired
-const memberAttempts = await prisma.memberAttempt.deleteMany({ where: { createdAt: { lt: days(30) } } });
+const memberAttempts = await prisma.memberAttempt.deleteMany({ where: { OR: [{ createdAt: { lt: days(30) } }, { kind: { in: ["rate", "vote"] }, createdAt: { lt: days(2) } }] } });
 const memberSessions = await prisma.memberSession.deleteMany({ where: { expiresAt: { lt: new Date() } } });
 console.log(`accounts: ${memberAttempts.count} old attempt(s) and ${memberSessions.count} expired session(s) removed`);
 console.log(`retention: ${runs.count} old run(s), ${viewDays} old daily view row(s), ${snapshots} old source snapshot(s), ${logins.count} login attempt(s), ${dups.count} resolved duplicate(s) removed`);

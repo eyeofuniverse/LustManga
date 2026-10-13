@@ -130,7 +130,7 @@ export function pickSurvivor<T extends { publish: string; pageCount: number; cre
 }
 
 /**
- * Fold `dropId` into `keepId`: sources, tags, counters and the translation group move across,
+ * Fold `dropId` into `keepId`: sources, tags, counters, comments, ratings and the translation group move across,
  * the loser's stored images are deleted, and the loser row is removed.
  */
 export async function mergeWorks(keepId: string, dropId: string): Promise<{ purged: number }> {
@@ -159,6 +159,12 @@ export async function mergeWorks(keepId: string, dropId: string): Promise<{ purg
       where: { OR: [{ workId: dropId }, { otherId: dropId }], status: "OPEN" },
       data: { status: "MERGED" },
     }),
+    // what readers wrote about the loser is theirs, and moves with it: comments (their replies share the work), and star
+    // ratings (a member who rated both keeps the rating of the survivor), then the survivor's average is worked out again
+    prisma.$executeRaw`DELETE FROM "WorkRating" d USING "WorkRating" k WHERE d."workId" = ${dropId} AND k."workId" = ${keepId} AND k."memberId" = d."memberId"`,
+    prisma.workRating.updateMany({ where: { workId: dropId }, data: { workId: keepId } }),
+    prisma.comment.updateMany({ where: { workId: dropId }, data: { workId: keepId } }),
+    prisma.$executeRaw`UPDATE "Work" SET "ratingSum" = COALESCE((SELECT sum(value) FROM "WorkRating" WHERE "workId" = ${keepId}), 0), "ratingCount" = (SELECT count(*) FROM "WorkRating" WHERE "workId" = ${keepId}) WHERE id = ${keepId}`,
   ]);
   const purged = await purgeImages(dropId, drop.coverKey);
   await prisma.work.delete({ where: { id: dropId } });

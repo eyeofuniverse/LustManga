@@ -40,12 +40,16 @@ export async function requestIp(): Promise<string> {
 export const hashKey = (value: string): string => sha(`${value}|${process.env.ADMIN_GATE_SECRET ?? "dev"}`).slice(0, 32);
 
 export async function startSession(memberId: string): Promise<void> {
+  // signing in from a browser that already holds a session ends that one (no orphaned rows, nothing carried over)
+  const jar = await cookies();
+  const before = jar.get(MEMBER_COOKIE)?.value;
+  if (before) await prisma.memberSession.deleteMany({ where: { tokenHash: sha(before) } }).catch(() => {});
   const token = randomBytes(32).toString("base64url");
   const h = await headers();
   await prisma.memberSession.create({
     data: { memberId, tokenHash: sha(token), userAgent: h.get("user-agent")?.slice(0, 300) ?? null, expiresAt: new Date(Date.now() + TTL_MS) },
   });
-  (await cookies()).set(MEMBER_COOKIE, token, cookieOpts(TTL_MS / 1000));
+  jar.set(MEMBER_COOKIE, token, cookieOpts(TTL_MS / 1000));
 }
 
 /** The signed-in member, or null. One lookup per request however many components ask. */

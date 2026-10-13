@@ -122,13 +122,13 @@ export const voteCommentAction = async (input: { id: string; value: number }) =>
 export const reportCommentAction = async (input: { id: string; reason: string; details?: string }) => guard((me) => reportComment(me, input.id, input.reason, input.details));
 
 /** More of a work's comments, for the "show more" button. Open to everyone (comments are public). */
-export async function moreCommentsAction(input: { work: number; sort: CommentSort; page: number }): Promise<{ ok: true; items: CommentDto[]; topLevel: number } | Fail> {
+export async function moreCommentsAction(input: { work: number; sort: CommentSort; page: number }): Promise<{ ok: true; items: CommentDto[]; topLevel: number; total: number } | Fail> {
   try {
     const w = await prisma.work.findFirst({ where: { publicId: Number(input.work), publish: "PUBLISHED" }, select: { id: true } });
     if (!w) return { ok: false, message: "That work is not available." };
     const me = await getMember();
     const t = await loadThread(w.id, me?.id ?? null, { sort: input.sort === "top" ? "top" : "new", page: Math.min(200, Math.max(1, Math.floor(Number(input.page)) || 1)) });
-    return { ok: true, items: t.items, topLevel: t.topLevel };
+    return { ok: true, items: t.items, topLevel: t.topLevel, total: t.total };
   } catch (e) {
     console.error("load comments failed", e);
     return WENT_WRONG;
