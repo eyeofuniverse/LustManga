@@ -37,7 +37,7 @@ on:
     - cron: "10 7,23 * * *" # retry galleries that failed
 jobs:
   plan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       sites: ${{ steps.s.outputs.sites }}
     steps:
@@ -47,7 +47,7 @@ jobs:
           if [ -z "$SITE" ] || [ "$SITE" = "all" ]; then echo 'sites=["hentaifox","hentaiera","asmhentai","nhentaixxx"]' >> "$GITHUB_OUTPUT"; else echo "sites=[\"$SITE\"]" >> "$GITHUB_OUTPUT"; fi
   ingest:
     needs: plan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 350
     strategy:
       fail-fast: false
