@@ -9,6 +9,7 @@ import { chromium, type BrowserContext, type Page } from "playwright";
 import { prisma, db } from "../src/lib/db";
 import { AGE_COOKIE } from "../src/lib/prefs";
 import { deleteAd, saveAd } from "../src/lib/admin/ads-core";
+import { readerAdPositions } from "../src/lib/ads/reader";
 
 const BASE = (process.env.BASE_URL ?? "http://localhost:3200").replace(/\/$/, "");
 const DESKTOP = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -47,10 +48,13 @@ const mkAd = async (name: string, code: string, priority: number) => {
   if (!r.ok) throw new Error(r.message);
   return r.id!;
 };
+// the site keeps its ad choices for a minute (a console save drops them at once; these tests write to the database), so on the real
+// site a change is waited out; a local server started with ADS_CACHE_SECONDS=1 only needs a moment
+const CACHE_WAIT_MS = BASE.includes("localhost") ? 1800 : 65_000;
 const settle = async (url: string) => {
-  await sleep(1800);
+  await sleep(CACHE_WAIT_MS);
   await fetch(url, { headers: { "user-agent": DESKTOP } });
-  await sleep(1800);
+  await sleep(CACHE_WAIT_MS === 1800 ? 1800 : 4000);
 };
 async function cleanup() {
   await retry(() => prisma.ad.deleteMany({ where: { name: { startsWith: "zz-test" } } }));
@@ -202,7 +206,8 @@ try {
   console.log("\n— scroll mode");
   r = await open(small.url, { phone: true, mode: "scroll" });
   const bands = await r.page.locator("[data-ad-after]").evaluateAll((els) => els.map((e) => ({ after: e.getAttribute("data-ad-after"), h: Math.round(e.getBoundingClientRect().height) })));
-  ok(bands.length === 2 && bands[0]!.after === "15" && bands[1]!.after === "30" && bands.every((b) => b.h === 340), "two bands, after pages 15 and 30, each a fixed 340 px (nothing moves when the ad arrives)", JSON.stringify(bands));
+  const want = readerAdPositions(small.pages, 15).map(String);
+  ok(want.length >= 2 && JSON.stringify(bands.map((b) => b.after)) === JSON.stringify(want) && bands.every((b) => b.h === 340), `bands after pages ${want.join(", ")}, each a fixed 340 px (nothing moves when the ad arrives)`, JSON.stringify(bands));
   await r.page.locator('[data-ad-after="15"]').scrollIntoViewIfNeeded();
   await sleep(1200);
   ok(await settleBook(r.page, async () => await r.page.locator('[data-ad-after="15"] #zz-link').isVisible()), "the ad is there when the reader gets to it");
