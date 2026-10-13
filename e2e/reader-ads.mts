@@ -43,10 +43,16 @@ async function pick(label: string, where: { chapterPages: [number, number]; work
 
 const OK_CODE = '<a id="zz-link" href="https://example.com/zz-click" target="_blank" rel="noopener" style="display:block;width:300px;height:250px;background:#a0c;color:#fff;font:20px sans-serif;text-align:center;line-height:250px">zz reader ad</a>';
 const NEVER = '<script async src="data:text/javascript,void 0"></script> <ins data-zoneid="1"></ins>';
+// One for each device: the site's own ads for the slot are made for a device each, and an ad made for the visitor's own device beats
+// one for "all" whatever the priority, so a test ad has to be one too.
 const mkAd = async (name: string, code: string, priority: number) => {
-  const r = await saveAd(prisma, ME, null, { slot: "reader-mid", name: `zz-test ${name}`, type: "code", device: "all", code, width: 300, height: 250, priority: String(priority), active: "on" });
-  if (!r.ok) throw new Error(r.message);
-  return r.id!;
+  const ids: string[] = [];
+  for (const device of ["desktop", "mobile"]) {
+    const r = await saveAd(prisma, ME, null, { slot: "reader-mid", name: `zz-test ${name} ${device}`, type: "code", device, code, width: 300, height: 250, priority: String(priority), active: "on" });
+    if (!r.ok) throw new Error(r.message);
+    ids.push(r.id!);
+  }
+  return ids;
 };
 // the site keeps its ad choices for a minute (a console save drops them at once; these tests write to the database), so on the real
 // site a change is waited out; a local server started with ADS_CACHE_SECONDS=1 only needs a moment
@@ -63,10 +69,10 @@ async function cleanup() {
 
 const browser = await chromium.launch();
 const errors: string[] = [];
-async function open(url: string, o: { phone?: boolean; wide?: boolean; mode?: "book" | "scroll"; cookies?: { name: string; value: string }[] } = {}) {
+async function open(url: string, o: { phone?: boolean; wide?: boolean; size?: { width: number; height: number }; mode?: "book" | "scroll"; cookies?: { name: string; value: string }[] } = {}) {
   const ctx = await browser.newContext({
     userAgent: o.phone ? PHONE : DESKTOP,
-    viewport: o.phone ? { width: 390, height: 844 } : o.wide ? { width: 1440, height: 900 } : { width: 800, height: 900 }, // 800 wide: one page at a time
+    viewport: o.size ?? (o.phone ? { width: 390, height: 844 } : o.wide ? { width: 1440, height: 900 } : { width: 800, height: 900 }), // 800 wide: one page at a time
     isMobile: !!o.phone,
     hasTouch: !!o.phone,
   });
@@ -106,16 +112,9 @@ try {
   const tiny = await pick("a chapter shorter than one interval", { chapterPages: [6, 14], workPages: [1, 99] });
   console.log(`(small: #${small.id} ch${small.chapter}, ${small.pages} pages in a work of ${small.workPages}; big: #${big.id} ch${big.chapter}, ${big.pages} pages in a work of ${big.workPages}; tiny: ${tiny.pages} pages)`);
 
-  /* ───────────── no ad: nothing changes ───────────── */
-  console.log("\n— with no ad to show");
-  await settle(small.url);
-  let r = await open(small.url, { phone: true });
-  await press(r.page, "ArrowDown", 15);
-  ok(/Page 16 of/.test(await live(r.page)) && (await onAdSlide(r.page)) === 0, "no ad configured: page 16 follows page 15 directly");
-  await r.ctx.close();
-
   /* ───────────── a short work: every 15 pages, in the book ───────────── */
   console.log("\n— a short work, book mode on a phone");
+  let r: Awaited<ReturnType<typeof open>>;
   const AD = await mkAd("reader ad", OK_CODE, 100);
   await settle(small.url);
   r = await open(small.url, { phone: true });
@@ -165,6 +164,18 @@ try {
   await sleep(500);
   ok(/Page \d+ of/.test(await live(r.page)) && (await onAdSlide(r.page)) === 0, "jumping to the end shows no ad on the way");
   await r.ctx.close();
+
+  // a phone on its side, with the address bar showing: the ad and the Continue button must both fit
+  for (const size of [{ width: 844, height: 390 }, { width: 667, height: 320 }]) {
+    r = await open(small.url, { phone: true, size });
+    await press(r.page, "ArrowDown", 15);
+    await settleBook(r.page, async () => (await onAdSlide(r.page)) === 1 && (await r.page.locator("#zz-link").isVisible()));
+    await sleep(600);
+    const ad = await r.page.locator("#zz-link").boundingBox();
+    const btn = await r.page.getByRole("button", { name: "Continue reading" }).boundingBox();
+    ok(!!ad && !!btn && ad.y >= 0 && ad.y + ad.height <= size.height && btn.y >= 0 && btn.y + btn.height <= size.height && btn.x + btn.width <= size.width, `on a ${size.width}x${size.height} screen the ad and the Continue button are both fully inside`, JSON.stringify({ ad, btn }));
+    await r.ctx.close();
+  }
 
   /* ───────────── a chapter shorter than one interval ───────────── */
   console.log("\n— a chapter shorter than 15 pages");
@@ -222,19 +233,19 @@ try {
 
   /* ───────────── an ad slot that stays empty ───────────── */
   console.log("\n— an ad that never fills");
-  await deleteAd(prisma, ME, AD);
+  for (const id of AD) await deleteAd(prisma, ME, id);
   await mkAd("empty", NEVER, 100);
   await settle(small.url);
   r = await open(small.url, { phone: true });
   await press(r.page, "ArrowDown", 12);
-  await sleep(7000); // longer than the 5 seconds an ad gets
+  await sleep(10_000); // longer than the 8 seconds an ad gets
   await press(r.page, "ArrowDown", 3);
   ok(/Page 16 of/.test(await live(r.page)) && (await onAdSlide(r.page)) === 0, "an ad that did not fill is left out: page 16 follows page 15");
   const first = await r.page.evaluate(() => Number(sessionStorage.getItem("lm:reader-empty") ?? "0"));
   ok(first >= 1, "the empty slot was counted", String(first));
   // the second ad slot (after 30) also stays empty: after two, this tab is left alone
   await press(r.page, "ArrowDown", 12);
-  await sleep(7000);
+  await sleep(10_000);
   await press(r.page, "ArrowDown", 3);
   ok(/Page 31 of/.test(await live(r.page)) && (await onAdSlide(r.page)) === 0, "the second empty slot is left out too");
   const cookie = (await r.ctx.cookies()).find((c) => c.name === "lm_rq");

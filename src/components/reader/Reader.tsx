@@ -121,16 +121,24 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage, 
   }, [adOn, adIdx, slides, slideIdx, total]);
   useEffect(() => setAdOn(null), [scrollMode]);
 
-  /** an ad slot gave nothing: leave it out, and after a couple in one tab stop making room for ads at all */
+  /** an ad slot gave nothing: leave it out, and after a couple in a row in one tab stop making room for ads at all */
   const onAdState = useCallback((after: number, s: "filled" | "empty") => {
-    if (s !== "empty") return;
+    if (s === "filled") {
+      // one that fills starts the count again: a slow moment is not a content blocker
+      try {
+        if (sessionStorage.getItem(EMPTY_KEY)) sessionStorage.removeItem(EMPTY_KEY);
+      } catch {
+        /* storage blocked */
+      }
+      return;
+    }
     setEmptyAds((prev) => (prev.has(after) ? prev : new Set(prev).add(after)));
     try {
       const n = Number(sessionStorage.getItem(EMPTY_KEY) ?? "0") + 1;
       sessionStorage.setItem(EMPTY_KEY, String(n));
       if (n >= SESSION_EMPTY_LIMIT) {
         setAdsOff(true);
-        document.cookie = `${QUIET_COOKIE}=1; path=/; SameSite=Lax`; // the server leaves ads out of the pages that follow
+        document.cookie = `${QUIET_COOKIE}=1; path=/; SameSite=Lax${location.protocol === "https:" ? "; Secure" : ""}`; // the server leaves ads out of the pages that follow
       }
     } catch {
       /* storage blocked: only this slot is left out */

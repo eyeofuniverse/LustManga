@@ -143,7 +143,7 @@ export const SLOTS: SlotDef[] = [
     desktop: S(300, 250),
     mobile: S(300, 250),
     revenue: "strong",
-    tip: "Shown for looking at only: it cannot be clicked, so a tap meant for a page never opens an ad (and earns on views, not clicks). There is a Continue button in the book. A place that stays empty is left out, and a reader whose browser keeps showing nothing is not given more.",
+    tip: "Shown for looking at only: it cannot be clicked, so a tap meant for a page never opens an ad (and earns on views, not clicks). There is a Continue button in the book. A place that stays empty is left out, and a reader whose browser keeps showing nothing (two in a row) is not given more.",
   },
   {
     key: "reader-end",

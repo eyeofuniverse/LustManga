@@ -26,6 +26,7 @@ export function readerAdPositions(total: number, every: number): number[] {
 
 /**
  * A reader whose browser keeps showing nothing where an ad should be (a content blocker, or no ad for them) is not asked to look
- * at empty slides: after this many empty ones in a session the reader stops making room for ads at all.
+ * at empty slides: after this many empty ones IN A ROW in a session (one that fills starts the count again) the reader stops
+ * making room for ads at all.
  */
 export const SESSION_EMPTY_LIMIT = 2;

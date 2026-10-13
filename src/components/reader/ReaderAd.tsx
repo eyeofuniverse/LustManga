@@ -3,6 +3,9 @@
 import { ChevronRight } from "lucide-react";
 import { AdBox } from "@/components/ads/AdBox";
 
+/** how long the network gets to fill a slot before it is left out: generous, because a slow connection is not an empty slot */
+const GIVE_UP_MS = 8000;
+
 /** What the reader needs to show one ad: plain data, chosen by the server for this visitor. There is no link: nothing here is clickable. */
 export interface ReaderAdData {
   id: string;
@@ -26,8 +29,9 @@ export interface ReaderAdData {
 export function ReaderAd({ ad, eager = false, onState, onContinue }: { ad: ReaderAdData; eager?: boolean; onState?: (s: "filled" | "empty") => void; onContinue?: () => void }) {
   const banner = ad.type === "banner" && ad.imageUrl;
   return (
-    <div className="flex flex-col items-center gap-4 px-4" data-reader-ad={ad.id}>
-      <AdBox ad={ad} passive eager={eager} giveUpMs={5000} onState={onState} className="text-white/50">
+    // on a short screen (a phone on its side) the button goes beside the ad instead of under it, so neither is ever cut off
+    <div className="flex flex-col items-center gap-4 px-4 [@media(max-height:430px)]:flex-row [@media(max-height:430px)]:gap-8" data-reader-ad={ad.id}>
+      <AdBox ad={ad} passive eager={eager} giveUpMs={GIVE_UP_MS} onState={onState} className="text-white/50">
         {banner && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={ad.imageUrl!} alt={ad.alt ?? "Advertisement"} width={ad.width ?? undefined} height={ad.height ?? undefined} draggable={false} className="mx-auto block h-auto max-w-full rounded-lg" />
