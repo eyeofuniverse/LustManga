@@ -27,6 +27,10 @@ interface Props {
   /** the CSS background behind the pages */
   background: string;
   endCard: React.ReactNode;
+  /** what an ad slide shows (the reader decides which ad, and what to do with its fill state); called only for the current slide and the next */
+  renderAd?(after: number, current: boolean): React.ReactNode;
+  /** true for an ad slide the reader has already been shown: turning forward passes over it (going back always does) */
+  skipAd?(after: number): boolean;
   onIndex(index: number): void;
   /** the reader tried to go past the first (-1) or last (1) slide */
   onEdge(dir: 1 | -1): void;
@@ -38,6 +42,8 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n
 const MAX_ZOOM = 4;
 const DOUBLE_TAP_MS = 300;
 const TURN_MS = 340;
+/** how many slides ahead an ad slide is made: far enough that the ad has arrived (or been found empty) before the reader does */
+const AD_LOOKAHEAD = 3;
 
 type Gesture = {
   pts: Map<number, { x: number; y: number }>;
@@ -53,7 +59,7 @@ type Gesture = {
   s0: number;
 };
 
-export function BookStage({ ref, slides, pages, index, rtl, brightness, background, endCard, onIndex, onEdge, onToggleUi, onZoomChange }: Props) {
+export function BookStage({ ref, slides, pages, index, rtl, brightness, background, endCard, renderAd, skipAd, onIndex, onEdge, onToggleUi, onZoomChange }: Props) {
   const stage = useRef<HTMLDivElement>(null);
   const track = useRef<HTMLDivElement>(null);
   const zoomEl = useRef<HTMLDivElement>(null);
@@ -72,8 +78,8 @@ export function BookStage({ ref, slides, pages, index, rtl, brightness, backgrou
   const reduce = useRef(false);
 
   // keep the latest props reachable from the (stable) native listeners
-  const live = useRef({ index, count, rtl, onIndex, onEdge, onToggleUi, onZoomChange });
-  live.current = { index, count, rtl, onIndex, onEdge, onToggleUi, onZoomChange };
+  const live = useRef({ index, count, rtl, slides, skipAd, onIndex, onEdge, onToggleUi, onZoomChange });
+  live.current = { index, count, rtl, slides, skipAd, onIndex, onEdge, onToggleUi, onZoomChange };
 
   useEffect(() => {
     reduce.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -107,7 +113,10 @@ export function BookStage({ ref, slides, pages, index, rtl, brightness, backgrou
   const prevIndex = useRef(index);
   const mounted = useRef(false);
   useLayoutEffect(() => {
-    const adjacent = Math.abs(index - prevIndex.current) === 1;
+    // a turn that steps over an ad slide (going back skips it) still slides, like any other turn
+    const from = prevIndex.current;
+    const between = slides.slice(Math.min(from, index) + 1, Math.max(from, index));
+    const adjacent = Math.abs(index - from) === 1 || (Math.abs(index - from) > 1 && between.every((s) => s.kind === "ad"));
     prevIndex.current = index;
     place(0, mounted.current && adjacent ? TURN_MS : 0);
     mounted.current = true;
@@ -159,8 +168,10 @@ export function BookStage({ ref, slides, pages, index, rtl, brightness, backgrou
   const go = useCallback(
     (dir: 1 | -1, crossChapters = true) => {
       clearTimeout(tapTimer.current); // a pending "tap in the middle" must not toggle the bars after this page turn
-      const { index: i, count: n } = live.current;
-      const to = i + dir;
+      const { index: i, count: n, slides: all } = live.current;
+      let to = i + dir;
+      // an ad is for going forward, once: going back never lands on one, and neither does going forward over one already seen
+      for (let s = all[to]; s?.kind === "ad" && (dir === -1 || live.current.skipAd?.(s.after)); s = all[to]) to += dir;
       if (to < 0 || to >= n) {
         // nothing further: a small nudge, then let the reader decide (previous / next chapter)
         place(dir * (live.current.rtl ? 1 : -1) * 28, 120);
@@ -381,19 +392,19 @@ export function BookStage({ ref, slides, pages, index, rtl, brightness, backgrou
         <div ref={track} className="absolute inset-0 will-change-transform">
           {ready &&
             slides.map((s, i) => {
-              if (Math.abs(i - index) > 2) return null;
+              if (Math.abs(i - index) > 2 && !(s.kind === "ad" && i > index && i - index <= AD_LOOKAHEAD)) return null;
               const active = i === index;
               const shown = s.kind === "pages" ? (rtl ? [...s.pages].reverse() : s.pages) : [];
               const two = shown.length === 2;
               const box = { w: two ? size.w / 2 : size.w, h: size.h };
               return (
                 <div
-                  key={s.kind === "end" ? "end" : s.pages.join("-")}
+                  key={s.kind === "end" ? "end" : s.kind === "ad" ? `ad-${s.after}` : s.pages.join("-")}
                   className="absolute top-0 h-full w-full"
                   style={{ left: `${vIndex(i) * 100}%` }}
                   role="group"
                   aria-roledescription="slide"
-                  aria-label={s.kind === "end" ? "End of chapter" : `Page ${s.pages.join(" and ")}`}
+                  aria-label={s.kind === "end" ? "End of chapter" : s.kind === "ad" ? "Advertisement" : `Page ${s.pages.join(" and ")}`}
                   aria-hidden={!active}
                   inert={!active}
                 >
@@ -401,6 +412,9 @@ export function BookStage({ ref, slides, pages, index, rtl, brightness, backgrou
                   <div aria-hidden="true" className={`pointer-events-none absolute inset-y-0 z-10 w-10 ${rtl ? "right-0 -scale-x-100" : "left-0"}`} style={{ background: "linear-gradient(90deg, rgba(0,0,0,.5), transparent)" }} />
                   {s.kind === "end" ? (
                     <div className="grid h-full w-full place-items-center overflow-y-auto">{endCard}</div>
+                  ) : s.kind === "ad" ? (
+                    // the ad is made when the reader is one slide away (so it is ready), and dropped once it is behind
+                    <div className="grid h-full w-full place-items-center overflow-y-auto">{i >= index && i <= index + AD_LOOKAHEAD ? renderAd?.(s.after, active) : null}</div>
                   ) : (
                     <div className="flex h-full w-full items-center justify-center">
                       {shown.map((n, k) => {

@@ -18,7 +18,7 @@ export default async function Page() {
       <ul>
         <li>Your saved works, reading history, reader settings and theme are stored in your browser only. We never receive them.</li>
         <li>
-          A few cookies make the site work: one remembers that you confirmed you are an adult, one remembers your language and hidden-tag choices (so lists can be filtered before they are sent to you), and a short-lived one stops the same work being counted as viewed twice.
+          A few cookies make the site work: one remembers that you confirmed you are an adult, one remembers your language and hidden-tag choices (so lists can be filtered before they are sent to you), a short-lived one stops the same work being counted as viewed twice, and one more (until you close the browser) stops the reader making room for ads between pages when your browser keeps showing none.
         </li>
       </ul>
 

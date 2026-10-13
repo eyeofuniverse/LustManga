@@ -28,6 +28,7 @@ const ZONES: Record<string, [number, number]> = {
   "work-mid": [6053418, 6053420],
   "work-footer": [6053422, 6053424],
   "reader-end": [6053426, 6053428],
+  "reader-mid": [6054836, 6054838], // between pages in the reader; shown for looking at only (not clickable)
 };
 const POPUNDER = 6053388;
 

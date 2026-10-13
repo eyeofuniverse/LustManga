@@ -341,7 +341,7 @@ export const getReaderData = cache(async (publicId: number, chapterNumber: numbe
   const work = await db(() =>
     prisma.work.findFirst({
       where: { publicId, publish: "PUBLISHED" },
-      select: { id: true, publicId: true, slug: true, title: true, mediaId: true, kind: true, language: true },
+      select: { id: true, publicId: true, slug: true, title: true, mediaId: true, kind: true, language: true, pageCount: true },
     }),
   );
   if (!work) return null;

@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, BookOpen, ChevronLeft, ChevronRight, Hand, Maximize2, Minimize2, MousePointerClick, Pause, Play, RotateCcw, RotateCw, ScrollText, Settings2, Sparkles, X, ZoomIn, ZoomOut,
 } from "lucide-react";
 import { DEFAULT_READER, recordProgress, useReaderPrefs } from "@/lib/library";
 import { readHref, workHref } from "@/lib/format";
-import { buildSlides, isLongStrip, pageOfSlide, slideOfPage, wantsSpread } from "@/lib/spreads";
+import { adSlideIndex, buildSlides, isLongStrip, pageOfSlide, slideOfPage, wantsSpread } from "@/lib/spreads";
+import { SESSION_EMPTY_LIMIT, readerAdEvery, readerAdPositions } from "@/lib/ads/reader";
 import { BookStage, type BookHandle } from "./BookStage";
+import { ReaderAd, type ReaderAdData } from "./ReaderAd";
 import type { ReaderPage } from "./types";
 import { DownloadChapter } from "@/components/work/DownloadChapter";
 import { useReadTracking } from "@/components/analytics/Events";
@@ -25,7 +27,15 @@ interface Props {
   startPage: number;
   /** the ad for the end-of-chapter card, already chosen by the server (nothing when there is none) */
   endAd?: React.ReactNode;
+  /** the ad shown between pages, chosen by the server for this visitor (none: no room is made for one) */
+  midAd?: ReaderAdData | null;
+  /** pages in the whole work: a long work gets an ad every 30 pages, a short one every 15 */
+  workPages?: number;
 }
+
+/** how many ad slots stayed empty in this browser tab (a content blocker, or nothing to show): after a couple, no more room is made */
+const EMPTY_KEY = "lm:reader-empty";
+const QUIET_COOKIE = "lm_rq";
 
 // scroll mode renders real <img>s only near the reader, so a 2,000-page set never holds 2,000 decoded images
 const BEFORE = 6;
@@ -43,7 +53,7 @@ const BACKGROUNDS: Record<string, string> = {
 const AUTO_TURN_MS = { 1: 12_000, 2: 6_000, 3: 3_000 } as const;
 const AUTO_SCROLL_PX = { 1: 40, 2: 90, 3: 170 } as const;
 
-export function Reader({ work, chapter, pages, prev, next, chapters, startPage, endAd }: Props) {
+export function Reader({ work, chapter, pages, prev, next, chapters, startPage, endAd, midAd = null, workPages = 0 }: Props) {
   const router = useRouter();
   const total = pages.length;
   const { prefs, set } = useReaderPrefs();
@@ -52,7 +62,14 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage, 
   const scrollMode = prefs.mode === "scroll" || (prefs.mode === "auto" && strip);
   const [vp, setVp] = useState({ w: 0, h: 0 });
   const spread = !scrollMode && prefs.spread === "auto" && wantsSpread(vp.w, vp.h);
-  const slides = useMemo(() => buildSlides(pages, spread, prefs.coverAlone), [pages, spread, prefs.coverAlone]);
+  // ads between pages: where they go (see lib/ads/reader.ts), minus any whose slot stayed empty
+  const [emptyAds, setEmptyAds] = useState<Set<number>>(() => new Set());
+  const [adsOff, setAdsOff] = useState(false);
+  const adPositions = useMemo(() => (midAd && !adsOff ? readerAdPositions(total, readerAdEvery(workPages)).filter((p) => !emptyAds.has(p)) : []), [midAd, adsOff, total, workPages, emptyAds]);
+  const slides = useMemo(() => buildSlides(pages, spread, prefs.coverAlone, scrollMode ? [] : adPositions), [pages, spread, prefs.coverAlone, scrollMode, adPositions]);
+  // the ad slide being shown (book mode), by the page it follows; null while a page is shown
+  const [adOn, setAdOn] = useState<number | null>(null);
+  const seenAds = useRef<Set<number>>(new Set()); // ad slides this reader has been shown: turning forward over one again passes it
   const [playing, setPlaying] = useState(false);
 
   const [page, setPage] = useState(Math.min(Math.max(startPage, 1), total + 1));
@@ -88,10 +105,37 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage, 
   const sheetRef = useRef(sheet);
   sheetRef.current = sheet;
   const at = Math.min(page, total); // the "end of chapter" card counts as page total + 1
-  const slideIdx = slideOfPage(slides, page);
+  // an ad slide is shown for as long as adOn names it; if it has been left out meanwhile (it never filled), the reader is on the next slide
+  const adIdx = adOn != null ? adSlideIndex(slides, adOn) : -1;
+  const slideIdx = adIdx >= 0 ? adIdx : Math.min(slideOfPage(slides, page) + (adOn != null ? 1 : 0), slides.length - 1);
   const slide = slides[slideIdx];
+  const onAd = slide?.kind === "ad";
   const shownPages = slide?.kind === "pages" ? slide.pages : [at];
   const label = shownPages.length > 1 ? `${shownPages[0]}–${shownPages[shownPages.length - 1]}` : String(at);
+
+  // the slide the reader was on was left out (its ad never filled): carry on from the page after it
+  useEffect(() => {
+    if (adOn == null || adIdx >= 0) return;
+    setAdOn(null);
+    setPage(pageOfSlide(slides, slideIdx, total));
+  }, [adOn, adIdx, slides, slideIdx, total]);
+  useEffect(() => setAdOn(null), [scrollMode]);
+
+  /** an ad slot gave nothing: leave it out, and after a couple in one tab stop making room for ads at all */
+  const onAdState = useCallback((after: number, s: "filled" | "empty") => {
+    if (s !== "empty") return;
+    setEmptyAds((prev) => (prev.has(after) ? prev : new Set(prev).add(after)));
+    try {
+      const n = Number(sessionStorage.getItem(EMPTY_KEY) ?? "0") + 1;
+      sessionStorage.setItem(EMPTY_KEY, String(n));
+      if (n >= SESSION_EMPTY_LIMIT) {
+        setAdsOff(true);
+        document.cookie = `${QUIET_COOKIE}=1; path=/; SameSite=Lax`; // the server leaves ads out of the pages that follow
+      }
+    } catch {
+      /* storage blocked: only this slot is left out */
+    }
+  }, []);
 
   useEffect(() => {
     const on = () => setVp({ w: window.innerWidth, h: window.innerHeight });
@@ -166,6 +210,7 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage, 
   const jumpTo = useCallback(
     (n: number, smooth = false) => {
       const target = Math.min(Math.max(n, 1), total + 1);
+      setAdOn(null);
       setPage(target);
       if (scrollMode) document.getElementById(target > total ? "end" : `pg-${target}`)?.scrollIntoView({ block: "start", behavior: smooth ? "smooth" : "auto" });
     },
@@ -361,7 +406,7 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage, 
         {chapters.length > 1 ? `, chapter ${chapter.number}` : ""}
       </h1>
       <p className="sr-only" aria-live="polite">
-        Page {label} of {total}
+        {onAd ? "Advertisement. Continue to the next page." : `Page ${label} of ${total}`}
       </p>
 
       {/* ───────── top bar ───────── */}
@@ -402,7 +447,8 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage, 
           {pages.map((p) => {
             const near = p.n >= at - BEFORE && p.n <= at + AFTER;
             return (
-              <div key={p.n} id={`pg-${p.n}`} data-n={p.n} className="relative w-full bg-neutral-950" style={{ aspectRatio: `${p.w || 800} / ${p.h || 1200}` }}>
+              <Fragment key={p.n}>
+              <div id={`pg-${p.n}`} data-n={p.n} className="relative w-full bg-neutral-950" style={{ aspectRatio: `${p.w || 800} / ${p.h || 1200}` }}>
                 {near && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -429,6 +475,13 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage, 
                   </span>
                 </button>
               </div>
+              {midAd && adPositions.includes(p.n) && (
+                // a fixed-height band between two pages: the ad is made only while the reader is near it, and a tap on it does nothing
+                <div role="group" aria-label="Advertisement" data-ad-after={p.n} className="flex h-[340px] items-center justify-center bg-neutral-950" onClick={(e) => e.stopPropagation()}>
+                  {near && <ReaderAd ad={midAd} onState={(s) => onAdState(p.n, s)} />}
+                </div>
+              )}
+              </Fragment>
             );
           })}
           <section id="end" className="grid min-h-[70dvh] place-items-center" aria-label="End of chapter">
@@ -445,8 +498,18 @@ export function Reader({ work, chapter, pages, prev, next, chapters, startPage, 
           brightness={1 - prefs.dim / 100}
           background={BACKGROUNDS[prefs.bg]}
           endCard={endCard}
+          skipAd={(after) => seenAds.current.has(after)}
+          renderAd={(after, current) => (midAd ? <ReaderAd ad={midAd} eager onState={(s) => onAdState(after, s)} onContinue={current ? () => book.current?.go(1) : undefined} /> : null)}
           onIndex={(i) => {
-            setPage(pageOfSlide(slides, i, total));
+            const s = slides[i];
+            // an ad slide belongs to no page: the page the reader is on (and the progress saved) stay as they were
+            if (s?.kind === "ad") {
+              seenAds.current.add(s.after);
+              setAdOn(s.after);
+            } else {
+              setAdOn(null);
+              setPage(pageOfSlide(slides, i, total));
+            }
             setUi(false);
           }}
           onEdge={(dir) => (dir === 1 ? goChapter(next) : goChapter(prev, true))}

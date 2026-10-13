@@ -5,8 +5,10 @@ import { pagesOf } from "@/lib/pages";
 import { cdn } from "@/lib/cdn";
 import { workHref } from "@/lib/format";
 import { flatParams, idParam, intParam } from "@/lib/url";
+import { cookies } from "next/headers";
 import { Reader } from "@/components/reader/Reader";
 import { AdSlot } from "@/components/ads/AdSlot";
+import { serveAd } from "@/lib/ads/serve";
 
 type Params = Promise<{ id: string; chapter: string }>;
 
@@ -50,6 +52,11 @@ export default async function ReadPage({ params, searchParams }: { params: Param
   const sp = flatParams(await searchParams);
   const startPage = intParam(sp.p, 1, 1, pages.length);
 
+  // The ad between pages. A tab whose ad slots kept coming up empty (a content blocker) is left alone from then on (see Reader).
+  // Nothing is shown to robots, admins or when ads are switched off: serveAd says so by returning nothing.
+  const quiet = (await cookies()).get("lm_rq")?.value === "1";
+  const mid = quiet ? null : await serveAd("reader-mid");
+
   return (
     <Reader
       work={{ publicId: data.work.publicId, slug: data.work.slug, title: data.work.title }}
@@ -60,6 +67,8 @@ export default async function ReadPage({ params, searchParams }: { params: Param
       chapters={data.chapters.map((c) => ({ number: c.number }))}
       startPage={startPage}
       endAd={<AdSlot slot="reader-end" className="mt-6" />}
+      midAd={mid ? { id: mid.id, slot: mid.slot, type: mid.type, code: mid.code, imageUrl: mid.imageUrl, alt: mid.alt, isolation: mid.isolation, width: mid.width, height: mid.height } : null}
+      workPages={data.work.pageCount}
     />
   );
 }

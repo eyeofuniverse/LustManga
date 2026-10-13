@@ -5,7 +5,6 @@ import { PrefsProvider } from "@/components/site/PrefsProvider";
 import { AgeGate } from "@/components/site/AgeGate";
 import { Tracker } from "@/components/analytics/Tracker";
 import { GoogleAnalytics } from "@/components/analytics/GoogleAnalytics";
-import { PopUnderSlot } from "@/components/ads/PopUnderSlot";
 import { analyticsEnabled } from "@/lib/analytics/config";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +18,7 @@ export default async function ReaderLayout({ children }: { children: React.React
     <PrefsProvider initial={prefs}>
       <Tracker enabled={analyticsEnabled()} />
       <GoogleAnalytics enabled={analyticsEnabled()} />
-      <PopUnderSlot />
+      {/* no pop-under here: the network opens it on a tap, and in the reader a tap is how a page turns */}
       <div id="site-content" data-gated={!ageOk} inert={!ageOk}>
         {children}
       </div>

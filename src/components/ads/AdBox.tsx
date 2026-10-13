@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { FRAME_SANDBOX, NO_FILL_MS, buildFrameDoc, hasContent, injectCode, sendImpression } from "@/lib/ads/client";
 import { useAdult } from "./useAdult";
 
+/** nothing inside can be pressed or reached (see the "passive" option) */
+const PASSIVE = "select-none [&_*]:!pointer-events-none";
+
 export interface BoxAd {
   id: string;
   slot: string;
@@ -25,17 +28,53 @@ export interface BoxAd {
  *     after ten seconds instead of leaving a label over a hole, and comes back if the ad arrives late.
  * An impression is counted once the box has been at least half in view for a second, never earlier, and only for an ad that is
  * actually on screen: an empty zone is not a view.
+ *
+ * Options for a place where an accidental tap must never open an ad (the reader):
+ *   passive    the ad is shown but cannot be clicked, focused or tabbed to: "inert" for browsers that have it, and no pointer
+ *              events on anything inside for the ones that do not. A tap on it goes to whatever is behind.
+ *   eager      run the ad as soon as the box exists, instead of when it is near the screen (the reader mounts it one page ahead)
+ *   giveUpMs   how long the network gets to fill the box (the default is NO_FILL_MS)
+ *   onState    told once the ad is on screen ("filled") or has not come ("empty"), so the page can leave a slot out
  */
-export function AdBox({ ad, className = "", children }: { ad: BoxAd; className?: string; children?: React.ReactNode }) {
+export function AdBox({
+  ad,
+  className = "",
+  children,
+  passive = false,
+  eager = false,
+  giveUpMs = NO_FILL_MS,
+  onState,
+}: {
+  ad: BoxAd;
+  className?: string;
+  children?: React.ReactNode;
+  passive?: boolean;
+  eager?: boolean;
+  giveUpMs?: number;
+  onState?: (state: "filled" | "empty") => void;
+}) {
   const adult = useAdult();
   const box = useRef<HTMLDivElement>(null);
   const holder = useRef<HTMLDivElement>(null);
-  const [near, setNear] = useState(false);
+  const [near, setNear] = useState(eager);
+  const tell = useRef(onState);
+  tell.current = onState;
+  const told = useRef<"filled" | "empty" | null>(null);
+  const report = (s: "filled" | "empty") => {
+    if (told.current === s || (s === "empty" && told.current === "filled")) return;
+    told.current = s;
+    tell.current?.(s);
+  };
   const [scale, setScale] = useState(1);
   // is there an ad to see? A banner is on the page from the start; an isolated frame cannot be looked into; network code has to fill
   const [shown, setShown] = useState(ad.type === "banner" || ad.isolation === "frame");
   const [empty, setEmpty] = useState(false);
   const counted = useRef(false);
+  // a banner or an isolated frame is there from the start
+  useEffect(() => {
+    if (ad.type === "banner" || ad.isolation === "frame") report("filled");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // close to the screen: time to run the ad
   useEffect(() => {
@@ -105,6 +144,7 @@ export function AdBox({ ad, className = "", children }: { ad: BoxAd; className?:
       if (hasContent(el)) {
         setShown(true);
         setEmpty(false);
+        report("filled");
         return true;
       }
       return false;
@@ -113,13 +153,17 @@ export function AdBox({ ad, className = "", children }: { ad: BoxAd; className?:
     const mo = new MutationObserver(look);
     mo.observe(el, { childList: true, subtree: true });
     const giveUp = setTimeout(() => {
-      if (!hasContent(el)) setEmpty(true);
-    }, NO_FILL_MS);
+      if (!hasContent(el)) {
+        setEmpty(true);
+        report("empty");
+      }
+    }, giveUpMs);
     return () => {
       clearTimeout(giveUp);
       mo.disconnect();
     };
-  }, [adult, near, ad.type, ad.isolation, ad.code]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adult, near, ad.type, ad.isolation, ad.code, giveUpMs]);
 
   const w = ad.width ?? undefined;
   const h = ad.height ?? undefined;
@@ -137,10 +181,16 @@ export function AdBox({ ad, className = "", children }: { ad: BoxAd; className?:
         Advertisement
       </p>
       {ad.type === "banner" ? (
-        children
+        passive ? (
+          <div inert className={PASSIVE}>
+            {children}
+          </div>
+        ) : (
+          children
+        )
       ) : (
         // the outer box takes the space the (possibly scaled) ad will occupy; the inner one holds the ad at its real size
-        <div className="relative mx-auto max-w-full overflow-hidden" style={{ width: w ? w * scale : undefined, height: h ? h * scale : undefined }}>
+        <div inert={passive} className={`relative mx-auto max-w-full overflow-hidden${passive ? ` ${PASSIVE}` : ""}`} style={{ width: w ? w * scale : undefined, height: h ? h * scale : undefined }}>
           <div
             ref={holder}
             className="relative isolate flex justify-center [contain:layout_paint_style]"

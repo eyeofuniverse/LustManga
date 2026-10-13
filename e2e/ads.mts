@@ -359,7 +359,7 @@ try {
   ok((await stat(NOFILL.id)).impressions === n0, "...and an empty zone is not counted as a view");
   await ctx.close();
   await deleteAd(prisma, ME, NOFILL.id);
-  const LATE = await code("search-top", "fills late", '<ins></ins><script>var s=document.currentScript;setTimeout(function(){var d=document.createElement("div");d.id="zz-late";d.style.cssText="width:728px;height:90px";d.textContent="late ad";s.parentNode.appendChild(d)},6000)</script>', { width: 728, height: 90 });
+  const LATE = await code("search-top", "fills late", '<ins></ins><script>var s=document.currentScript;setTimeout(function(){var d=document.createElement("div");d.id="zz-late";d.style.cssText="width:728px;height:90px";d.textContent="late ad";s.parentNode.appendChild(d)},9000)</script>', { width: 728, height: 90 });
   await settle();
   ctx = await mk();
   p = await ctx.newPage();
@@ -367,7 +367,7 @@ try {
   const l0 = (await stat(LATE.id)).impressions;
   await p.waitForTimeout(2500);
   ok((await stat(LATE.id)).impressions === l0, "an ad that has not arrived yet is not counted");
-  await p.waitForTimeout(8500);
+  await p.waitForTimeout(12500);
   ok((await p.locator("#zz-late").isVisible()) && (await stat(LATE.id)).impressions === l0 + 1, "an ad that arrives a few seconds late is shown and counted once");
   await ctx.close();
   await deleteAd(prisma, ME, LATE.id);
