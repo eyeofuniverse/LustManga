@@ -30,8 +30,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 70
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -41,6 +41,7 @@ jobs:
           {
             echo "DATABASE_URL=${{ secrets.DATABASE_URL }}"
             echo "DB_RETRY_ATTEMPTS=12"
+            echo "DB_CALL_TIMEOUT_MS=300000"
             echo "DIRECT_URL=${{ secrets.DIRECT_URL }}"
           } > .env
       - run: npx prisma generate

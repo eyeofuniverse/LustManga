@@ -5,7 +5,9 @@
 //   3. queues near-title matches for an admin (Console, Duplicates)
 //   4. confirms queued matches by comparing first-page image fingerprints: close = merge, far = dismiss
 // A rejected copy always wins: if an admin rejected one, the other copy is rejected too.
-//   npm run dedupe -- [--fuzzy-days=3] [--dry-run]
+//   npm run dedupe -- [--fuzzy-days=3] [--max-minutes=25] [--dry-run]
+// It stops starting new work after --max-minutes (the scheduled run must never use up the whole job), and the near-title scan
+// (step 3) remembers how far it got, so each work is looked at once instead of the same three days of works again every night.
 import { prisma } from "../src/lib/db";
 import { artistsCompatible, findSimilar, hamming, mergeWorks, normTitle, pickSurvivor, recordCandidate } from "../src/lib/dedupe";
 import { purgeImages } from "../src/lib/purge";
@@ -13,6 +15,9 @@ import { purgeImages } from "../src/lib/purge";
 const arg = (n: string, d: string) => process.argv.find((a) => a.startsWith(`--${n}=`))?.split("=")[1] ?? d;
 const dry = process.argv.includes("--dry-run");
 const fuzzyDays = Number(arg("fuzzy-days", "3"));
+const deadline = Date.now() + Math.max(1, Number(arg("max-minutes", "25"))) * 60_000;
+const timeUp = () => Date.now() > deadline;
+const CURSOR_KEY = "dedupe.fuzzyCursor";
 const TOL = 2;
 const PHASH_MERGE = 6; // out of 64 bits
 const PHASH_REJECT = 20;
@@ -33,6 +38,10 @@ const groups = await prisma.$queryRaw<{ language: string; titleNorm: string }[]>
 
 let merged = 0, rejectedFollow = 0, flagged = 0;
 for (const g of groups) {
+  if (timeUp()) {
+    console.log("time budget reached in the exact-duplicate pass; the rest waits for the next run");
+    break;
+  }
   const rows = await prisma.work.findMany({
     where: { language: g.language, titleNorm: g.titleNorm },
     select: {
@@ -81,11 +90,21 @@ for (const g of groups) {
 console.log(`exact duplicates: ${merged} merged, ${rejectedFollow} rejected to follow an earlier rejection`);
 
 // 3 ─ near-title candidates for recent works
+// oldest first, from where the last run stopped (or fuzzyDays ago on the first run), so a backlog is worked off over several runs
+const cursorRow = await prisma.setting.findUnique({ where: { key: CURSOR_KEY } });
+const since = cursorRow && typeof cursorRow.value === "string" ? new Date(cursorRow.value) : new Date(Date.now() - fuzzyDays * 86_400_000);
 const recent = await prisma.work.findMany({
-  where: { createdAt: { gt: new Date(Date.now() - fuzzyDays * 86_400_000) }, titleNorm: { not: null } },
-  select: { id: true, titleNorm: true, language: true, kind: true, pageCount: true },
+  where: { createdAt: { gt: since }, titleNorm: { not: null } },
+  orderBy: { createdAt: "asc" },
+  take: 4000,
+  select: { id: true, titleNorm: true, language: true, kind: true, pageCount: true, createdAt: true },
 });
+let scanned = 0;
+let reached: Date | null = null;
 for (const w of recent) {
+  if (timeUp()) break;
+  scanned++;
+  reached = w.createdAt;
   const sims = await findSimilar({ titleNorm: w.titleNorm!, language: w.language, kind: w.kind as "ONESHOT" | "SERIES", pageCount: w.pageCount, artists: [] }, w.id);
   for (const s of sims) {
     if (dry) { flagged++; continue; }
@@ -93,7 +112,8 @@ for (const w of recent) {
     if (!exists) { await recordCandidate(w.id, s.id, s.score, ["similar title"]); flagged++; }
   }
 }
-console.log(`near-title matches queued: ${flagged}`);
+if (!dry && reached) await prisma.setting.upsert({ where: { key: CURSOR_KEY }, create: { key: CURSOR_KEY, value: reached.toISOString() }, update: { value: reached.toISOString() } });
+console.log(`near-title matches queued: ${flagged} (${scanned} of ${recent.length} new work(s) checked${scanned < recent.length ? ", the rest next run" : ""})`);
 
 // 4 ─ confirm open candidates with first-page fingerprints
 const firstHash = async (workId: string) =>
@@ -101,6 +121,7 @@ const firstHash = async (workId: string) =>
 let confirmed = 0, dismissed = 0;
 const open = await prisma.duplicateCandidate.findMany({ where: { status: "OPEN" }, take: 500 });
 for (const cand of open) {
+  if (timeUp()) break;
   const [a, b] = await Promise.all([
     prisma.work.findUnique({ where: { id: cand.workId } }),
     prisma.work.findUnique({ where: { id: cand.otherId } }),
