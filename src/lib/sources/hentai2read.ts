@@ -1,4 +1,4 @@
-import { Http, UA } from "@/lib/http";
+import { Http, SourceBlockedError, UA } from "@/lib/http";
 import { parseH2rStats, type SourceStats } from "@/lib/sources/stats";
 
 export const SITE = "hentai2read";
@@ -18,7 +18,10 @@ const RESERVED =
 async function html(path: string): Promise<string | null> {
   const url = path.startsWith("http") ? path : BASE + path;
   for (let i = 0; i < 6; i++) {
-    const res = await http.request(url, {}, 3).catch(() => null);
+    const res = await http.request(url, {}, 3).catch((e) => {
+      if (e instanceof SourceBlockedError) throw e; // a bot challenge: not worth six more tries
+      return null;
+    });
     if (res) {
       if (res.status === 404) return null;
       const text = await res.text();

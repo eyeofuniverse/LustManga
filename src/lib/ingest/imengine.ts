@@ -213,6 +213,8 @@ export async function runImEngine(cfgName: string, o: ImOptions): Promise<Ingest
         while (!budget.expired && c.created.n < c.created.cap) {
           const ids = await im.listIds(cfg, mode, lang, page);
           if (!ids || !ids.length) {
+            // the end of a list is page 2 or later with nothing on it; nothing on page 1 means the site has changed or is not answering
+            if (page === 1) stats.errors.push(`${cfg.name} ${lang ?? "all"}: the first page of the ${mode} list came back empty`);
             o.log(`${lang ?? "all"}: reached the end of the ${mode} list at page ${page}`);
             break;
           }

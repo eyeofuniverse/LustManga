@@ -2,6 +2,17 @@ export const UA = "LustManga/0.1 (+https://github.com/eyeofuniverse/LustManga)";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * A site answered with a bot challenge (Cloudflare's "Just a moment...") instead of its page. Retrying cannot help and
+ * hammering it makes it worse, so this is thrown at once, and a run reports it as a block rather than as an empty list.
+ */
+export class SourceBlockedError extends Error {
+  constructor(public host: string) {
+    super(`${host} is answering with a bot challenge instead of its pages`);
+    this.name = "SourceBlockedError";
+  }
+}
+
 /** Polite fetch wrapper: minimum gap between calls, retry with backoff on 429/5xx/network errors. */
 export class Http {
   /** earliest time the next request may start; claimed synchronously so concurrent callers queue up */
@@ -29,6 +40,7 @@ export class Http {
           ...init,
           headers: { "user-agent": UA, ...this.headers, ...(init.headers as Record<string, string>) },
         });
+        if (res.headers.get("cf-mitigated") === "challenge") throw new SourceBlockedError(new URL(url).host);
         if (res.status === 429 || res.status >= 500) {
           const ra = Number(res.headers.get("retry-after")) || 0;
           const reset = Number(res.headers.get("x-ratelimit-retry-after")) || 0;
@@ -39,6 +51,7 @@ export class Http {
         }
         return res;
       } catch (e) {
+        if (e instanceof SourceBlockedError) throw e;
         lastErr = e;
         await sleep(Math.min(20_000, 800 * 2 ** i));
       }

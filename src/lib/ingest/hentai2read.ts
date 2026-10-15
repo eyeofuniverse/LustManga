@@ -227,6 +227,8 @@ export async function runHentai2Read(o: H2ROptions): Promise<IngestStats> {
       while (!budget.expired) {
         const slugs = await h2r.listSlugs(o.mode, page);
         if (!slugs.length) {
+          // nothing on page 1 means the site has changed or is not answering; the end of a list is a later page
+          if (page === 1) stats.errors.push(`hentai2read: the first page of the ${o.mode} list came back empty`);
           o.log(`reached the end of the ${o.mode} list at page ${page}`);
           break;
         }

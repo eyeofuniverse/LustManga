@@ -121,7 +121,8 @@ export async function storeChapterPages(
           status: "READY",
           pageCount: pages.length,
           pageData: pages.map((p) => p.tuple) as unknown as number[][],
-          bytes: pages.reduce((a, p) => a + p.tuple[2], 0),
+          // an INT4 column: a gallery of more than 2 GB (a 4.7 GB one exists) made this update fail, so the chapter never became READY
+          bytes: Math.min(2_147_483_647, pages.reduce((a, p) => a + p.tuple[2], 0)),
           phash: pages.find((p) => p.phash)?.phash ?? null,
           publishedAt,
           error: null,
@@ -134,11 +135,14 @@ export async function storeChapterPages(
   } catch (e) {
     const msg = (e as Error).message.slice(0, 300);
     const permanent = e instanceof UnsupportedImageError;
+    // "429 Too Many Requests" says the source wants us to slow down, nothing about this chapter: it goes back in the queue without
+    // using up an attempt (six of them used to park 143 MangaDex chapters for good)
+    const slowDown = !permanent && /\b429\b|too many requests|rate.?limit/i.test(msg);
     await db(() =>
       prisma.chapter.update({
         where: { id: chapterId },
         // permanent failures are parked at once; an admin can still reset them from Ingest runs
-        data: { status: "FAILED", error: permanent ? `unsupported: ${msg}` : msg, attempts: permanent ? MAX_ATTEMPTS : { increment: 1 } },
+        data: slowDown ? { status: "QUEUED", error: msg } : { status: "FAILED", error: permanent ? `unsupported: ${msg}` : msg, attempts: permanent ? MAX_ATTEMPTS : { increment: 1 } },
       }),
     );
     if (!permanent) budget.fail(log); // a file we cannot convert says nothing about the source being down

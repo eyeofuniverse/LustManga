@@ -53,3 +53,20 @@ test("gate frees its slot when a call throws", async () => {
   await assert.rejects(() => run(async () => { throw new Error("boom"); }), /boom/);
   assert.equal(await run(async () => "next"), "next");
 });
+
+import { SourceBlockedError } from "./http";
+
+test("a bot challenge is thrown at once as a block, not retried", async () => {
+  const realFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls++;
+    return new Response("<title>Just a moment...</title>", { status: 403, headers: { "cf-mitigated": "challenge" } });
+  }) as typeof fetch;
+  try {
+    await assert.rejects(() => new Http(0).request("https://blocked.example/list", {}, 5), SourceBlockedError);
+    assert.equal(calls, 1, "a challenge must not be retried");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});

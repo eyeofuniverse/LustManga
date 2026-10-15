@@ -73,5 +73,12 @@ if (source === "hitomi") {
 
 console.log("\nsummary", JSON.stringify(stats, null, 2));
 await prisma.$disconnect();
-// individual failures are recorded on the run; only a run that errored AND stored nothing is a failed job
-process.exit(stats.errors.length && !stats.pagesStored ? 1 : 0);
+// individual failures are recorded on the run; only a run that errored AND stored nothing is a failed job, with two exceptions that
+// are said in the log instead of turning the job red:
+//   - the site is answering with a bot challenge (nothing we can do from here; the run is reported, and the next one tries again)
+//   - a retry run: it goes back to galleries that already failed, and one that is broken at the source fails again every time
+//     (a JPEG cut off at the source); six failures park it, and until then the error is a warning
+const blocked = stats.errors.length > 0 && stats.errors.every((e) => /bot challenge/i.test(e));
+if (blocked) console.log(`::warning title=${source} is blocking us::${stats.errors[0]}. Nothing was fetched this run.`);
+else if (stats.errors.length && arg("mode", "popular") === "retry") console.log(`::warning title=${source} retry::${stats.errors.length} gallery(ies) failed again: ${stats.errors[0]}`);
+process.exit(stats.errors.length && !stats.pagesStored && !blocked && arg("mode", "popular") !== "retry" ? 1 : 0);
