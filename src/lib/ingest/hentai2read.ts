@@ -1,7 +1,7 @@
 import { statsToFields } from "@/lib/signals";
 import { cleanTitle } from "@/lib/titles";
 import { prisma, db } from "@/lib/db";
-import { pool } from "@/lib/http";
+import { pool, SourceBlockedError } from "@/lib/http";
 import { classify } from "@/lib/safety/classify";
 import { loadTerms } from "@/lib/safety/load-terms";
 import { slug as slugify, upsertTags } from "@/lib/tags";
@@ -261,6 +261,11 @@ export async function runHentai2Read(o: H2ROptions): Promise<IngestStats> {
         if (o.mode === "popular" && !o.dryRun) await saveCursor(key, { page }, pageNewer);
       }
     }
+  } catch (e) {
+    // a bot challenge is the site's answer, not a crash: say so, keep what was stored, and let the job report it as a block
+    if (!(e instanceof SourceBlockedError)) throw e;
+    o.log(e.message);
+    stats.errors.push(e.message);
   } finally {
     await endRun(runId, stats);
   }
