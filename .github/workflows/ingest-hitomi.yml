@@ -28,8 +28,8 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: "5 */4 * * *" # newest uploads first, cheap and quick
-    - cron: "35 */3 * * *" # most-read, resumable cursor, never finishes
+    - cron: "5 * * * *" # newest uploads first, cheap and quick
+    - cron: "35 */2 * * *" # most-read, resumable cursor, never finishes
     - cron: "50 5,21 * * *" # retry galleries that failed
 concurrency:
   group: ingest-hitomi-${{ github.event.inputs.mode || github.event.schedule }}
@@ -69,7 +69,7 @@ jobs:
           LANGS="${{ github.event.inputs.langs }}"
           if [ -z "$MODE" ]; then
             case "${{ github.event.schedule }}" in
-              "5 */4 * * *") MODE=recent; LIMIT=40 ;;
+              "5 * * * *") MODE=recent; LIMIT=40 ;;
               "50 5,21 * * *") MODE=retry; LIMIT=40 ;;
               *) MODE=popular; LIMIT=400 ;;
             esac

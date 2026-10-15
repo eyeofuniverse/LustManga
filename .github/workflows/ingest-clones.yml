@@ -32,8 +32,8 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: "25 */4 * * *" # newest uploads
-    - cron: "55 */3 * * *" # best first / cursor sweep, never finishes
+    - cron: "25 * * * *" # newest uploads
+    - cron: "55 */2 * * *" # best first / cursor sweep, never finishes
     - cron: "10 7,23 * * *" # retry galleries that failed
 jobs:
   plan:
@@ -87,7 +87,7 @@ jobs:
           LANGS="${{ github.event.inputs.langs }}"
           if [ -z "$MODE" ]; then
             case "${{ github.event.schedule }}" in
-              "25 */4 * * *") MODE=recent; LIMIT=40 ;;
+              "25 * * * *") MODE=recent; LIMIT=40 ;;
               "10 7,23 * * *") MODE=retry; LIMIT=40 ;;
               *) MODE=popular; LIMIT=300 ;;
             esac
