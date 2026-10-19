@@ -17,6 +17,7 @@ import {
   endRun,
   finalizeWork,
   pageNewer,
+  POPULAR_DEPTH,
   saveCursor,
   storeChapterPages,
   storeCover,
@@ -216,6 +217,10 @@ export async function runImEngine(cfgName: string, o: ImOptions): Promise<Ingest
             // the end of a list is page 2 or later with nothing on it; nothing on page 1 means the site has changed or is not answering
             if (page === 1) stats.errors.push(`${cfg.name} ${lang ?? "all"}: the first page of the ${mode} list came back empty`);
             o.log(`${lang ?? "all"}: reached the end of the ${mode} list at page ${page}`);
+            break;
+          }
+          if (o.mode === "popular" && (page - 1) * ids.length >= POPULAR_DEPTH) {
+            o.log(`${lang ?? "all"}: the ${POPULAR_DEPTH} most popular are in; leaving the rest to the newest-uploads runs`);
             break;
           }
           const [known, suppressed] = await Promise.all([

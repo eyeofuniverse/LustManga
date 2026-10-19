@@ -32,6 +32,13 @@ export const emptyStats = (): IngestStats => ({
 
 /** a chapter that failed this many times is parked until an admin resets it */
 export const MAX_ATTEMPTS = 6;
+
+/**
+ * How deep a best-first ("popular") sweep goes into one source's list, per language. Every work costs about 29 MB of R2 storage
+ * (a 5,500-work day added 150 GB, roughly $2.30 a month for good), so the sweep takes the most popular works and then stops;
+ * the newest uploads keep coming through the "recent" mode. Raise it with POPULAR_DEPTH when there is budget for more.
+ */
+export const POPULAR_DEPTH = Number(process.env.POPULAR_DEPTH) > 0 ? Number(process.env.POPULAR_DEPTH) : 2500;
 /** consecutive chapter failures before a run stops itself */
 const BREAKER = 8;
 

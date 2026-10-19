@@ -15,6 +15,7 @@ import {
   endRun,
   finalizeWork,
   offsetNewer,
+  POPULAR_DEPTH,
   saveCursor,
   storeChapterPages,
   storeCover,
@@ -240,6 +241,10 @@ export async function runHitomi(o: HitomiOptions): Promise<IngestStats> {
         let idle = 0; // consecutive pages that produced nothing new
 
         while (!budget.expired && c.created.n < c.created.cap) {
+          if (o.mode === "popular" && offset >= POPULAR_DEPTH) {
+            o.log(`${lang}: the ${POPULAR_DEPTH} most popular are in; leaving the rest to the newest-uploads runs`);
+            break;
+          }
           const { ids, total } = await hm.listIds(path, offset, CHUNK);
           if (!ids.length) {
             if (offset === 0) stats.errors.push(`hitomi ${lang}: the ${o.mode} index came back empty`);

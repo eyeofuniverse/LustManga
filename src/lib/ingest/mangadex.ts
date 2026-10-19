@@ -10,6 +10,7 @@ import {
   endRun,
   finalizeWork,
   offsetNewer,
+  POPULAR_DEPTH,
   saveCursor,
   scaleSeed,
   storeChapterPages,
@@ -317,7 +318,7 @@ export async function runMangadex(o: IngestOptions): Promise<IngestStats> {
     const key = "mangadex:popular:offset";
     const saved = await db(() => prisma.setting.findUnique({ where: { key } }));
     let offset = (saved?.value as { offset?: number } | null)?.offset ?? 0;
-    while (!budget.expired && offset <= 9900) {
+    while (!budget.expired && offset <= 9900 && offset < POPULAR_DEPTH) {
       const page = await md.listPopular(offset);
       if (!page.data.length) {
         offset = 10_000;
@@ -329,7 +330,9 @@ export async function runMangadex(o: IngestOptions): Promise<IngestStats> {
         await saveCursor(key, { offset }, offsetNewer);
       if (reached < page.data.length) break;
     }
-    if (offset > 9900 && !budget.expired) {
+    if (offset >= POPULAR_DEPTH && POPULAR_DEPTH <= 9900) {
+      o.log(`the ${POPULAR_DEPTH} most followed are in; the rest of the catalogue is left alone (raise POPULAR_DEPTH to take more)`);
+    } else if (offset > 9900 && !budget.expired) {
       o.log("popular pass complete, continuing with the rest of the catalogue");
       phase = "backlog";
     }

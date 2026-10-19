@@ -24,10 +24,12 @@ on:
       dry_run:
         type: boolean
         default: false
-  schedule:
-    - cron: "20 */4 * * *" # newest uploads
-    - cron: "50 */3 * * *" # most-read, resumable cursor, never finishes
-    - cron: "40 6,22 * * *" # retry works that failed
+  # Scheduled runs are off since 2026-10-19: hentai2read answers every request with a Cloudflare bot challenge, so a run fetches
+  # nothing (and must not try to get around it). To turn them back on once it answers again, restore:
+  #   schedule:
+  #     - cron: "20 */4 * * *" # newest uploads
+  #     - cron: "50 */3 * * *" # most-read, resumable cursor, never finishes
+  #     - cron: "40 6,22 * * *" # retry works that failed
 concurrency:
   group: ingest-hentai2read-${{ github.event.inputs.mode || github.event.schedule }}
   cancel-in-progress: false
