@@ -1,5 +1,5 @@
 import { prisma, db } from "@/lib/db";
-import { pool } from "@/lib/http";
+import { pool, SourceBlockedError } from "@/lib/http";
 import { classify } from "@/lib/safety/classify";
 import { loadTerms } from "@/lib/safety/load-terms";
 import { slug as slugify, upsertTags } from "@/lib/tags";
@@ -201,6 +201,8 @@ export async function runImEngine(cfgName: string, o: ImOptions): Promise<Ingest
     } else {
       const wanted = o.langs.includes("all") ? [null] : (o.langs.length ? o.langs : ["en"]).map((l) => LANGUAGES[l]).filter(Boolean);
       const perLang = Math.max(1, Math.ceil(o.limit / wanted.length));
+      let firstPages = 0; // lists whose first page was read
+      let alive = 0; // lists that answered with works, or were already swept to the depth limit
       for (const lang of wanted) {
         if (budget.expired) break;
         // sites without a popularity list are walked newest-first instead
@@ -213,9 +215,9 @@ export async function runImEngine(cfgName: string, o: ImOptions): Promise<Ingest
 
         while (!budget.expired && c.created.n < c.created.cap) {
           const ids = await im.listIds(cfg, mode, lang, page);
+          if (page === 1) firstPages++;
+          if (ids && ids.length) alive++;
           if (!ids || !ids.length) {
-            // the end of a list is page 2 or later with nothing on it; nothing on page 1 means the site has changed or is not answering
-            if (page === 1) stats.errors.push(`${cfg.name} ${lang ?? "all"}: the first page of the ${mode} list came back empty`);
             o.log(`${lang ?? "all"}: reached the end of the ${mode} list at page ${page}`);
             break;
           }
@@ -251,7 +253,15 @@ export async function runImEngine(cfgName: string, o: ImOptions): Promise<Ingest
           if (!o.dryRun && (mode === "popular" || o.mode === "popular")) await saveCursor(key, { page }, pageNewer);
         }
       }
+      // one language with nothing listed is normal (a site may have no works in it); every list empty means the site has
+      // changed or is not answering
+      if (firstPages > 0 && alive === 0) stats.errors.push(`${cfg.name}: every list came back empty on its first page`);
     }
+  } catch (e) {
+    // a bot challenge is the site's answer, not a crash: say so, keep what was stored, and let the job report it as a block
+    if (!(e instanceof SourceBlockedError)) throw e;
+    o.log(e.message);
+    stats.errors.push(e.message);
   } finally {
     await endRun(runId, stats);
   }

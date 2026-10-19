@@ -247,7 +247,6 @@ export async function runHitomi(o: HitomiOptions): Promise<IngestStats> {
           }
           const { ids, total } = await hm.listIds(path, offset, CHUNK);
           if (!ids.length) {
-            if (offset === 0) stats.errors.push(`hitomi ${lang}: the ${o.mode} index came back empty`);
             o.log(`${lang}: reached the end of ${path}`);
             break;
           }

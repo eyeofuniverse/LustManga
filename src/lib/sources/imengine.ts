@@ -1,4 +1,4 @@
-import { Http, UA } from "@/lib/http";
+import { Http, SourceBlockedError, UA } from "@/lib/http";
 import { parseImStats, type SourceStats } from "@/lib/sources/stats";
 
 /**
@@ -57,7 +57,12 @@ const client = (cfg: SiteCfg) => {
 /** Fetch a page, retrying 5xx / stub pages. Returns null for a real 404. */
 async function html(cfg: SiteCfg, path: string): Promise<string | null> {
   for (let i = 0; i < 5; i++) {
-    const res = await client(cfg).request(cfg.base + path, {}, 3).catch(() => null);
+    const res = await client(cfg)
+      .request(cfg.base + path, {}, 3)
+      .catch((e) => {
+        if (e instanceof SourceBlockedError) throw e; // a bot challenge is the site's answer: not worth five more tries
+        return null;
+      });
     if (res) {
       if (res.status === 404) return null;
       const t = await res.text();
