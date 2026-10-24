@@ -16,13 +16,36 @@ export const FRAME_SANDBOX = "allow-scripts allow-popups allow-popups-to-escape-
  */
 export function sendImpression(adId: string): void {
   if (typeof window === "undefined" || optedOut()) return;
-  const body = JSON.stringify({ ad: adId });
+  seen.push(adId);
+  if (seen.length >= MAX_BATCH) flushImpressions();
+  else timer ??= setTimeout(flushImpressions, BATCH_MS);
+}
+
+// A page with several ad boxes used to make one request to the server per box. They are collected for a couple of seconds
+// and sent together (and at once when the page is being left), which is one request per page instead of three or four.
+const BATCH_MS = 2000;
+const MAX_BATCH = 20; // the server takes no more than this in one request
+const seen: string[] = [];
+let timer: ReturnType<typeof setTimeout> | undefined;
+
+export function flushImpressions(): void {
+  clearTimeout(timer);
+  timer = undefined;
+  if (!seen.length || typeof window === "undefined") return;
+  const body = JSON.stringify({ ads: seen.splice(0, MAX_BATCH) });
   try {
     if (navigator.sendBeacon?.("/api/ads/i", new Blob([body], { type: "application/json" }))) return;
   } catch {
     /* fall through to fetch */
   }
   fetch("/api/ads/i", { method: "POST", headers: { "content-type": "application/json" }, body, keepalive: true }).catch(() => {});
+}
+
+if (typeof window !== "undefined") {
+  addEventListener("pagehide", flushImpressions);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushImpressions();
+  });
 }
 
 /** Elements an ad network's code leaves in the page that show nothing. */

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { staticMeta } from "@/lib/seo";
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { CONTACT_EMAIL, SITE_NAME } from "@/lib/site";
 import { RETENTION_DAYS } from "@/lib/analytics/config";
 import { adsInUse } from "@/lib/ads/serve";

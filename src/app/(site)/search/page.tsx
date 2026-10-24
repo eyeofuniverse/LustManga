@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { HelpCircle, Search as SearchIcon } from "lucide-react";
 import { currentPrefs } from "@/lib/prefs-server";
 import { countWorks, listWorks, popularTags, prefFilters, resolveTerms } from "@/lib/queries";

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { Ban, CheckCircle2, ChevronDown, Lock, Plus, ShieldAlert, Sparkles, Star, Tag, Trash2 } from "lucide-react";
 import { removeTerm } from "@/lib/admin/actions";
 import { addTermAction, createTagAction, deleteAction, flagAction, mergeAction, renameAction } from "@/lib/admin/form-actions";

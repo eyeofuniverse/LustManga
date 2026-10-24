@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { Check, Clock, Flame, Heart, Star, TrendingUp } from "lucide-react";
 import { CATEGORIES, LANGUAGES } from "@/lib/format";
 import { withQuery } from "@/lib/url";

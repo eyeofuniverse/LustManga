@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { currentPrefs } from "@/lib/prefs-server";
 import { countWorks, getTag, listWorks, prefFilters, tagTypeOf } from "@/lib/queries";

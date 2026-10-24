@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { useState, useTransition } from "react";
 import { ChevronDown, ChevronUp, Flag, Loader2, MessageSquare, Pencil, Reply, Trash2 } from "lucide-react";
 import { deleteCommentAction, editCommentAction, moreCommentsAction, postCommentAction, reportCommentAction, voteCommentAction } from "@/lib/member/actions";

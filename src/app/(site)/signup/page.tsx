@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { getMember } from "@/lib/member/session";
 import { safeNext } from "@/lib/member/next";
 import { SignUpForm } from "@/components/member/AuthForms";

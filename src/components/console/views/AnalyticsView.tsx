@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { Activity, AlertTriangle, ArrowUpRight, Clock, Eye, FileX, Gauge, Info, MousePointerClick, Search as SearchIcon, ShieldCheck, Users } from "lucide-react";
 import type { AnalyticsData, CollectorHealth, ContentData, HealthData, OverviewData, Row, SearchData, TopWork, VitalSummary } from "@/lib/analytics/types";
 import { TABS, type AnalyticsTab } from "@/lib/analytics/types";

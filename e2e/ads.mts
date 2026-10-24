@@ -192,9 +192,12 @@ try {
   const stat = async (id: string) => (await retry(() => prisma.adStat.findFirst({ where: { adId: id, day: new Date(`${today}T00:00:00Z`) } }))) ?? { impressions: 0, clicks: 0 };
   const hit = (body: unknown, o: { ua?: string; headers?: Record<string, string> } = {}) =>
     fetch(`${BASE}/api/ads/i`, { method: "POST", headers: { "content-type": "application/json", "user-agent": o.ua ?? DESKTOP, "x-forwarded-for": "203.0.113.50", ...o.headers }, body: typeof body === "string" ? body : JSON.stringify(body) });
-  ok((await hit({ ad: LT.id })).status === 204 && (await stat(LT.id)).impressions === 1, "a shown ad adds one to today's count");
+  const first = await hit({ ad: LT.id });
+  const c1 = (await stat(LT.id)).impressions;
+  ok(first.status === 204 && c1 === 1, "a shown ad adds one to today's count", `status ${first.status}, count ${c1}`);
   await hit({ ad: LT.id });
-  ok((await stat(LT.id)).impressions === 2, "and again");
+  const c2 = (await stat(LT.id)).impressions;
+  ok(c2 === 2, "and again", `count ${c2}`);
   ok((await hit({ ad: "nonsense" })).status === 400 && (await hit("null")).status === 400 && (await hit("{")).status === 400, "a bad id or body is a 400");
   const ghost = "cabcdefghijklmnopqrstuvwx";
   await hit({ ad: ghost });
@@ -247,7 +250,7 @@ try {
   const order = await p.evaluate(worksBefore, GRID.id);
   ok(order === 12, "at 1280 px the visible ad sits right after the 12th work", String(order));
   await p.locator(`[data-ad-id="${LT.id}"]`).scrollIntoViewIfNeeded();
-  await p.waitForTimeout(2500);
+  await p.waitForTimeout(4500) // a second in view, then up to two seconds while the page's impressions are gathered into one request;
   ok((await stat(LT.id)).impressions === t0 + 1, "once seen for a second, exactly one impression is counted");
   await p.waitForTimeout(1500);
   ok((await stat(LT.id)).impressions === t0 + 1, "staying on the page does not count it again");
@@ -367,7 +370,7 @@ try {
   const l0 = (await stat(LATE.id)).impressions;
   await p.waitForTimeout(2500);
   ok((await stat(LATE.id)).impressions === l0, "an ad that has not arrived yet is not counted");
-  await p.waitForTimeout(12500);
+  await p.waitForTimeout(15000);
   ok((await p.locator("#zz-late").isVisible()) && (await stat(LATE.id)).impressions === l0 + 1, "an ad that arrives a few seconds late is shown and counted once");
   await ctx.close();
   await deleteAd(prisma, ME, LATE.id);

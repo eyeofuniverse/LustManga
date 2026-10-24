@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { compact, tagHref } from "@/lib/format";
 import { SectionHeader } from "@/components/work/Section";
 

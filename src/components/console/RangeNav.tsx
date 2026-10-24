@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { RANGES, type Range } from "@/lib/analytics/ranges";
 
 /** A "Today / 7 days / 30 days / 90 days" switch made of links, so the choice lives in the address. */

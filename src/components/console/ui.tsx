@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { ChevronLeft, ChevronRight, Inbox, Search } from "lucide-react";
 import { barWidths } from "@/lib/admin/format";
 

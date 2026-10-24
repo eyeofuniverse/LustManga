@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { staticMeta } from "@/lib/seo";
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { CONTACT_EMAIL, SITE_NAME } from "@/lib/site";
 
 export const metadata: Metadata = staticMeta({ title: "18 U.S.C. 2257 Record-Keeping Statement", description: "LustPages's 18 U.S.C. 2257 statement: what the site hosts, who is responsible for records, and how to report content involving real people.", path: "/2257" });

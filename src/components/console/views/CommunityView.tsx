@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { Ban, CheckCircle2, EyeOff, ExternalLink, MessagesSquare, ShieldCheck, Trash2, Undo2, UserX } from "lucide-react";
 import { banMember, dismissCommentReports, setCommentStatus, unbanMember } from "@/lib/admin/community-actions";
 import type { CommunityData } from "@/lib/admin/community";

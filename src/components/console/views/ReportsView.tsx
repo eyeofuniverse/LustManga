@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { CheckCircle2, ExternalLink, Flag, Mail, RotateCcw, XCircle } from "lucide-react";
 import { setReportStatus } from "@/lib/admin/actions";
 import type { ReportsData } from "@/lib/admin/types";

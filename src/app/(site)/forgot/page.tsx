@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { ResetForm } from "@/components/member/AuthForms";
 
 export const metadata: Metadata = { title: "Reset your password", robots: { index: false, follow: false } };

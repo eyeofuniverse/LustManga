@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { ArrowRight } from "lucide-react";
 
 export function SectionHeader({ title, href, label = "View all", sub }: { title: string; href?: string; label?: string; sub?: string }) {

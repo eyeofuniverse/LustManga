@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { ArrowRight, Eye, EyeOff, Info, Megaphone, MousePointerClick, Power, ShieldCheck } from "lucide-react";
 import { setAdsEnabledAction } from "@/lib/admin/ad-actions";
 import { REVENUE_LABEL, type Band, type SlotGroup } from "@/lib/ads/registry";

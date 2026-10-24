@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { useEffect, useState } from "react";
 import { Bell, Clock, Heart, Play, Trash2, X } from "lucide-react";
 import { isFinished, useFavorites, useHistory } from "@/lib/library";

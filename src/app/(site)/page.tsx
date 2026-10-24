@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { BookMarked, BookOpen, Compass, Flame, Images, Library, Palette, Gamepad2, Globe2, Sparkles, type LucideIcon } from "lucide-react";
 import { currentPrefs } from "@/lib/prefs-server";
 import { categoryCounts, getWork, homeLists, popularTags, siteStats } from "@/lib/queries";

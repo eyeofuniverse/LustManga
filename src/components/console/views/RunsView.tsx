@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { Activity, AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
 import { retryFailedChapters } from "@/lib/admin/actions";
 import type { RunDetail, RunsData } from "@/lib/admin/types";

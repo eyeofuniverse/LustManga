@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { Settings, UserRound } from "lucide-react";
 import { getMember } from "@/lib/member/session";
 import { Avatar } from "@/components/member/Avatar";

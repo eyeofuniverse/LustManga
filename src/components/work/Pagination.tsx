@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { withQuery } from "@/lib/url";
 import { PageJump } from "./PageJump";

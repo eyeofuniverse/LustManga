@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { AlertTriangle, ArrowRight, BookOpen, CheckCircle2, Copy, FileText, Flag, HardDrive, Images, Lock, ShieldAlert } from "lucide-react";
 import type { DashboardData, RunRow } from "@/lib/admin/dashboard";
 import { ago, duration, fmtBytes } from "@/lib/admin/format";

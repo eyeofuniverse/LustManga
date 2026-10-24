@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { PageHeading } from "@/components/work/Section";
 import { staticMeta } from "@/lib/seo";
 

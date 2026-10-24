@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { useEffect, useRef, useState } from "react";
 import { BookOpen, Bell, BellRing, Check, EyeOff, Flag, Heart, Link2, Play, Share2 } from "lucide-react";
 import { MAX_FOLLOWS, resumePoint, useFavorites, useFollows, useHistory } from "@/lib/library";

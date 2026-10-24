@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { staticMeta } from "@/lib/seo";
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { CONTACT_EMAIL, SITE_NAME } from "@/lib/site";
 
 export const metadata: Metadata = staticMeta({ title: "DMCA and Takedown Requests", description: "How to send a copyright takedown notice to LustPages, what to include, and what happens next. We act promptly on valid requests.", path: "/dmca" });

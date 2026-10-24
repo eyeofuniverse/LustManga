@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { notFound } from "next/navigation";
 import { MessageSquare, Star } from "lucide-react";
 import { loadProfile } from "@/lib/member/community-queries";

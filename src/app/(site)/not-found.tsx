@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { NotFoundTracker } from "@/components/analytics/Events";
 
 export default function NotFound() {

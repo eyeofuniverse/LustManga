@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { Logo } from "./Logo";
 import { SITE_NAME } from "@/lib/site";
 

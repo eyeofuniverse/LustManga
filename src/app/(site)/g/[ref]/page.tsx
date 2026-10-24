@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { notFound, permanentRedirect } from "next/navigation";
 import { CalendarDays, FileText, Languages, Layers, Star } from "lucide-react";
 import { currentPrefs } from "@/lib/prefs-server";

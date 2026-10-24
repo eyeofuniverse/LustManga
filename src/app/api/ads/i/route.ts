@@ -22,7 +22,9 @@ export async function POST(req: Request) {
   if (/(^|;\s*)lm_nocount=1/.test(cookie) || /(__Host-)?lm_session=/.test(cookie)) return new Response(null, NONE); // test runs and signed-in admins
   if (tooMany(clientIp(req))) return new Response(null, { status: 429 });
   const body = await readJson(req);
-  if (!isAdId(body.ad)) return new Response(null, { status: 400 });
-  await countImpression(body.ad).catch(() => {});
+  // one ad ({ ad }), or the boxes of one page together ({ ads: [...] })
+  const ids = Array.isArray(body.ads) ? body.ads.slice(0, 20) : [body.ad];
+  if (!ids.length || !ids.every(isAdId)) return new Response(null, { status: 400 });
+  await Promise.all(ids.map((id) => countImpression(id).catch(() => {})));
   return new Response(null, NONE);
 }

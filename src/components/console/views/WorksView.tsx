@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { Check, ExternalLink, EyeOff, Trash2, X } from "lucide-react";
 import { deleteWork, rejectWork, setWorkPublish } from "@/lib/admin/actions";
 import type { WorkRow, WorksData } from "@/lib/admin/types";

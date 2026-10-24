@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { useEffect, useState } from "react";
 import { BellPlus, Loader2, X } from "lucide-react";
 import { useFollows } from "@/lib/library";

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { useState, useTransition } from "react";
 import { Star } from "lucide-react";
 import { rateWorkAction } from "@/lib/member/actions";

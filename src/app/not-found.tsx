@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { NotFoundTracker } from "@/components/analytics/Events";
 import { Tracker } from "@/components/analytics/Tracker";
 import { LogoMark } from "@/components/site/Logo";

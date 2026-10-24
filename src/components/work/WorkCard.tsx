@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { FileText } from "lucide-react";
 import type { WorkCard as Work } from "@/lib/types";
 import { categoryLabel, isNew, workHref } from "@/lib/format";

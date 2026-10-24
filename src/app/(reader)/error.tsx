@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/site/Link";
 
 /** The reader has no site chrome, so it brings its own way out when a chapter fails to load. */
 export default function ReaderError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { ArrowLeft, ChevronDown, Copy, Info, Pause, Play, Plus, Trash2 } from "lucide-react";
 import { deleteAdAction, duplicateAdAction, setAdActiveAction } from "@/lib/admin/ad-actions";
 import { REVENUE_LABEL, type Band } from "@/lib/ads/registry";

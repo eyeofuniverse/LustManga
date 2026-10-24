@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { Search } from "lucide-react";
 import type { TagType } from "@prisma/client";
 import { listTags } from "@/lib/queries";

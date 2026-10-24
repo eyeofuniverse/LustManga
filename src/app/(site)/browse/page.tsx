@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import Link from "@/components/site/Link";
 import { currentPrefs } from "@/lib/prefs-server";
 import { categoryCounts, countWorks, listWorks, popularTags, prefFilters, siteStats } from "@/lib/queries";
 import { categoryHref, categoryLabel, compact, langLabel } from "@/lib/format";
