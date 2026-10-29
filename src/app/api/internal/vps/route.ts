@@ -8,6 +8,9 @@ export const runtime = "nodejs";
 
 const tooMany = makeLimiter(30, 60_000);
 const MAX_BYTES = 256 * 1024;
+/** any other method looks like a page that does not exist, so the route is not advertised */
+export const GET = () => new Response(null, { status: 404 });
+
 const sha = (s: string) => createHash("sha256").update(s).digest();
 
 /**
