@@ -9,6 +9,8 @@ const SEND_TO_REAL_DOMAIN = process.env.VERCEL_ENV === "production" && /^https:\
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // the Docker image runs the self-contained server (see Dockerfile); Vercel builds are not affected
+  ...(process.env.NEXT_OUTPUT === "standalone" ? { output: "standalone" } : {}),
   // dev and production can run side by side (QA) without trampling each other's build output
   distDir: process.env.NEXT_DIST_DIR || ".next",
   reactStrictMode: true,
