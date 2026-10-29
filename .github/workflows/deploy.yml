@@ -1,25 +1,16 @@
-# Deploys the site to our own server: asks Coolify to pull this branch, build the image and swap it in (the old one keeps
-# running until the new one is up; a failed build changes nothing). Pushes that only touch workflows, scripts, tests or notes
-# do not deploy.
+# Deploys the site to our own server on every push: connects to the server over ssh with a key that can only run
+# "deploy <app>", which asks Coolify to pull this branch, build the image and swap it in (the old container keeps
+# running until the new one is up; a failed build changes nothing). Pushes that only touch workflows, scripts, tests
+# or notes do not deploy.
 name: Deploy
 on:
   push:
     branches: [main]
-    paths:
-      - 'src/app'
-      - 'src/components'
-      - 'src/lib'
-      - 'src/middleware.ts'
-      - 'public/eed8d83efac81fa695d6faa0fcaf5ada.txt'
-      - 'public/maskable-icon.png'
-      - 'prisma/schema.prisma'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'next.config.mjs'
-      - 'tailwind.config.ts'
-      - 'postcss.config.mjs'
-      - 'tsconfig.json'
-      - 'Dockerfile'
+    paths-ignore:
+      - '.github/**'
+      - 'e2e/**'
+      - 'scripts/**'
+      - '**.md'
   workflow_dispatch:
 concurrency:
   group: deploy
@@ -30,5 +21,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Ask Coolify to deploy
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
         run: |
-          curl --fail --show-error --silent --max-time 60 -X POST             -H "Authorization: Bearer ${{ secrets.COOLIFY_DEPLOY_TOKEN }}"             "https://deploy.ckfportugal.com/api/v1/deploy?uuid=rwzwljn9bye51sea4a6j6xuv&force=false"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "159.69.9.228 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILid4rM/FIES9QOKys6UaB5qIwGaDGkBN5ejEr1kpR97" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 deployer@159.69.9.228 "deploy rwzwljn9bye51sea4a6j6xuv"
