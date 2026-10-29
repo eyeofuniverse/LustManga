@@ -1,0 +1,11 @@
+[Unit]
+Description=Report this server's health to the LustPages console
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/bin/lp-agent
+NoNewPrivileges=yes
+PrivateTmp=yes
+TimeoutStartSec=90

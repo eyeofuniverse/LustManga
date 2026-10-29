@@ -8,3 +8,4 @@ e2e
 *.md
 tsconfig.tsbuildinfo
 .vercel
+ops

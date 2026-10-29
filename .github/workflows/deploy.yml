@@ -10,6 +10,7 @@ on:
       - '.github/**'
       - 'e2e/**'
       - 'scripts/**'
+      - 'ops/**'
       - '**.md'
   workflow_dispatch:
 concurrency:

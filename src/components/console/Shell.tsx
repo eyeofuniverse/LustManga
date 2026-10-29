@@ -4,13 +4,13 @@ import Link from "@/components/site/Link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Activity, BarChart3, Copy, Megaphone, ExternalLink, Flag, LayoutDashboard, Library, LogOut, Menu, MessagesSquare, Moon, ScrollText, Search, ShieldAlert, Sun, Tags, X, type LucideIcon,
+  Activity, BarChart3, Copy, Megaphone, ExternalLink, Flag, LayoutDashboard, Library, LogOut, Menu, MessagesSquare, Moon, ScrollText, Search, Server, ShieldAlert, Sun, Tags, X, type LucideIcon,
 } from "lucide-react";
 import { initials } from "@/lib/admin/format";
 import { NavProgress } from "@/components/site/NavProgress";
 import { CommandPalette } from "./CommandPalette";
 
-export type NavIcon = "dashboard" | "analytics" | "ads" | "review" | "reports" | "community" | "duplicates" | "works" | "tags" | "runs" | "audit";
+export type NavIcon = "dashboard" | "analytics" | "ads" | "review" | "reports" | "community" | "duplicates" | "works" | "tags" | "runs" | "servers" | "audit";
 export type NavItem = { href: string; label: string; icon: NavIcon; group: string; badge?: number };
 
 const ICONS: Record<NavIcon, LucideIcon> = {
@@ -24,6 +24,7 @@ const ICONS: Record<NavIcon, LucideIcon> = {
   works: Library,
   tags: Tags,
   runs: Activity,
+  servers: Server,
   audit: ScrollText,
 };
 

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { prisma, db } from "@/lib/db";
 import { getAdminSession, hasRole } from "@/lib/admin/auth";
 import { Shell, type NavItem } from "@/components/console/Shell";
+import { serverIssueCount } from "@/lib/admin/vps-data";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,8 @@ export default async function PanelLayout({ children }: { children: React.ReactN
       prisma.commentReport.count({ where: { status: "OPEN" } }),
     ]),
   ).catch(() => [0, 0, 0, 0, 0, 0]);
+  // servers that need a look (infrastructure is for admins; a moderator never sees the screen, so skip the read)
+  const serverIssues = hasRole(me, "ADMIN") ? await serverIssueCount().catch(() => 0) : 0;
 
   const items: NavItem[] = [
     { href: "/console", label: "Dashboard", icon: "dashboard", group: "Overview" },
@@ -31,6 +34,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
     { href: "/console/works", label: "Works", icon: "works", group: "Catalogue" },
     { href: "/console/tags", label: "Tags & safety", icon: "tags", group: "Catalogue" },
     { href: "/console/runs", label: "Ingest runs", icon: "runs", group: "System", badge: failed || undefined },
+    ...(hasRole(me, "ADMIN") ? [{ href: "/console/servers", label: "Servers", icon: "servers" as const, group: "System", badge: serverIssues || undefined }] : []),
     { href: "/console/audit", label: "Audit log", icon: "audit", group: "System" },
   ];
 
