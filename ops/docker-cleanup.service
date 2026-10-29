@@ -1,0 +1,8 @@
+[Unit]
+Description=Clean docker build cache and old images
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/docker-cleanup.sh
+Nice=10
