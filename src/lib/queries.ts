@@ -6,6 +6,7 @@ import { prisma, db } from "@/lib/db";
 import { PAGE_SIZE } from "@/lib/site";
 import { normText, type NumCond, type Term } from "@/lib/search";
 import { slug as makeSlug } from "@/lib/tags";
+import { memo } from "@/lib/memo";
 import type { Prefs } from "@/lib/prefs";
 import { OWN_TRAFFIC_CAP } from "@/lib/signals";
 import type { Sort } from "@/lib/sorts";
@@ -106,7 +107,7 @@ function where(o: ListOpts): Prisma.Sql {
   return Prisma.join(c, " AND ");
 }
 
-export async function listWorks(o: ListOpts): Promise<{ items: WorkCard[]; hasNext: boolean }> {
+async function listWorksFresh(o: ListOpts): Promise<{ items: WorkCard[]; hasNext: boolean }> {
   const size = o.pageSize ?? PAGE_SIZE;
   const page = Math.max(1, o.page ?? 1);
   const days = o.sort ? WINDOW_DAYS[o.sort] : undefined;
@@ -136,6 +137,9 @@ export async function listWorks(o: ListOpts): Promise<{ items: WorkCard[]; hasNe
   return { items: rows.slice(0, size), hasNext: rows.length > size };
 }
 
+/** Listings are read from memory for a minute (then refreshed in the background): see lib/memo.ts. */
+export const listWorks = memo(60, listWorksFresh);
+
 export interface UpdateCard extends WorkCard {
   chapterNumber: number;
   chapterAt: Date | string;
@@ -145,7 +149,7 @@ export interface UpdateCard extends WorkCard {
  * Series ordered by their newest chapter, one row per series: the "Latest updates" page. A chapter's date is when it
  * was published upstream (so a backlog fetch does not make 25 old chapters look brand new), else when we stored it.
  */
-export async function listUpdates(o: Pick<ListOpts, "langs" | "exclude" | "page" | "pageSize">): Promise<{ items: UpdateCard[]; hasNext: boolean }> {
+async function listUpdatesFresh(o: Pick<ListOpts, "langs" | "exclude" | "page" | "pageSize">): Promise<{ items: UpdateCard[]; hasNext: boolean }> {
   const size = o.pageSize ?? PAGE_SIZE;
   const page = Math.max(1, o.page ?? 1);
   const rows = await db(() =>
@@ -162,6 +166,9 @@ export async function listUpdates(o: Pick<ListOpts, "langs" | "exclude" | "page"
   );
   return { items: rows.slice(0, size), hasNext: rows.length > size };
 }
+
+/** The newest-chapter-per-series scan is the slowest read on the site, and "latest updates" moves slowly: five minutes. */
+export const listUpdates = memo(300, listUpdatesFresh);
 
 /**
  * "More by this artist / circle / from this parody": other works that share the work's first artist, first circle and
@@ -180,13 +187,15 @@ export async function getMoreBy(
 }
 
 /** Count, capped so a huge unfiltered list never becomes a full-table count. */
-export async function countWorks(o: ListOpts, cap = 10_000): Promise<{ n: number; capped: boolean }> {
+async function countWorksFresh(o: ListOpts, cap = 10_000): Promise<{ n: number; capped: boolean }> {
   const rows = await db(() =>
     prisma.$queryRaw<{ n: number }[]>(Prisma.sql`SELECT count(*)::int AS n FROM (SELECT 1 FROM "Work" w WHERE ${where(o)} LIMIT ${cap + 1}) t`),
   );
   const n = rows[0]?.n ?? 0;
   return { n: Math.min(n, cap), capped: n > cap };
 }
+
+export const countWorks = memo(300, countWorksFresh);
 
 /** Prefs -> the filters every public list applies. */
 export const prefFilters = (p: Prefs): Pick<ListOpts, "langs" | "exclude"> => ({
@@ -201,7 +210,7 @@ const tagCols = { id: true, type: true, name: true, slug: true, count: true } as
 const tagColsWithHidden = { ...tagCols, hidden: true } as const;
 
 /** Find a tag by type and slug (or by an old/merged spelling). Returns the canonical tag. */
-export const getTag = cache(async (type: TagType, slugOrName: string): Promise<TagLite | null> => {
+export const getTag = cache(memo(300, async (type: TagType, slugOrName: string): Promise<TagLite | null> => {
   if (slugOrName.includes("\u0000")) return null; // never reaches the database: Postgres rejects a NUL byte in text
   const s = makeSlug(slugOrName) || slugOrName.toLowerCase();
   const direct = await db(() => prisma.tag.findUnique({ where: { type_slug: { type, slug: s } }, select: tagColsWithHidden }));
@@ -209,7 +218,7 @@ export const getTag = cache(async (type: TagType, slugOrName: string): Promise<T
   const alias = await db(() => prisma.tagAlias.findUnique({ where: { type_slug: { type, slug: s } }, include: { target: { select: tagColsWithHidden } } }));
   if (alias) return alias.target;
   return db(() => prisma.tag.findFirst({ where: { type, name: { equals: slugOrName, mode: "insensitive" } }, select: tagColsWithHidden }));
-});
+}));
 
 /** Resolve search terms to tag ids. A positive term with no matching tag means "no results". */
 export async function resolveTerms(terms: Term[]): Promise<{ include: number[]; exclude: number[]; missing: string[]; cats: string[] }> {
@@ -287,7 +296,7 @@ export const hasTitleTwin = cache(async (id: string, title: string, language: st
   return n > 0;
 });
 
-export const getWork = cache(async (publicId: number) => {
+export const getWork = cache(memo(60, async (publicId: number) => {
   const w = await db(() =>
     prisma.work.findFirst({
       where: { publicId, publish: "PUBLISHED" },
@@ -301,10 +310,10 @@ export const getWork = cache(async (publicId: number) => {
   const byType: Record<string, TagLite[]> = {};
   for (const t of w.tags) (byType[t.type] ??= []).push(t);
   return { ...w, byType };
-});
+}));
 
 /** Other-language versions of the same work. Cached per request: the page and its metadata (hreflang) both need it. */
-export const getVariants = cache(async (groupId: string | null, selfId: string) => {
+export const getVariants = cache(memo(300, async (groupId: string | null, selfId: string) => {
   if (!groupId) return [];
   return db(() =>
     prisma.work.findMany({
@@ -313,10 +322,10 @@ export const getVariants = cache(async (groupId: string | null, selfId: string) 
       orderBy: [{ language: "asc" }, { publicId: "asc" }],
     }),
   );
-});
+}));
 
 /** Works that share the most distinctive tags. */
-export async function getRelated(work: { publicId: number; language: string; tagIds: number[] }, prefs: Prefs, take = 12): Promise<WorkCard[]> {
+async function getRelatedFresh(work: { publicId: number; language: string; tagIds: number[] }, prefs: Prefs, take = 12): Promise<WorkCard[]> {
   if (!work.tagIds.length) return [];
   // the rarest tags say the most about a work: rank by how few works carry them
   const rare = await db(() =>
@@ -333,6 +342,8 @@ export async function getRelated(work: { publicId: number; language: string; tag
   );
   return rows;
 }
+
+export const getRelated = memo(300, getRelatedFresh);
 
 /* ───────────────────────────── reader ───────────────────────────── */
 
