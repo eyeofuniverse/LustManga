@@ -3,6 +3,7 @@ import { prisma, db } from "@/lib/db";
 import { isBot } from "@/lib/analytics/ua";
 import { countClick, isAdId } from "@/lib/ads/serve";
 import { safeUrl } from "@/lib/ads/validate";
+import { SITE_URL } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ const HEADERS = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollo
  */
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const home = NextResponse.redirect(new URL("/", req.url), { status: 302, headers: HEADERS });
+  const home = NextResponse.redirect(new URL("/", SITE_URL), { status: 302, headers: HEADERS });
   if (!isAdId(id)) return home;
   const ad = await db(() => prisma.ad.findUnique({ where: { id }, select: { active: true, type: true, linkUrl: true } })).catch(() => null);
   const to = ad && ad.active && ad.type === "banner" ? safeUrl(ad.linkUrl) : null;

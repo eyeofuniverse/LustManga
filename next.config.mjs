@@ -11,9 +11,6 @@ const SEND_TO_REAL_DOMAIN = process.env.VERCEL_ENV === "production" && /^https:\
 const nextConfig = {
   // the Docker image runs the self-contained server (see Dockerfile); Vercel builds are not affected
   ...(process.env.NEXT_OUTPUT === "standalone" ? { output: "standalone" } : {}),
-  // Behind our own proxy the server binds 0.0.0.0, and without this every absolute URL it builds from the request (redirects,
-  // sign-in callbacks) read http://0.0.0.0:3000/...; with it they use the Host header the proxy passes on.
-  ...(process.env.NEXT_OUTPUT === "standalone" ? { experimental: { trustHostHeader: true } } : {}),
   // dev and production can run side by side (QA) without trampling each other's build output
   distDir: process.env.NEXT_DIST_DIR || ".next",
   reactStrictMode: true,
